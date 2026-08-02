@@ -1,0 +1,28 @@
+# Build artifacts
+*.exe
+*.out
+*.test
+*.prof
+coverage.html
+
+# Go workspace
+go.work
+go.work.sum
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local config
+.claude/settings.local.json
+
+# Claude Code
+.claude/
+CLAUDE.md

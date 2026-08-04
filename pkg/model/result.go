@@ -21,6 +21,7 @@ type ScanStats struct {
 	Duration        int64    `json:"duration_ms"`
 	ParametersFound int      `json:"parameters_found"`
 	PayloadsSent    int      `json:"payloads_sent"`
+	ProbeFiltered   int      `json:"probe_filtered,omitempty"`
 	Errors          int      `json:"errors,omitempty"`
 	WAF             *WAFInfo `json:"waf,omitempty"`
 }

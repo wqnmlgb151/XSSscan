@@ -34,6 +34,7 @@ type Crawler struct {
 	sameHostOnly    bool
 	discoverSitemap bool
 	discoverRobots  bool
+	extraHeaders    map[string]string
 	visited         map[string]bool
 	mu              sync.Mutex
 }
@@ -62,6 +63,7 @@ type CrawlerConfig struct {
 	SameHostOnly    bool
 	DiscoverSitemap bool
 	DiscoverRobots  bool
+	ExtraHeaders    map[string]string
 }
 
 // NewCrawler creates a crawler with the given options.
@@ -92,6 +94,7 @@ func NewCrawlerWithConfig(client *http.Client, config CrawlerConfig) *Crawler {
 		sameHostOnly:    config.SameHostOnly,
 		discoverSitemap: config.DiscoverSitemap,
 		discoverRobots:  config.DiscoverRobots,
+		extraHeaders:    config.ExtraHeaders,
 		visited:         make(map[string]bool),
 	}
 }
@@ -308,6 +311,9 @@ func (c *Crawler) fetchAndExtract(ctx context.Context, pageURL, startHost string
 		return nil, nil, err
 	}
 	req.Header.Set("User-Agent", httpclient.DefaultUA)
+	for k, v := range c.extraHeaders {
+		req.Header.Set(k, v)
+	}
 
 	resp, err := c.client.Do(req)
 	if err != nil {
@@ -484,9 +490,9 @@ func getAttr(n *html.Node, key string) string {
 }
 
 // ExtractFormsFromPage fetches a URL and extracts HTML forms with their input fields.
+// Optional headers (e.g., Authorization, JWT, custom) are applied after User-Agent.
 // Returns nil if the page is not HTML or no forms are found.
-// This is the public entry point for form auto-discovery during scanning.
-func ExtractFormsFromPage(ctx context.Context, client *http.Client, pageURL string) ([]FormInfo, error) {
+func ExtractFormsFromPage(ctx context.Context, client *http.Client, pageURL string, headers map[string]string) ([]FormInfo, error) {
 	if err := ssrfguard.IsURLTargetAllowed(pageURL); err != nil {
 		return nil, fmt.Errorf("ssrf blocked: %w", err)
 	}
@@ -496,6 +502,9 @@ func ExtractFormsFromPage(ctx context.Context, client *http.Client, pageURL stri
 		return nil, err
 	}
 	req.Header.Set("User-Agent", httpclient.DefaultUA)
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -503,7 +512,11 @@ func ExtractFormsFromPage(ctx context.Context, client *http.Client, pageURL stri
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
+	switch resp.StatusCode {
+	case http.StatusOK:
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return nil, fmt.Errorf("HTTP %d — target requires authentication (use --login-url, --cookie, --header, or --jwt)", resp.StatusCode)
+	default:
 		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 

@@ -7,8 +7,11 @@ GOTEST=$(GO) test
 GOCLEAN=$(GO) clean
 GOMOD=$(GO) mod
 
+VERSION ?= 0.6.0
+LDFLAGS = -X main.Version=$(VERSION)
+
 build:
-	$(GOBUILD) -o $(BINARY_NAME) ./cmd
+	$(GOBUILD) -ldflags "$(LDFLAGS)" -o $(BINARY_NAME) ./cmd
 
 run: build
 	./$(BINARY_NAME)

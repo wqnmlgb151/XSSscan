@@ -16,7 +16,7 @@ func TestValidateConfig_WorkersOverMax(t *testing.T) {
 }
 
 func TestValidateConfig_WorkersAtMax(t *testing.T) {
-	cfg := &ScanConfig{Workers: maxWorkers, RateLimit: 50, Timeout: 30, MaxPayload: 50}
+	cfg := &ScanConfig{URL: "http://example.com", Workers: maxWorkers, RateLimit: 50, Timeout: 30, MaxPayload: 50}
 	err := validateConfig(cfg)
 	if err != nil {
 		t.Errorf("Expected no error for workers at max, got: %v", err)
@@ -24,7 +24,7 @@ func TestValidateConfig_WorkersAtMax(t *testing.T) {
 }
 
 func TestValidateConfig_RateLimitBelowMin(t *testing.T) {
-	cfg := &ScanConfig{Workers: 10, RateLimit: 0, Timeout: 30, MaxPayload: 50}
+	cfg := &ScanConfig{URL: "http://example.com", Workers: 10, RateLimit: 0, Timeout: 30, MaxPayload: 50}
 	validateConfig(cfg)
 	if cfg.RateLimit != minRateLimit {
 		t.Errorf("Expected rate limit to be set to %d, got %d", minRateLimit, cfg.RateLimit)
@@ -32,7 +32,7 @@ func TestValidateConfig_RateLimitBelowMin(t *testing.T) {
 }
 
 func TestValidateConfig_RateLimitNegative(t *testing.T) {
-	cfg := &ScanConfig{Workers: 10, RateLimit: -5, Timeout: 30, MaxPayload: 50}
+	cfg := &ScanConfig{URL: "http://example.com", Workers: 10, RateLimit: -5, Timeout: 30, MaxPayload: 50}
 	validateConfig(cfg)
 	if cfg.RateLimit != minRateLimit {
 		t.Errorf("Expected rate limit to be set to %d, got %d", minRateLimit, cfg.RateLimit)
@@ -40,7 +40,7 @@ func TestValidateConfig_RateLimitNegative(t *testing.T) {
 }
 
 func TestValidateConfig_TimeoutBelowMin(t *testing.T) {
-	cfg := &ScanConfig{Workers: 10, RateLimit: 50, Timeout: 0, MaxPayload: 50}
+	cfg := &ScanConfig{URL: "http://example.com", Workers: 10, RateLimit: 50, Timeout: 0, MaxPayload: 50}
 	validateConfig(cfg)
 	if cfg.Timeout != minTimeout {
 		t.Errorf("Expected timeout to be set to %d, got %d", minTimeout, cfg.Timeout)
@@ -48,7 +48,7 @@ func TestValidateConfig_TimeoutBelowMin(t *testing.T) {
 }
 
 func TestValidateConfig_TimeoutNegative(t *testing.T) {
-	cfg := &ScanConfig{Workers: 10, RateLimit: 50, Timeout: -1, MaxPayload: 50}
+	cfg := &ScanConfig{URL: "http://example.com", Workers: 10, RateLimit: 50, Timeout: -1, MaxPayload: 50}
 	validateConfig(cfg)
 	if cfg.Timeout != minTimeout {
 		t.Errorf("Expected timeout to be set to %d, got %d", minTimeout, cfg.Timeout)
@@ -56,7 +56,7 @@ func TestValidateConfig_TimeoutNegative(t *testing.T) {
 }
 
 func TestValidateConfig_DefaultMaxPayload(t *testing.T) {
-	cfg := &ScanConfig{Workers: 10, RateLimit: 50, Timeout: 30, MaxPayload: 0}
+	cfg := &ScanConfig{URL: "http://example.com", Workers: 10, RateLimit: 50, Timeout: 30, MaxPayload: 0}
 	validateConfig(cfg)
 	if cfg.MaxPayload != defaultMaxPayload {
 		t.Errorf("Expected max payload to be set to %d, got %d", defaultMaxPayload, cfg.MaxPayload)
@@ -64,7 +64,7 @@ func TestValidateConfig_DefaultMaxPayload(t *testing.T) {
 }
 
 func TestValidateConfig_NegativeMaxPayload(t *testing.T) {
-	cfg := &ScanConfig{Workers: 10, RateLimit: 50, Timeout: 30, MaxPayload: -1}
+	cfg := &ScanConfig{URL: "http://example.com", Workers: 10, RateLimit: 50, Timeout: 30, MaxPayload: -1}
 	validateConfig(cfg)
 	if cfg.MaxPayload != defaultMaxPayload {
 		t.Errorf("Expected max payload to be set to %d, got %d", defaultMaxPayload, cfg.MaxPayload)
@@ -107,7 +107,7 @@ func TestValidateConfig_NoLoginURL(t *testing.T) {
 }
 
 func TestValidateConfig_AllDefaults(t *testing.T) {
-	cfg := &ScanConfig{}
+	cfg := &ScanConfig{URL: "http://example.com"}
 	validateConfig(cfg)
 
 	if cfg.RateLimit != minRateLimit {

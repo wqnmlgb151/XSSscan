@@ -8,8 +8,9 @@
 <p align="center">
 <img src="https://img.shields.io/badge/go-1.26+-00ADD8?logo=go" alt="Go">
 <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
-<img src="https://img.shields.io/badge/tests-20packages--race--passing-brightgreen" alt="Tests">
+<img src="https://img.shields.io/badge/tests-19packages--race--passing-brightgreen" alt="Tests">
 <img src="https://img.shields.io/badge/coverage-10%2F18--≥80%25-blue" alt="Coverage">
+<img src="https://img.shields.io/badge/repo-github.com%2Fwqnmlgb151%2FXSSscan-lightgrey" alt="Repo">
 </p>
 
 ---
@@ -93,8 +94,15 @@ docker run --rm xsscan --url "http://target.com/page?q=test"
 ## 快速开始
 
 ```bash
+# 查看版本
+./xsscan --version
+
 # 最简扫描
 ./xsscan --url "http://target.com/search?q=test"
+
+# 管道模式 — 从 stdin 读取 URL
+echo "http://target.com/search?q=test" | ./xsscan
+cat urls.txt | ./xsscan --silent
 
 # 推荐日常用法 — 上下文探测 + WAF 绕过 + 随机 UA
 ./xsscan --url "http://target.com/search?q=test" \
@@ -585,6 +593,26 @@ make clean
 | `pkg/payload` | 46.8% | ⚠️ Fair |
 | `pkg/execverify` | 38.1% | 🔴 Low (browser-dependent) |
 | `pkg/dom` | 19.4% | 🔴 Low (CDP integration) |
+
+---
+
+## 版本规则
+
+版本号遵循 `x.y.z` 格式：
+
+| 位 | 含义 |
+|----|------|
+| **x** (major) | 重大架构变更或破坏性改动 |
+| **y** (feature) | 新增功能（如新扫描模式、新 flag） |
+| **z** (bugfix) | Bug 修复、体验优化 |
+
+构建时通过 ldflags 注入版本：
+
+```bash
+make build VERSION=1.0.0
+```
+
+`--version` 输出当前构建版本。
 
 ---
 

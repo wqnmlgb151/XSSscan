@@ -59,6 +59,7 @@ type Engine struct {
 
 	payloadsSent  int64
 	errors        int64
+	probeFiltered int
 	wafTracker    *WAFTracker
 	csrfExtractor *csrf.Extractor
 
@@ -171,7 +172,8 @@ func (e *Engine) Run(ctx context.Context, target model.Target) (*model.ScanResul
 	skips points where the marker reflects but real payload chars (< > \")
 	would be escaped — the marker->payload assumption gap. */
 	if e.config.EnableProbe {
-		filtered := make([]model.InjectionPoint, 0, len(analysisResult.InjectionPoints))
+		preFilterCount := len(analysisResult.InjectionPoints)
+		filtered := make([]model.InjectionPoint, 0, preFilterCount)
 		for _, injection := range analysisResult.InjectionPoints {
 			if e.runContextProbe(ctx, injection, host) {
 				filtered = append(filtered, injection)
@@ -180,6 +182,7 @@ func (e *Engine) Run(ctx context.Context, target model.Target) (*model.ScanResul
 					zap.String("param", injection.Parameter.Name))
 			}
 		}
+		e.probeFiltered = preFilterCount - len(filtered)
 		analysisResult.InjectionPoints = filtered
 		e.logger.Info("Probe filtering complete",
 			zap.Int("remaining", len(filtered)))
@@ -287,6 +290,7 @@ dispatch:
 		Duration:        time.Since(startTime).Milliseconds(),
 		ParametersFound: len(analysisResult.InjectionPoints),
 		PayloadsSent:    int(atomic.LoadInt64(&e.payloadsSent)),
+		ProbeFiltered:   e.probeFiltered,
 		Errors:          int(atomic.LoadInt64(&e.errors)),
 		WAF:             e.wafTracker.Result(),
 	}

@@ -104,6 +104,13 @@ const (
 	minTimeout        = 1
 )
 
+// Version is the current xsscan version. Set via ldflags at build time:
+//
+//	make build VERSION=1.0.0
+//
+// x.y.z: x = major (architectural redesign), y = feature, z = bug fix.
+var Version = "0.6.0"
+
 var cfg ScanConfig
 
 var rootCmd = &cobra.Command{
@@ -116,9 +123,11 @@ var rootCmd = &cobra.Command{
 支持存储型 XSS 检测（需要 --stored 和 --trigger-url）。
 
 支持 Query、POST Body (JSON/Form)、Header、Cookie 参数注入。
+支持管道输入：echo http://target | xsscan
 
 仅用于授权的安全测试。`,
-	RunE: runScan,
+	Version: Version,
+	RunE:    runScan,
 }
 
 const (
@@ -471,16 +480,24 @@ func setupSignalHandler(cancel context.CancelFunc) {
 }
 
 func resolveTargets(primaryURL string) ([]string, error) {
-	urls := []string{primaryURL}
+	var urls []string
+	if primaryURL != "" {
+		urls = append(urls, primaryURL)
+	}
 	if cfg.TargetsFile != "" {
 		fileURLs, err := loadTargets(cfg.TargetsFile)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load targets: %w", err)
 		}
-		if len(fileURLs) > 0 {
-			urls = fileURLs
-			color.Cyan("[*] Loaded %d targets from %s\n", len(urls), cfg.TargetsFile)
+		if cfg.TargetsFile == "-" {
+			color.Cyan("[*] Loaded %d targets from stdin\n", len(fileURLs))
+		} else if len(fileURLs) > 0 {
+			color.Cyan("[*] Loaded %d targets from %s\n", len(fileURLs), cfg.TargetsFile)
 		}
+		urls = append(urls, fileURLs...)
+	}
+	if len(urls) == 0 {
+		return nil, fmt.Errorf("no target URLs provided")
 	}
 	return urls, nil
 }
@@ -551,6 +568,7 @@ func crawlAndScan(ctx context.Context, client *http.Client, engine *scanner.Engi
 		MaxDepth:     cfg.CrawlDepth,
 		MaxPages:     cfg.CrawlMaxPages,
 		SameHostOnly: true,
+		ExtraHeaders: baseTarget.Headers,
 	}
 	c := crawler.NewCrawlerWithConfig(client, crawlCfg)
 	crawlResult, err := c.Crawl(ctx, scanURL)
@@ -562,6 +580,10 @@ func crawlAndScan(ctx context.Context, client *http.Client, engine *scanner.Engi
 		return nil
 	}
 	color.Green("[+] Crawl discovered %d URLs, %d forms\n", len(crawlResult.URLs), len(crawlResult.Forms))
+
+	if len(crawlResult.URLs) == 0 && len(crawlResult.Forms) == 0 {
+		color.Yellow("[!] Crawl returned no results — target may require authentication or block crawling\n")
+	}
 
 	for _, u := range crawlResult.URLs {
 		subTarget := deriveTarget(baseTarget, u)
@@ -597,7 +619,7 @@ func crawlAndScan(ctx context.Context, client *http.Client, engine *scanner.Engi
 }
 
 func discoverFormsFromPage(ctx context.Context, client *http.Client, tgt model.Target) []model.Target {
-	forms, err := crawler.ExtractFormsFromPage(ctx, client, tgt.URL)
+	forms, err := crawler.ExtractFormsFromPage(ctx, client, tgt.URL, tgt.Headers)
 	if err != nil {
 		color.Yellow("[!] Form auto-discovery skipped: %v\n", err)
 		return nil
@@ -722,6 +744,9 @@ func reportScanResults(allFindings []model.Finding, totalStats model.ScanStats, 
 	if !cfg.Silent {
 		printResults(result, duration)
 	}
+	if totalStats.ProbeFiltered > 0 && findingsCount == 0 {
+		color.Yellow("[!] %d injection point(s) filtered by --probe — re-run without --probe to confirm\n", totalStats.ProbeFiltered)
+	}
 	if cfg.Output != "" {
 		r := report.NewReporter()
 		scanData := report.FromScanResult(result, duration.Milliseconds())
@@ -765,6 +790,14 @@ func collectChangedFlags(cmd *cobra.Command) map[string]bool {
 }
 
 func validateConfig(cfg *ScanConfig) error {
+	// Pipeline mode: no --url and no --targets-file, but stdin is redirected.
+	if cfg.URL == "" && cfg.TargetsFile == "" {
+		if isStdinPiped() {
+			cfg.TargetsFile = "-"
+		} else {
+			return fmt.Errorf("no target URL provided (use --url, --targets-file, or pipe URLs via stdin)")
+		}
+	}
 	if cfg.Workers > maxWorkers {
 		return fmt.Errorf("--workers exceeds maximum allowed (%d)", maxWorkers)
 	}
@@ -777,7 +810,7 @@ func validateConfig(cfg *ScanConfig) error {
 	if cfg.MaxPayload <= 0 {
 		cfg.MaxPayload = defaultMaxPayload
 	}
-	if cfg.LoginURL != "" {
+	if cfg.LoginURL != "" && cfg.URL != "" {
 		if !ssrfguard.HostsMatch(cfg.URL, cfg.LoginURL) {
 			return fmt.Errorf("--login-url host must match --url host (got %s vs %s)", cfg.LoginURL, cfg.URL)
 		}
@@ -786,6 +819,15 @@ func validateConfig(cfg *ScanConfig) error {
 		return fmt.Errorf("--stored requires at least one --trigger-url")
 	}
 	return nil
+}
+
+// isStdinPiped returns true when stdin is a pipe or redirect (not a TTY).
+func isStdinPiped() bool {
+	stat, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return (stat.Mode() & os.ModeCharDevice) == 0
 }
 
 var blockedHeaders = map[string]bool{
@@ -827,9 +869,9 @@ func parseCookies(cookies []string) []*http.Cookie {
 func printBanner() {
 	color.Cyan(`
 ╔═══════════════════════════════════════╗
-║   xsscan v0.5.0 - XSS Scanner        ║
+║   xsscan v%-26s ║
 ║   For authorized security testing    ║
-╚═══════════════════════════════════════╝`)
+╚═══════════════════════════════════════╝`, Version)
 }
 
 func printResults(result *model.ScanResult, duration time.Duration) {
@@ -961,6 +1003,7 @@ func scanOneTarget(ctx context.Context, engine *scanner.Engine, tgt model.Target
 	*allFindings = append(*allFindings, result.Findings...)
 	totalStats.PayloadsSent += result.Stats.PayloadsSent
 	totalStats.ParametersFound += result.Stats.ParametersFound
+	totalStats.ProbeFiltered += result.Stats.ProbeFiltered
 	if result.Stats.WAF != nil {
 		if totalStats.WAF == nil {
 			totalStats.WAF = result.Stats.WAF

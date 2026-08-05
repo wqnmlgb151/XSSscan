@@ -535,8 +535,19 @@ func (e *Engine) applyVerificationResult(f *model.Finding, result *execverify.Ex
 	}
 }
 
+var wafLogged int32
+
 func (e *Engine) trackWAF(wafResult verify.WAFResult) {
-	e.wafTracker.Report(wafResult.Detected, wafResult.Name, false)
+	if !wafResult.Detected {
+		return
+	}
+	e.wafTracker.Report(true, wafResult.Name, false)
+	// Log first WAF detection regardless of bypass mode
+	if atomic.CompareAndSwapInt32(&wafLogged, 0, 1) {
+		e.logger.Warn("WAF detected — report will include WAF info",
+			zap.String("waf", wafResult.Name),
+			zap.String("evidence", wafResult.Evidence))
+	}
 }
 
 func (e *Engine) scanPayload(ctx context.Context, injection model.InjectionPoint, p payload.Payload, csp *analyze.CSPPolicy, host string) (*model.Finding, error) {
@@ -802,6 +813,26 @@ func convertCSPBypasses(csp *analyze.CSPPolicy) []model.CSPBypass {
 	}
 	return result
 }
+var sensitiveHeaders = map[string]bool{
+	"authorization":       true,
+	"proxy-authorization": true,
+	"cookie":              true,
+	"set-cookie":          true,
+	"x-api-key":           true,
+	"api-key":             true,
+	"x-auth-token":        true,
+	"x-csrf-token":        true,
+	"x-xsrf-token":        true,
+	"www-authenticate":    true,
+}
+
+func redactHeaderValue(name, value string) string {
+	if sensitiveHeaders[strings.ToLower(name)] {
+		return "[REDACTED]"
+	}
+	return value
+}
+
 func buildRawRequest(target model.Target) string {
 	var b strings.Builder
 
@@ -828,13 +859,15 @@ func buildRawRequest(target model.Target) string {
 
 	for k, v := range target.Headers {
 		// Sanitize header values to prevent CRLF injection in raw request output.
-		fmt.Fprintf(&b, "%s: %s\r\n", stripCRLF(k), stripCRLF(v))
+		// Redact sensitive headers (Authorization, cookies) to prevent credential leaks
+		// when reports are shared.
+		fmt.Fprintf(&b, "%s: %s\r\n", stripCRLF(k), stripCRLF(redactHeaderValue(k, v)))
 	}
 	if len(target.Cookies) > 0 {
 		cookieParts := make([]string, 0, len(target.Cookies))
 		for _, c := range target.Cookies {
 			if c != nil {
-				cookieParts = append(cookieParts, c.Name+"="+c.Value)
+				cookieParts = append(cookieParts, c.Name+"=[REDACTED]")
 			}
 		}
 		if len(cookieParts) > 0 {

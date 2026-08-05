@@ -74,8 +74,8 @@ func TestBuildRawRequest_Cookies(t *testing.T) {
 	}
 	req := buildRawRequest(target)
 
-	if !strings.Contains(req, "Cookie: session=abc123; csrf=xyz\r\n") {
-		t.Errorf("Expected Cookie header, got:\n%s", req)
+	if !strings.Contains(req, "Cookie: session=[REDACTED]; csrf=[REDACTED]\r\n") {
+		t.Errorf("Expected Cookie header with redacted values, got:\n%s", req)
 	}
 }
 

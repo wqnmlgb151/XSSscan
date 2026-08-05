@@ -3,9 +3,12 @@ package httpclient
 
 import (
 	"crypto/tls"
+	"fmt"
 	"net/http"
 	"net/http/cookiejar"
 	"time"
+
+	"github.com/xsscan/xsscan/pkg/ssrfguard"
 )
 
 // DefaultUA is sent when no User-Agent is specified by the caller.
@@ -38,6 +41,9 @@ func NewClient(timeout time.Duration, proxy *ProxyConfig) *http.Client {
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 10 {
 				return http.ErrUseLastResponse
+			}
+			if err := ssrfguard.IsURLTargetAllowed(req.URL.String()); err != nil {
+				return fmt.Errorf("redirect blocked: %w", err)
 			}
 			return nil
 		},

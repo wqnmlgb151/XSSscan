@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"regexp"
 	"strings"
 	"syscall"
 	"time"
@@ -690,6 +691,12 @@ func setContentType(headers map[string]string) map[string]string {
 	return headers
 }
 
+var ansiEscapeRE = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b`)
+
+func stripANSI(s string) string {
+	return ansiEscapeRE.ReplaceAllString(s, "")
+}
+
 func collectBlindXSSCallbacks(srv *callback.Server, allFindings *[]model.Finding, callbackURL string) {
 	if srv.Count() == 0 {
 		color.Cyan("[*] Waiting 30s for blind XSS callbacks...")
@@ -699,15 +706,16 @@ func collectBlindXSSCallbacks(srv *callback.Server, allFindings *[]model.Finding
 	if cbCount > 0 {
 		color.Green("\n[+] Received %d blind XSS callback(s):\n", cbCount)
 		for i, cb := range srv.Callbacks() {
-			color.Green("  [%d] %s %s %s", i+1, cb.Method, cb.Path, cb.Query)
+			color.Green("  [%d] %s %s %s", i+1,
+				stripANSI(cb.Method), stripANSI(cb.Path), stripANSI(cb.Query))
 			if cb.UserAgent != "" {
-				color.Cyan("      UA: %s", cb.UserAgent)
+				color.Cyan("      UA: %s", stripANSI(cb.UserAgent))
 			}
 			if cb.Referer != "" {
-				color.Cyan("      Referer: %s", cb.Referer)
+				color.Cyan("      Referer: %s", stripANSI(cb.Referer))
 			}
 			if cb.Body != "" {
-				color.Cyan("      Body: %s", cb.Body)
+				color.Cyan("      Body: %s", stripANSI(cb.Body))
 			}
 		}
 		for _, cb := range srv.Callbacks() {

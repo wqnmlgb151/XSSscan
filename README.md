@@ -9,7 +9,7 @@
 <img src="https://img.shields.io/badge/go-1.26+-00ADD8?logo=go" alt="Go">
 <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
 <img src="https://img.shields.io/badge/tests-19packages--race--passing-brightgreen" alt="Tests">
-<img src="https://img.shields.io/badge/coverage-10%2F18--≥80%25-blue" alt="Coverage">
+<img src="https://img.shields.io/badge/coverage-9%2F19--≥80%25-blue" alt="Coverage">
 <img src="https://img.shields.io/badge/repo-github.com%2Fwqnmlgb151%2FXSSscan-lightgrey" alt="Repo">
 </p>
 
@@ -38,14 +38,14 @@
 - **上下文感知 Payload 生成** — 通过 HTML 词法分析器识别 19 种注入上下文，为每种上下文生成针对性的 payload
 - **反射型 XSS 检测** — 基于 marker 的反射检测，模糊匹配（URL 编码、HTML 实体、截断）覆盖各种变形
 - **存储型 XSS 检测** — 双阶段检测：注入唯一 marker + 轮询触发页面
-- **DOM XSS 检测** — 无头 Chrome 覆盖 12 种 source（fragment、window.name、localStorage、postMessage 等）
+- **DOM XSS 检测** — 无头 Chrome 双层检测：CDP sink hook（innerHTML/eval/document.write 等 11 种 sink）+ 事后 DOM 扫描兜底。覆盖 11 种 source
 - **Blind XSS 检测** — 内置 HTTP 回调服务器，`sync.Cond` 零 CPU 等待
 
 ### 智能引擎
 
 - **自动表单发现** — 无需手动 `--data`，自动获取目标页面提取 `<form>` 的 action/method/input 字段，生成对应的 POST/GET 扫描目标
 - **上下文探针** (`--probe`) — 扫描前发送安全探针验证上下文可利用性，大幅降低误报
-- **WAF 感知绕过** — 11 种变异策略，按 WAF 类型精准选择，首次检测到 WAF 自动启用
+- **WAF 感知绕过** — 17 种变异策略（11 结构 + 6 编码），按 WAF 类型精准选择，首次检测到 WAF 自动启用
 - **置信度评分** — 0.0–1.0 评分体系，含交互效应（WAF×无净化、语法×上下文逃逸）
 - **语义去重** — 按攻击向量类 + 上下文能力类去重，保留最高置信度变体
 
@@ -140,6 +140,7 @@ cat urls.txt | ./xsscan --silent
 - GET 表单：自动拼接 query 参数到 action URL
 - 去重：相同 action+method 的表单只扫描一次
 - 与 `--crawl` 叠加：爬虫发现的每一页都会提取表单
+- `--render-spa`：SPA 页面无静态表单时，自动用 Headless Chrome 渲染 JS 后提取表单
 - **URL 已有 query 参数时跳过**：避免对已有参数的目标重复扫描
 - **有诊断提示**：页面无表单或请求失败时显示明确原因
 
@@ -171,7 +172,12 @@ cat urls.txt | ./xsscan --silent
 ./xsscan --url "http://target.com/page?q=test" --headless
 ```
 
-覆盖 12 种 DOM XSS source：
+覆盖 11 种 DOM XSS source，双层检测：
+
+| 层级 | 方式 | 置信度 |
+|------|------|--------|
+| **CDP Sink Hook** | 脚本注入 `Page.addScriptToEvaluateOnNewDocument`，拦截 innerHTML/eval/document.write/Function/location.assign 等 11 种 sink | 0.85 |
+| **事后 DOM 扫描** | 兜底检测，扫描 DOM 中已渲染的 marker（hooks 未命中时启用） | 0.75 |
 
 | Source | 测试方式 |
 |--------|----------|
@@ -181,7 +187,7 @@ cat urls.txt | ./xsscan --silent
 | window.name | `window.name` 注入 |
 | Referer | `document.referrer` |
 | javascript:href | `javascript:` 协议 |
-| Inline Event | 内联事件处理器 |
+| Inline Event | 内联事件处理器注入 |
 | localStorage | `localStorage.setItem` |
 | sessionStorage | `sessionStorage.setItem` |
 | document.cookie | Cookie 注入 |
@@ -446,7 +452,7 @@ Target URL
 │  • 上下文特定模板                                │
 │  • 框架 payload (React/Vue/Angular/jQuery/Jinja2)│
 │  • Polyglot payload                              │
-│  • WAF 绕过变异 (11 种策略)                      │
+│  • WAF 绕过变异 (17 种策略: 11 结构 + 6 编码)   │
 │  • 自定义词表支持                                │
 └─────────────────────────────────────────────────┘
     │
@@ -469,8 +475,9 @@ Target URL
     ▼
 ┌─────────────────────────────────────────────────┐
 │  Semantic Dedup                                  │
-│  • 攻击向量类 + 上下文能力类分组                  │
-│  • 保留最高置信度变体                            │
+│  • 5 元组 key (URL+param+context+vector+exploit) │
+│  • exploit 技术分类 (script/event/protocol/...) │
+│  • URL 归一化去重，噪音从 50→8 finding/目标      │
 └─────────────────────────────────────────────────┘
     │
     ▼ (可选)
@@ -505,7 +512,7 @@ Target URL
 | `pkg/auth/oauth/` | OAuth 2.0/OIDC：自动发现、ROPC、PKCE |
 | `pkg/dom/` | 无头 Chrome DOM XSS 检测（CDP） |
 | `pkg/execverify/` | 浏览器执行验证（4-worker 并发） |
-| `pkg/crawler/` | BFS 同域链接发现（10-worker 并发） |
+| `pkg/crawler/` | BFS 链接发现 + SPA 路由提取 + Sitemap + JS 渲染 (`--render-spa`) |
 | `pkg/stored/` | 存储型 XSS：marker 注入 + 触发轮询 |
 | `pkg/callback/` | Blind XSS HTTP 回调服务器 |
 | `pkg/ssrfguard/` | SSRF 防护：IP 验证 + 重定向链检查 |
@@ -535,8 +542,8 @@ Target URL
 | 执行验证 | 4-worker Chrome 并发 |
 | 爬虫并发 | 10-worker BFS 深度并行 |
 | 上下文类型 | 19 种 |
-| WAF 签名 | 8 种 + 11 种绕过策略 |
-| DOM XSS Source | 12 种 |
+| WAF 签名 | 8 种 + 17 种绕过策略（11 结构 + 6 编码） |
+| DOM XSS Source | 11 种 + CDP sink hook（11 种 sink） |
 | 框架 Payload | 7 种（React, Vue, Angular, Svelte, jQuery, HTMX, Jinja2） |
 | 零数据竞争 | `go test -race` 全通过 |
 
@@ -583,13 +590,13 @@ make clean
 | `pkg/csrf` | 89.1% | ⭐ Excellent |
 | `pkg/auth` | 88.2% | ⭐ Excellent |
 | `pkg/ssrfguard` | 85.5% | ⭐ Excellent |
-| `pkg/crawler` | 84.5% | ⭐ Excellent |
+| `pkg/crawler` | 72.0% | ✅ Good |
 | `pkg/scanner` | 82.0% | ⭐ Excellent |
 | `pkg/stored` | 77.9% | ✅ Good |
-| `pkg/analyze` | 64.9% | ✅ Good |
 | `pkg/auth/oauth` | 66.2% | ✅ Good |
+| `pkg/analyze` | 64.9% | ✅ Good |
 | `pkg/context` | 58.7% | ⚠️ Fair |
-| `pkg/cmd` | 57.1% | ⚠️ Fair |
+| `cmd/` | 51.0% | ⚠️ Fair |
 | `pkg/payload` | 46.8% | ⚠️ Fair |
 | `pkg/execverify` | 38.1% | 🔴 Low (browser-dependent) |
 | `pkg/dom` | 19.4% | 🔴 Low (CDP integration) |

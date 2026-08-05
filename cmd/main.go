@@ -75,6 +75,7 @@ type ScanConfig struct {
 	PayloadPreset  string
 	PayloadWordlist string
 	Headless       bool
+	RenderSPA      bool
 	ConfigFile     string
 	JWT            string
 	Silent         bool
@@ -188,6 +189,7 @@ func init() {
 	rootCmd.Flags().BoolVar(&cfg.AdaptiveRate, "adaptive-rate", false, "Auto-adjust rate limit on 429 responses")
 	rootCmd.Flags().StringVar(&cfg.PayloadPreset, "payload-preset", "standard", "Payload preset: minimal, standard, full")
 	rootCmd.Flags().BoolVar(&cfg.Headless, "headless", false, "Enable headless browser for DOM XSS detection (requires Chrome)")
+	rootCmd.Flags().BoolVar(&cfg.RenderSPA, "render-spa", false, "Use headless Chrome to render SPA pages for form discovery (requires Chrome)")
 	rootCmd.Flags().StringVar(&cfg.PayloadWordlist, "payload-wordlist", "", "Path to custom payload wordlist (one payload per line)")
 	rootCmd.Flags().StringVar(&cfg.ConfigFile, "config", "", "Path to YAML config file")
 	rootCmd.Flags().StringVar(&cfg.JWT, "jwt", "", "JWT token (sent as Bearer in Authorization header)")
@@ -542,7 +544,7 @@ func scanAllTargets(ctx context.Context, engine *scanner.Engine, client *http.Cl
 
 		// Auto-discover forms when URL has no query params and no explicit --data.
 		if cfg.Body == "" && !hasQueryParams(scanTarget.URL) {
-			formTargets := discoverFormsFromPage(ctx, client, scanTarget)
+			formTargets := discoverFormsFromPage(ctx, client, scanTarget, cfg.RenderSPA)
 			for _, ft := range formTargets {
 				if err := scanOneTarget(ctx, engine, ft, allFindings, totalStats); err != nil {
 					color.Yellow("[!] Form scan failed for %s: %v\n", ft.URL, err)
@@ -612,11 +614,23 @@ func crawlAndScan(ctx context.Context, client *http.Client, engine *scanner.Engi
 	return nil
 }
 
-func discoverFormsFromPage(ctx context.Context, client *http.Client, tgt model.Target) []model.Target {
+func discoverFormsFromPage(ctx context.Context, client *http.Client, tgt model.Target, renderSPA bool) []model.Target {
 	forms, err := crawler.ExtractFormsFromPage(ctx, client, tgt.URL, tgt.Headers)
 	if err != nil {
 		color.Yellow("[!] Form auto-discovery skipped: %v\n", err)
 		return nil
+	}
+	if len(forms) == 0 && renderSPA {
+		color.Cyan("[*] No static forms found — attempting JS rendering...\n")
+		rendered, err := crawler.RenderPage(ctx, tgt.URL, 15*time.Second)
+		if err != nil {
+			color.Yellow("[!] JS rendering failed: %v\n", err)
+			return nil
+		}
+		forms = rendered.Forms
+		if len(forms) > 0 {
+			color.Green("[+] JS rendering discovered %d form(s)\n", len(forms))
+		}
 	}
 	if len(forms) == 0 {
 		color.Yellow("[!] No HTML forms found on target page\n")

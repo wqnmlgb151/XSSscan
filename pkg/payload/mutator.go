@@ -2,6 +2,8 @@
 package payload
 
 import (
+	"fmt"
+	"net/url"
 	"strings"
 	"unicode"
 
@@ -23,6 +25,14 @@ const (
 	MutationStringConcat        MutationType = "string_concat"
 	MutationNewlineInjection    MutationType = "newline_injection"
 	MutationEntityPlusCase      MutationType = "entity_plus_case"
+	// Encoding-layer mutations: transform the payload representation to bypass
+	// WAFs that inspect the literal bytes but don't decode before matching.
+	MutationDoubleURLEncode  MutationType = "double_url_encode"
+	MutationUnicodeFullwidth MutationType = "unicode_fullwidth"
+	MutationHTMLEntityNested MutationType = "html_entity_nested"
+	MutationUnicodeEscapeJS  MutationType = "unicode_escape_js"
+	MutationHexEntityMixed   MutationType = "hex_entity_mixed"
+	MutationNullByteInjection MutationType = "null_byte_injection"
 )
 
 // Mutation represents a single encoded variant of a payload.
@@ -134,6 +144,55 @@ var strategies = []mutationStrategy{
 			return isHTML && strings.Contains(payload, "<img ")
 		},
 		apply: applyNewlineInjection,
+	},
+	// Encoding-layer mutations
+	{
+		name:   MutationDoubleURLEncode,
+		bypass: "WAF that URL-decodes once before inspection (server double-decodes)",
+		applies: func(payload string, _, _ bool) bool {
+			return strings.ContainsAny(payload, "<>\"'()")
+		},
+		apply: doubleURLEncode,
+	},
+	{
+		name:   MutationUnicodeFullwidth,
+		bypass: "WAF that doesn't normalize fullwidth Unicode characters",
+		applies: func(payload string, _, _ bool) bool {
+			return len(payload) >= 3
+		},
+		apply: toFullwidth,
+	},
+	{
+		name:   MutationHTMLEntityNested,
+		bypass: "WAF that decodes HTML entities once, server decodes twice",
+		applies: func(payload string, isHTML, _ bool) bool {
+			return isHTML && strings.ContainsAny(payload, "<>\"'&")
+		},
+		apply: nestHTMLEntities,
+	},
+	{
+		name:   MutationUnicodeEscapeJS,
+		bypass: "WAF that doesn't decode \\uXXXX escapes in JS strings",
+		applies: func(payload string, _, isJS bool) bool {
+			return isJS && strings.Contains(payload, "alert")
+		},
+		apply: unicodeEscapeJS,
+	},
+	{
+		name:   MutationHexEntityMixed,
+		bypass: "WAF that matches named entities but not hex entities",
+		applies: func(payload string, isHTML, _ bool) bool {
+			return isHTML && strings.ContainsAny(payload, "<>")
+		},
+		apply: encodeHexEntities,
+	},
+	{
+		name:   MutationNullByteInjection,
+		bypass: "Legacy WAF that truncates at null byte",
+		applies: func(payload string, isHTML, _ bool) bool {
+			return isHTML && strings.HasPrefix(payload, "<")
+		},
+		apply: injectNullByte,
 	},
 	{
 		name:   MutationEntityPlusCase,
@@ -311,4 +370,70 @@ func mixCase(s string) string {
 		}
 	}
 	return b.String()
+}
+
+// doubleURLEncode applies a second layer of URL encoding so that a server
+// that decodes once still produces encoded metacharacters for the app.
+func doubleURLEncode(s string) string {
+	return url.PathEscape(url.PathEscape(s))
+}
+
+// toFullwidth converts ASCII to fullwidth Unicode equivalents (U+FF01–U+FF5E).
+// Some WAFs don't normalize these before matching.
+func toFullwidth(s string) string {
+	var b strings.Builder
+	for _, ch := range s {
+		if ch >= 0x21 && ch <= 0x7E {
+			b.WriteRune(ch - 0x20 + 0xFF01)
+		} else {
+			b.WriteRune(ch)
+		}
+	}
+	return b.String()
+}
+
+// nestHTMLEntities double-encodes HTML entities so that the server's first
+// decode produces literal &lt; &gt; strings that the browser then decodes.
+func nestHTMLEntities(s string) string {
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "<", "&amp;lt;")
+	s = strings.ReplaceAll(s, ">", "&amp;gt;")
+	s = strings.ReplaceAll(s, "\"", "&amp;quot;")
+	s = strings.ReplaceAll(s, "'", "&amp;#39;")
+	return s
+}
+
+// unicodeEscapeJS converts "alert" to "\u0061\u006c\u0065\u0072\u0074" etc.
+func unicodeEscapeJS(s string) string {
+	var b strings.Builder
+	for _, ch := range s {
+		if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') {
+			b.WriteString(fmt.Sprintf("\\u%04x", ch))
+		} else {
+			b.WriteRune(ch)
+		}
+	}
+	return b.String()
+}
+
+// encodeHexEntities replaces < and > with hex entity equivalents.
+func encodeHexEntities(s string) string {
+	s = strings.ReplaceAll(s, "<", "&#x3C;")
+	s = strings.ReplaceAll(s, ">", "&#x3E;")
+	return s
+}
+
+// injectNullByte inserts a null byte after the opening tag to truncate
+// legacy WAF pattern matching without affecting browser parsing.
+func injectNullByte(s string) string {
+	idx := strings.Index(s, "<")
+	if idx < 0 {
+		return s
+	}
+	// Find end of tag name
+	end := strings.IndexAny(s[idx:], " >\t\n")
+	if end < 0 {
+		return s
+	}
+	return s[:idx+end] + "\x00" + s[idx+end:]
 }

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 
@@ -24,9 +25,23 @@ import (
 //go:embed sinks.js
 var sinkDetectionScript string
 
+//go:embed hooks.js
+var hookScript string
+
 // buildSinkScript injects the marker into the sink detection template.
 func buildSinkScript(marker string) string {
 	return strings.Replace(sinkDetectionScript, "{{MARKER}}", marker, 1)
+}
+
+// buildHookScript injects the marker into the CDP sink hook script.
+func buildHookScript(marker string) string {
+	return strings.Replace(hookScript, "__MARKER_PLACEHOLDER__", marker, 1)
+}
+
+// sinkResult is a single recorded sink hit from the hooks.js instrumentation.
+type sinkResult struct {
+	Sink  string `json:"sink"`
+	Value string `json:"value"`
 }
 
 // jsStringLiteral safely encodes a string for use as a JS string literal.
@@ -301,6 +316,16 @@ func (s *Scanner) runSingleDOMTest(ctx context.Context, target model.Target, tes
 	ctx, cancel := context.WithTimeout(tabCtx, s.timeout)
 	defer cancel()
 
+	// Inject sink hooks via CDP before any navigation.
+	// These hooks intercept innerHTML, eval, document.write, etc. and record
+	// only when the xsscan marker passes through them — eliminating the false
+	// positives from static source checks (marker-in-URL, marker-in-cookie, etc.).
+	hookScript := buildHookScript(marker)
+	injectHook := chromedp.ActionFunc(func(ctx context.Context) error {
+		_, err := page.AddScriptToEvaluateOnNewDocument(hookScript).Do(ctx)
+		return err
+	})
+
 	var consoleMsgs []string
 	var exceptions []string
 
@@ -327,6 +352,7 @@ func (s *Scanner) runSingleDOMTest(ctx context.Context, target model.Target, tes
 	case test.Extra != "" && test.Name == "window.name":
 		// window.name persists across navigations — set it on about:blank first
 		err = chromedp.Run(ctx,
+			injectHook,
 			chromedp.Navigate("about:blank"),
 			chromedp.Evaluate(test.Extra, nil),
 			chromedp.Navigate(test.NavURL),
@@ -339,6 +365,7 @@ func (s *Scanner) runSingleDOMTest(ctx context.Context, target model.Target, tes
 		// out of a JS string literal and execute arbitrary code.
 		referrerJS := fmt.Sprintf(`(function(){var m=document.createElement('meta');m.name='referrer';m.content='unsafe-url';document.head.appendChild(m);var f=document.createElement('iframe');f.src=%s;document.body.appendChild(f);})();`, strconv.Quote(test.NavURL))
 		err = chromedp.Run(ctx,
+			injectHook,
 			chromedp.Navigate("about:blank"),
 			chromedp.Evaluate(referrerJS, nil),
 			chromedp.Sleep(2*time.Second),
@@ -348,6 +375,7 @@ func (s *Scanner) runSingleDOMTest(ctx context.Context, target model.Target, tes
 		// with an inline event handler. The onerror fires automatically (invalid src),
 		// testing whether dynamically-injected inline handlers execute in this context.
 		err = chromedp.Run(ctx,
+			injectHook,
 			chromedp.Navigate(test.NavURL),
 			chromedp.Sleep(1*time.Second),
 			chromedp.Evaluate(fmt.Sprintf(`(function(){
@@ -364,6 +392,7 @@ func (s *Scanner) runSingleDOMTest(ctx context.Context, target model.Target, tes
 		// Storage-based sources — set value on about:blank first (storage
 		// is origin-scoped), then navigate to target so the page reads it.
 		err = chromedp.Run(ctx,
+			injectHook,
 			chromedp.Navigate("about:blank"),
 			chromedp.Evaluate(test.Extra, nil),
 			chromedp.Navigate(test.NavURL),
@@ -374,6 +403,7 @@ func (s *Scanner) runSingleDOMTest(ctx context.Context, target model.Target, tes
 		// listener is registered, then post a message containing the marker.
 		postJS := fmt.Sprintf(`window.postMessage(%s, "*");`, jsStringLiteral(marker))
 		err = chromedp.Run(ctx,
+			injectHook,
 			chromedp.Navigate(test.NavURL),
 			chromedp.Sleep(1*time.Second),
 			chromedp.Evaluate(postJS, nil),
@@ -382,6 +412,7 @@ func (s *Scanner) runSingleDOMTest(ctx context.Context, target model.Target, tes
 	default:
 		// Standard navigation for fragment, search, pathname tests
 		err = chromedp.Run(ctx,
+			injectHook,
 			chromedp.Navigate(test.NavURL),
 			chromedp.Sleep(2*time.Second),
 		)
@@ -392,17 +423,46 @@ func (s *Scanner) runSingleDOMTest(ctx context.Context, target model.Target, tes
 
 	var findings []model.Finding
 
-	// Sink detection via embedded JS — only reports markers that appear in
-	// actually dangerous contexts, not just anywhere in the DOM.
-	var sinkHit string
-	err = chromedp.Run(ctx,
-		chromedp.Evaluate(buildSinkScript(marker), &sinkHit),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("JS evaluation failed: %w", err)
+	// Read CDP sink hooks first — these provide the highest-quality signal
+	// (marker actually passed through innerHTML/eval/document.write, not just
+	// sitting in the URL or cookie).
+	var hookHits []sinkResult
+	if err := chromedp.Run(ctx, chromedp.Evaluate(`window.__xsscan_hooks || []`, &hookHits)); err == nil {
+		for _, hit := range hookHits {
+			findings = append(findings, model.Finding{
+				Type:        model.DOMXSS,
+				Severity:    model.High,
+				Confidence:  0.85, // higher confidence: proven sink execution
+				URL:         test.NavURL,
+				Parameter:   fmt.Sprintf("DOM (%s)", test.Name),
+				ParamType:   model.ParamQuery,
+				Payload:     test.NavURL,
+				Contexts:    []string{"dom"},
+				Description: fmt.Sprintf("DOM XSS via %s: marker reached %s sink", test.Source, hit.Sink),
+				Remediation: "Use safe DOM APIs (textContent instead of innerHTML). Implement Trusted Types.",
+				CWE:         "CWE-79",
+				References: []string{
+					"https://owasp.org/www-community/attacks/DOM_Based_Cross_Site_Scripting",
+				},
+				Timestamp: time.Now(),
+			})
+		}
 	}
 
-	if sinkHit != "" {
+	// Fallback: sink detection via embedded JS (post-hoc DOM scan).
+	// Only used when hooks didn't catch anything (older browsers or
+	// hook interference). Reports markers that appear in dangerous
+	// DOM contexts, not just anywhere in the page.
+	if len(hookHits) == 0 {
+		var sinkHit string
+		err = chromedp.Run(ctx,
+			chromedp.Evaluate(buildSinkScript(marker), &sinkHit),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("JS evaluation failed: %w", err)
+		}
+
+		if sinkHit != "" {
 		findings = append(findings, model.Finding{
 			Type:        model.DOMXSS,
 			Severity:    model.High,
@@ -422,6 +482,7 @@ func (s *Scanner) runSingleDOMTest(ctx context.Context, target model.Target, tes
 			Timestamp: time.Now(),
 		})
 	}
+	} // end if len(hookHits) == 0
 
 	// Check console for payload execution indicators
 	for _, msg := range consoleMsgs {

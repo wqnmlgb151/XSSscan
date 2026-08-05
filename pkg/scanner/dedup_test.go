@@ -3,6 +3,7 @@ package scanner
 import (
 	"testing"
 
+	ctx "github.com/xsscan/xsscan/pkg/context"
 	"github.com/xsscan/xsscan/pkg/model"
 )
 
@@ -40,41 +41,41 @@ func TestClassifyAttackVector(t *testing.T) {
 
 func TestClassifyContext(t *testing.T) {
 	tests := []struct {
-		context string
+		context ctx.ContextType
 		want    contextClass
 	}{
-		{"html_body", ContextHTMLExecute},
-		{"html_tag", ContextHTMLExecute},
-		{"html_attr_value", ContextBreakout},
-		{"js_string", ContextJSExecute},
-		{"js_block", ContextJSExecute},
-		{"js_template_literal", ContextJSExecute},
-		{"url_attribute", ContextURL},
-		{"css_value", ContextLimited},
-		{"html_entity", ContextLimited},
-		{"unknown_context", ContextLimited},
+		{ctx.ContextHTMLBody, ContextHTMLExecute},
+		{ctx.ContextHTMLTag, ContextHTMLExecute},
+		{ctx.ContextHTMLAttrValue, ContextBreakout},
+		{ctx.ContextJSString, ContextJSExecute},
+		{ctx.ContextJSBlock, ContextJSExecute},
+		{ctx.ContextJSTemplateLiteral, ContextJSExecute},
+		{ctx.ContextURLAttr, ContextURL},
+		{ctx.ContextCSSValue, ContextLimited},
+		{ctx.ContextHTMLEntity, ContextLimited},
+		{ctx.ContextUnknown, ContextLimited},
 	}
 
 	for _, tt := range tests {
 		got := classifyContext(tt.context)
 		if got != tt.want {
-			t.Errorf("classifyContext(%q) = %q, want %q", tt.context, got, tt.want)
+			t.Errorf("classifyContext(%v) = %q, want %q", tt.context, got, tt.want)
 		}
 	}
 }
 
 func TestPrimaryContextClass(t *testing.T) {
 	tests := []struct {
-		contexts []string
+		contexts []ctx.ContextType
 		want     contextClass
 	}{
-		{[]string{"html_body"}, ContextHTMLExecute},
-		{[]string{"html_attr_value", "html_body"}, ContextHTMLExecute},
-		{[]string{"js_string"}, ContextJSExecute},
-		{[]string{"css_value"}, ContextLimited},
-		{[]string{"url_attribute"}, ContextURL},
-		{[]string{"html_attr_value"}, ContextBreakout},
-		{[]string{}, ContextLimited},
+		{[]ctx.ContextType{ctx.ContextHTMLBody}, ContextHTMLExecute},
+		{[]ctx.ContextType{ctx.ContextHTMLAttrValue, ctx.ContextHTMLBody}, ContextHTMLExecute},
+		{[]ctx.ContextType{ctx.ContextJSString}, ContextJSExecute},
+		{[]ctx.ContextType{ctx.ContextCSSValue}, ContextLimited},
+		{[]ctx.ContextType{ctx.ContextURLAttr}, ContextURL},
+		{[]ctx.ContextType{ctx.ContextHTMLAttrValue}, ContextBreakout},
+		{[]ctx.ContextType{}, ContextLimited},
 	}
 
 	for _, tt := range tests {

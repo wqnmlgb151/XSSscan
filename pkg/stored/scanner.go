@@ -175,7 +175,7 @@ func (s *Scanner) detectSingle(ctx context.Context, inj Injection) *model.Findin
 		return nil
 	}
 
-	found, evidenceURL := s.pollTriggerURLs(ctx, inj)
+	found, evidenceURL := s.pollTriggerURLs(ctx, inj.Target.Headers, inj)
 	if !found {
 		s.logger.Debug("marker not found on trigger URLs",
 			zap.String("param", inj.Parameter.Name),
@@ -286,7 +286,7 @@ func (s *Scanner) submitMarker(ctx context.Context, target model.Target) error {
 
 // pollTriggerURLs checks each trigger URL for the marker, polling up to MaxPolls times.
 // Within each poll round, trigger URLs are fetched concurrently.
-func (s *Scanner) pollTriggerURLs(ctx context.Context, inj Injection) (bool, string) {
+func (s *Scanner) pollTriggerURLs(ctx context.Context, headers map[string]string, inj Injection) (bool, string) {
 	triggerURLs := s.config.TriggerURLs
 	if len(triggerURLs) == 0 {
 		triggerURLs = []string{inj.Target.URL}
@@ -301,7 +301,7 @@ func (s *Scanner) pollTriggerURLs(ctx context.Context, inj Injection) (bool, str
 			}
 		}
 
-		if found, url := s.checkTriggerURLsConcurrent(ctx, triggerURLs, inj.Marker); found {
+		if found, url := s.checkTriggerURLsConcurrent(ctx, triggerURLs, inj.Marker, headers); found {
 			return true, url
 		}
 	}
@@ -309,7 +309,7 @@ func (s *Scanner) pollTriggerURLs(ctx context.Context, inj Injection) (bool, str
 }
 
 // checkTriggerURLsConcurrent fetches all trigger URLs concurrently within a poll round.
-func (s *Scanner) checkTriggerURLsConcurrent(ctx context.Context, triggerURLs []string, marker string) (bool, string) {
+func (s *Scanner) checkTriggerURLsConcurrent(ctx context.Context, triggerURLs []string, marker string, headers map[string]string) (bool, string) {
 	var wg sync.WaitGroup
 	resultCh := make(chan string, len(triggerURLs))
 	cancelCtx, cancel := context.WithCancel(ctx)
@@ -319,7 +319,7 @@ func (s *Scanner) checkTriggerURLsConcurrent(ctx context.Context, triggerURLs []
 		wg.Add(1)
 		go func(u string) {
 			defer wg.Done()
-			found, err := s.checkTriggerURL(cancelCtx, u, marker)
+			found, err := s.checkTriggerURL(cancelCtx, u, marker, headers)
 			if err == nil && found {
 				select {
 				case resultCh <- u:
@@ -339,13 +339,16 @@ func (s *Scanner) checkTriggerURLsConcurrent(ctx context.Context, triggerURLs []
 }
 
 // checkTriggerURL fetches a trigger URL and searches for the marker in the response body.
-func (s *Scanner) checkTriggerURL(ctx context.Context, triggerURL, marker string) (bool, error) {
+func (s *Scanner) checkTriggerURL(ctx context.Context, triggerURL, marker string, headers map[string]string) (bool, error) {
 	reqCtx, cancel := context.WithTimeout(ctx, s.config.RequestTimeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, triggerURL, nil)
 	if err != nil {
 		return false, fmt.Errorf("build request: %w", err)
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
 	}
 
 	resp, err := s.client.Do(req)

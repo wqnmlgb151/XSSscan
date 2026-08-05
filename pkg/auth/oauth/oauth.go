@@ -42,8 +42,9 @@ type TokenPair struct {
 
 // OAuthFlow handles OAuth 2.0 authentication flows.
 type OAuthFlow struct {
-	client *http.Client
-	config FlowConfig
+	client        *http.Client
+	config        FlowConfig
+	pkceVerifier  string // stored PKCE verifier from BuildAuthorizationURL for ExchangeCode
 }
 
 // NewFlow creates a new OAuth flow handler.
@@ -176,7 +177,7 @@ func (f *OAuthFlow) BuildAuthorizationURL(state string) (string, error) {
 		}
 		q.Set("code_challenge", challenge)
 		q.Set("code_challenge_method", "S256")
-		_ = verifier // caller must store this for token exchange
+		f.pkceVerifier = verifier // stored for ExchangeCode
 	}
 
 	u.RawQuery = q.Encode()
@@ -193,8 +194,12 @@ func (f *OAuthFlow) ExchangeCode(ctx context.Context, code, codeVerifier string)
 	if f.config.ClientSecret != "" {
 		form.Set("client_secret", f.config.ClientSecret)
 	}
-	if f.config.UsePKCE && codeVerifier != "" {
-		form.Set("code_verifier", codeVerifier)
+	if f.config.UsePKCE {
+		if codeVerifier != "" {
+			form.Set("code_verifier", codeVerifier)
+		} else if f.pkceVerifier != "" {
+			form.Set("code_verifier", f.pkceVerifier)
+		}
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", f.config.TokenURL,

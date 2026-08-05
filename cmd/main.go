@@ -603,14 +603,7 @@ func crawlAndScan(ctx context.Context, client *http.Client, engine *scanner.Engi
 		}
 		seenForms[formKey] = true
 
-		ft := deriveTarget(baseTarget, form.Action)
-		ft.Method = form.Method
-		if form.Method == "POST" {
-			ft.Body = buildFormBody(form.Inputs)
-			ft.Headers = setContentType(ft.Headers)
-		} else {
-			ft.URL = appendQueryParams(ft.URL, form.Inputs)
-		}
+		ft := formToTarget(baseTarget, form)
 		if err := scanOneTarget(ctx, engine, ft, allFindings, totalStats); err != nil {
 			color.Yellow("[!] Form scan failed for %s: %v\n", form.Action, err)
 		}
@@ -640,14 +633,7 @@ func discoverFormsFromPage(ctx context.Context, client *http.Client, tgt model.T
 		}
 		seen[formKey] = true
 
-		ft := deriveTarget(tgt, form.Action)
-		ft.Method = form.Method
-		if form.Method == "POST" {
-			ft.Body = buildFormBody(form.Inputs)
-			ft.Headers = setContentType(ft.Headers)
-		} else {
-			ft.URL = appendQueryParams(ft.URL, form.Inputs)
-		}
+		ft := formToTarget(tgt, form)
 		targets = append(targets, ft)
 	}
 	return targets
@@ -682,6 +668,18 @@ func hasQueryParams(rawURL string) bool {
 		return false
 	}
 	return parsed.RawQuery != ""
+}
+
+func formToTarget(base model.Target, form crawler.FormInfo) model.Target {
+	ft := deriveTarget(base, form.Action)
+	ft.Method = form.Method
+	if form.Method == "POST" {
+		ft.Body = buildFormBody(form.Inputs)
+		ft.Headers = setContentType(ft.Headers)
+	} else {
+		ft.URL = appendQueryParams(ft.URL, form.Inputs)
+	}
+	return ft
 }
 
 func setContentType(headers map[string]string) map[string]string {

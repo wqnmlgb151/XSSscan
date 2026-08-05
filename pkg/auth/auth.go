@@ -62,7 +62,10 @@ func Authenticate(client *http.Client, cfg LoginConfig) error {
 		return fmt.Errorf("login returned HTTP %d", resp.StatusCode)
 	}
 
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, loginMaxBodySize))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, loginMaxBodySize))
+	if err != nil {
+		return fmt.Errorf("read login response: %w", err)
+	}
 	bodyLower := strings.ToLower(string(body))
 
 	// Heuristic: if response contains login error indicators, login likely failed
@@ -77,22 +80,27 @@ func Authenticate(client *http.Client, cfg LoginConfig) error {
 	}
 
 	// Verify a session cookie was actually established
-	u, _ := url.Parse(cfg.LoginURL)
-	if cookies := client.Jar.Cookies(u); len(cookies) > 0 {
-		hasSession := false
-		for _, c := range cookies {
-			// Common session cookie names
-			if strings.Contains(strings.ToLower(c.Name), "session") ||
-				strings.Contains(strings.ToLower(c.Name), "sid") ||
-				strings.Contains(strings.ToLower(c.Name), "token") ||
-				strings.Contains(strings.ToLower(c.Name), "auth") {
-				hasSession = true
-				break
+	u, err := url.Parse(cfg.LoginURL)
+	if err != nil {
+		return fmt.Errorf("parse login URL for cookie check: %w", err)
+	}
+	if client.Jar != nil {
+		if cookies := client.Jar.Cookies(u); len(cookies) > 0 {
+			hasSession := false
+			for _, c := range cookies {
+				// Common session cookie names
+				if strings.Contains(strings.ToLower(c.Name), "session") ||
+					strings.Contains(strings.ToLower(c.Name), "sid") ||
+					strings.Contains(strings.ToLower(c.Name), "token") ||
+					strings.Contains(strings.ToLower(c.Name), "auth") {
+					hasSession = true
+					break
+				}
 			}
-		}
-		if !hasSession {
-			// Not a hard error — some apps use non-standard cookie names
-			// but at least one cookie should be present
+			if !hasSession {
+				// Not a hard error — some apps use non-standard cookie names
+				// but at least one cookie should be present
+			}
 		}
 	}
 

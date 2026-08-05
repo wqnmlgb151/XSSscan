@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -26,18 +25,6 @@ var csrfMetaNames = []string{
 	"csrf-token", "csrf_token", "_csrf", "xsrf-token",
 }
 
-// fieldPattern matches any of the known CSRF field name patterns (case-insensitive).
-var fieldPattern *regexp.Regexp
-
-func init() {
-	escaped := make([]string, len(csrfFieldNames))
-	for i, name := range csrfFieldNames {
-		escaped[i] = regexp.QuoteMeta(name)
-	}
-	// Matches name="csrf_token" name='csrf_token' name=`csrf_token`
-	pattern := `(?i)(?:name=["'` + "`" + `](` + strings.Join(escaped, "|") + `)["'` + "`" + `])`
-	fieldPattern = regexp.MustCompile(pattern)
-}
 
 // Token holds an extracted CSRF token and its field name.
 type Token struct {

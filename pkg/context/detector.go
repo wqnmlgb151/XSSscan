@@ -290,7 +290,6 @@ func countUnescapedBacktick(s string) int {
 			continue
 		}
 		if c == '$' && depth == 0 {
-			// peek next char for {
 			continue
 		}
 		if c == '{' && depth < 1 {

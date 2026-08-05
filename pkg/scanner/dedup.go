@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 
+	ctx "github.com/xsscan/xsscan/pkg/context"
 	"github.com/xsscan/xsscan/pkg/model"
 )
 
@@ -52,24 +53,24 @@ var payloadPatterns = []struct {
 }
 
 // contextClassification maps context types to execution capability classes.
-var contextClassification = map[string]contextClass{
-	"html_body":           ContextHTMLExecute,
-	"html_tag":            ContextHTMLExecute,
-	"html_attr_name":      ContextHTMLExecute,
-	"html_attr_value":     ContextBreakout,
-	"html_comment":        ContextBreakout,
-	"html_entity":         ContextLimited,
-	"js_string":           ContextJSExecute,
-	"js_comment":          ContextJSExecute,
-	"js_block":            ContextJSExecute,
-	"js_template_literal": ContextJSExecute,
-	"css_value":           ContextLimited,
-	"css_block":           ContextLimited,
-	"url_attribute":       ContextURL,
-	"template":            ContextJSExecute,
-	"svg_container":       ContextHTMLExecute,
-	"mathml_container":    ContextHTMLExecute,
-	"json_value":          ContextBreakout,
+var contextClassification = map[ctx.ContextType]contextClass{
+	ctx.ContextHTMLBody:          ContextHTMLExecute,
+	ctx.ContextHTMLTag:           ContextHTMLExecute,
+	ctx.ContextHTMLAttrName:      ContextHTMLExecute,
+	ctx.ContextHTMLAttrValue:     ContextBreakout,
+	ctx.ContextHTMLComment:       ContextBreakout,
+	ctx.ContextHTMLEntity:        ContextLimited,
+	ctx.ContextJSString:          ContextJSExecute,
+	ctx.ContextJSComment:         ContextJSExecute,
+	ctx.ContextJSBlock:           ContextJSExecute,
+	ctx.ContextJSTemplateLiteral: ContextJSExecute,
+	ctx.ContextCSSValue:          ContextLimited,
+	ctx.ContextCSSBlock:          ContextLimited,
+	ctx.ContextURLAttr:           ContextURL,
+	ctx.ContextTemplate:          ContextJSExecute,
+	ctx.ContextSVGContainer:      ContextHTMLExecute,
+	ctx.ContextMathMLContainer:   ContextHTMLExecute,
+	ctx.ContextJSONValue:         ContextBreakout,
 }
 
 // classifyAttackVector determines the attack technique category from a payload.
@@ -83,16 +84,28 @@ func classifyAttackVector(payload string) attackVectorClass {
 	return VectorUnknown
 }
 
-// classifyContext maps a context type string to its execution capability class.
-func classifyContext(context string) contextClass {
-	if c, ok := contextClassification[context]; ok {
+// parseContextTypes converts string context names to typed ContextType values.
+func parseContextTypes(contexts []string) []ctx.ContextType {
+	result := make([]ctx.ContextType, 0, len(contexts))
+	for _, s := range contexts {
+		ct := ctx.ParseContextType(s)
+		if ct != ctx.ContextUnknown {
+			result = append(result, ct)
+		}
+	}
+	return result
+}
+
+// classifyContext maps a context type to its execution capability class.
+func classifyContext(ct ctx.ContextType) contextClass {
+	if c, ok := contextClassification[ct]; ok {
 		return c
 	}
 	return ContextLimited
 }
 
 // primaryContextClass returns the highest-capability context class from a list.
-func primaryContextClass(contexts []string) contextClass {
+func primaryContextClass(contexts []ctx.ContextType) contextClass {
 	best := ContextLimited
 	priority := map[contextClass]int{
 		ContextHTMLExecute: 5,
@@ -130,7 +143,7 @@ func SemanticDedup(findings []model.Finding) []model.Finding {
 		key := dedupKey{
 			url:          f.URL,
 			param:        f.Parameter,
-			contextClass: string(primaryContextClass(f.Contexts)),
+			contextClass: string(primaryContextClass(parseContextTypes(f.Contexts))),
 			vectorClass:  string(classifyAttackVector(f.Payload)),
 		}
 

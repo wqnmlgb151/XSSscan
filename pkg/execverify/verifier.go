@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/chromedp/cdproto/page"
@@ -39,6 +40,7 @@ type Verifier struct {
 	timeout     time.Duration
 	auth        *AuthState
 	screenshotDir string
+	consoleMu   sync.Mutex
 }
 
 // AuthState carries authentication context for verification.
@@ -201,7 +203,7 @@ func (v *Verifier) runBrowserCheck(ctx context.Context, navURL string, result *E
 		}
 	}
 
-	result.ConsoleErrors = consoleErrors
+	result.ConsoleErrors = v.consoleLoad(&consoleErrors)
 
 	// Capture screenshot if execution was detected
 	if result.Executed && result.Confidence >= 0.9 {
@@ -266,9 +268,18 @@ func (v *Verifier) installConsoleHandler(ctx context.Context, errors *[]string) 
 			go func() {
 				chromedp.Run(ctx, page.HandleJavaScriptDialog(true))
 			}()
+			v.consoleMu.Lock()
 			*errors = append(*errors, fmt.Sprintf("JS dialog: %s", e.Message))
+			v.consoleMu.Unlock()
 		}
 	})
+}
+
+// consoleLoad safely reads console errors under the mutex.
+func (v *Verifier) consoleLoad(errors *[]string) []string {
+	v.consoleMu.Lock()
+	defer v.consoleMu.Unlock()
+	return *errors
 }
 
 // checkDOMMutations checks if script-injected elements appeared in the DOM.

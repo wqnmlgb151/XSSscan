@@ -53,8 +53,7 @@ type Engine struct {
 	generator *payload.Generator
 	verifier  *verify.Verifier
 	throttle  *Throttle
-	mutator   *payload.Mutator
-	mutatorOnce sync.Once
+	mutator   atomic.Value // stores *payload.Mutator (nil if not initialized)
 	logger    *zap.Logger
 
 	payloadsSent  int64
@@ -94,7 +93,7 @@ func NewEngine(cfg Config, logger *zap.Logger, client *http.Client) *Engine {
 		csrfExtractor: csrf.NewExtractor(client),
 	}
 	if cfg.WAFBypass {
-		engine.mutator = payload.NewMutator()
+		engine.mutator.Store(payload.NewMutator())
 	}
 	return engine
 }
@@ -552,24 +551,22 @@ func (e *Engine) scanPayload(ctx context.Context, injection model.InjectionPoint
 	// that subsequent payloads attempt WAF bypass. This catches the
 	// common case where the user runs a scan, hits a WAF, and would
 	// otherwise need to re-run with --waf-bypass.
-	if wafResult.Detected && e.mutator == nil && !e.config.WAFBypass {
-		e.mutatorOnce.Do(func() {
-			e.mutator = payload.NewMutator()
-			e.logger.Info("WAF detected — auto-enabling bypass mutations",
-				zap.String("waf", wafResult.Name))
-		})
+	if wafResult.Detected && e.mutator.Load() == nil && !e.config.WAFBypass {
+		e.mutator.Store(payload.NewMutator())
+		e.logger.Info("WAF detected — auto-enabling bypass mutations",
+			zap.String("waf", wafResult.Name))
 	}
 
 	if finding != nil {
 		return finding, nil
 	}
 
-	if e.mutator != nil {
+	if e.mutator.Load() != nil {
 		wafName := ""
 		if wafResult.Detected {
 			wafName = wafResult.Name
 		}
-		mutations := e.mutator.MutateTargeted(p.Value, p.Context, wafName, 5)
+		mutations := e.mutator.Load().(*payload.Mutator).MutateTargeted(p.Value, p.Context, wafName, 5)
 		for _, mut := range mutations {
 			mutatedPayload := p
 			mutatedPayload.Value = mut.Value
@@ -738,7 +735,7 @@ func (e *Engine) sendWithRetry(ctx context.Context, injection model.InjectionPoi
 func (e *Engine) buildFindingFromResponse(resp *http.Response, body []byte, modifiedTarget model.Target, injection model.InjectionPoint, p payload.Payload, csp *analyze.CSPPolicy) (*model.Finding, verify.WAFResult) {
 	bodyStr := string(body)
 	bodyLower := strings.ToLower(bodyStr)
-	wafResult := verify.DetectWAF(resp, bodyStr)
+	wafResult := verify.DetectWAFWithLower(resp, bodyLower, bodyStr)
 	vResult := e.verifier.VerifyWithThreshold(bodyStr, bodyLower, p, injection, csp, wafResult, e.config.ConfidenceMin)
 	if !vResult.Vulnerable {
 		return nil, wafResult

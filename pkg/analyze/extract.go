@@ -239,8 +239,7 @@ func extractPathParams(targetURL string) []model.Parameter {
 		}
 
 		// Check framework-style patterns: {id}, :id, <id>, [id]
-		if pathSegmentPattern.MatchString(seg) {
-			matches := pathSegmentPattern.FindStringSubmatch(seg)
+		if matches := pathSegmentPattern.FindStringSubmatch(seg); matches != nil {
 			paramName := matches[1]
 			params = append(params, model.Parameter{
 				Name:  paramName,
@@ -274,10 +273,10 @@ func isNumericSegment(s string) bool {
 	return len(s) > 0
 }
 
+var uuidPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
 // isUUID reports whether a string looks like a UUID.
 func isUUID(s string) bool {
-	// Simple UUID pattern: 8-4-4-4-12 hex digits
-	uuidPattern := regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 	return uuidPattern.MatchString(s)
 }
 

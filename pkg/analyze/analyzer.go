@@ -250,7 +250,10 @@ func (a *Analyzer) analyzePerParam(gtx stdctx.Context, target model.Target, para
 	baselineTarget := injectPerParamMarkers(target, map[string]string{}, false)
 	baselineResp, err := a.sendRequest(gtx, baselineTarget)
 	if err == nil && baselineResp != nil && baselineResp.Body != nil {
-		baselineBody, _ := io.ReadAll(io.LimitReader(baselineResp.Body, httpclient.MaxResponseSize))
+		baselineBody, err := io.ReadAll(io.LimitReader(baselineResp.Body, httpclient.MaxResponseSize))
+		if err != nil {
+			baselineBody = nil // non-fatal: framework/CSP detection skips without baseline
+		}
 		baselineResp.Body.Close()
 		result.Frameworks = a.frameworkDetector.Detect(baselineResp, string(baselineBody))
 		result.CSP = a.cspAnalyzer.Parse(request.HeaderMap(baselineResp.Header))

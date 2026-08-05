@@ -9,11 +9,10 @@ import (
 
 func TestWAFBypass_DisabledByDefault(t *testing.T) {
 	engine := &Engine{
-		config:  Config{WAFBypass: false},
-		mutator: nil,
+		config: Config{WAFBypass: false},
 	}
 
-	if engine.mutator != nil {
+	if engine.mutator.Load() != nil {
 		t.Error("Expected mutator to be nil when WAFBypass is false")
 	}
 }
@@ -24,10 +23,10 @@ func TestWAFBypass_EnabledCreatesMutator(t *testing.T) {
 	}
 	// Simulate the initialization logic
 	if engine.config.WAFBypass {
-		engine.mutator = payload.NewMutator()
+		engine.mutator.Store(payload.NewMutator())
 	}
 
-	if engine.mutator == nil {
+	if engine.mutator.Load() == nil {
 		t.Error("Expected mutator to be created when WAFBypass is true")
 	}
 }

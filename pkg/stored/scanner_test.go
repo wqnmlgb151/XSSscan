@@ -269,7 +269,7 @@ func TestCheckTriggerURL_SSRFBlocked(t *testing.T) {
 		RequestTimeout: 5 * time.Second,
 	}, nil)
 
-	found, err := scanner.checkTriggerURL(context.Background(), "http://127.0.0.1:9999/test", analyze.MarkerPrefix)
+	found, err := scanner.checkTriggerURL(context.Background(), "http://127.0.0.1:9999/test", analyze.MarkerPrefix, nil)
 	if err == nil {
 		t.Error("Expected SSRF error for private IP, got nil")
 	}

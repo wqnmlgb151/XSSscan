@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"html"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -26,7 +27,11 @@ func (v *Verifier) verifyViaProxy(ctx context.Context, target model.Target, para
 	// Create a proxy handler that injects the payload
 	proxyHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Forward the request to the actual target with payload injected
-		targetURL, _ := url.Parse(target.URL)
+		targetURL, err := url.Parse(target.URL)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("parse target URL: %v", err), http.StatusInternalServerError)
+				return
+			}
 
 		// Build the proxied request
 		proxyReq, err := v.buildProxiedRequest(r, targetURL, paramName, paramType, payload, target)
@@ -58,9 +63,12 @@ func (v *Verifier) verifyViaProxy(ctx context.Context, target model.Target, para
 		w.WriteHeader(resp.StatusCode)
 
 		// Read and forward the body
-		buf := make([]byte, 1<<20) // 1MB max
-		n, _ := resp.Body.Read(buf)
-		w.Write(buf[:n])
+		buf, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		if err != nil {
+			http.Error(w, fmt.Sprintf("read response body: %v", err), http.StatusBadGateway)
+			return
+		}
+		w.Write(buf)
 	})
 
 	// Start the proxy server
@@ -80,8 +88,10 @@ func (v *Verifier) buildProxiedRequest(r *http.Request, targetURL *url.URL, para
 	switch paramType {
 	case model.ParamBody:
 		// Inject into body
-		body := make([]byte, r.ContentLength)
-		r.Body.Read(body)
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			return nil, fmt.Errorf("read original request body: %w", err)
+		}
 		newBody := request.InjectBodyValue(string(body), paramName, payload, target.Headers)
 		req, err := http.NewRequest(r.Method, targetReqURL, strings.NewReader(newBody))
 		if err != nil {

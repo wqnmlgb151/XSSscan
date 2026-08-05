@@ -1,7 +1,7 @@
 // Package crawler provides lightweight same-host link discovery for XSS scanning.
 // It extracts links from HTML responses (a, form, area, frame, iframe) and
 // returns a deduplicated list of URLs reachable within a configurable depth.
-// Enhanced in v0.9.0 with SPA route discovery and sitemap/robots.txt support.
+// Supports SPA route discovery and sitemap/robots.txt support.
 package crawler
 
 import (
@@ -365,7 +365,7 @@ func (c *Crawler) markVisited(u string) {
 
 // extractLinks parses HTML and extracts all navigable URLs.
 // Resolves relative URLs against baseURL and optionally filters to same-host only.
-// Enhanced in v0.9.0 to extract SPA attributes and JS route patterns.
+// Extracts SPA attributes and JS route patterns.
 func extractLinks(body string, baseURL, startHost string, sameHostOnly bool) ([]string, error) {
 	base, err := url.Parse(baseURL)
 	if err != nil {
@@ -674,13 +674,16 @@ func extractSPALinks(body string, baseURL *url.URL) []string {
 }
 
 // extractRoutePatterns parses JavaScript blocks for common SPA route definitions.
+var (
+	routePatternRe  = regexp.MustCompile(`path\s*:\s*['"]([^'"]+)['"]`)
+	sitemapLocRE    = regexp.MustCompile(`<loc>\s*(.*?)\s*</loc>`)
+)
+
 func extractRoutePatterns(body string) []string {
 	var routes []string
 	seen := make(map[string]bool)
 
-	// path: '/route' or path: "/route" (Vue Router, React Router)
-	routeRe := regexp.MustCompile(`path\s*:\s*['"]([^'"]+)['"]`)
-	for _, m := range routeRe.FindAllStringSubmatch(body, -1) {
+	for _, m := range routePatternRe.FindAllStringSubmatch(body, -1) {
 		path := m[1]
 		if strings.HasPrefix(path, "/") && !seen[path] {
 			seen[path] = true
@@ -774,8 +777,7 @@ func DiscoverFromSitemapContext(ctx context.Context, client *http.Client, baseUR
 	}
 
 	bodyStr := string(body)
-	urlRE := regexp.MustCompile(`<loc>\s*(.*?)\s*</loc>`)
-	matches := urlRE.FindAllStringSubmatch(bodyStr, -1)
+	matches := sitemapLocRE.FindAllStringSubmatch(bodyStr, -1)
 
 	var urls []string
 	seen := make(map[string]bool)

@@ -614,6 +614,24 @@ make build VERSION=1.0.0
 
 `--version` 输出当前构建版本。
 
+### 更新日志
+
+**v0.6.1** (2026-08-05) — Bug 修复与性能优化
+
+- 修复 execverify 中 ContentLength=-1 导致 panic 的问题
+- 修复 OAuth PKCE verifier 被丢弃导致授权码流程不可用
+- 修复 WAFTracker/Engine 中数据竞争（mutator 懒初始化、name 字段）
+- 修复 auth 包 nil Jar / URL parse 错误导致的 panic
+- 修复 stored XSS 轮询不上报认证 headers（认证页面返回 401）
+- dedup map 改用 ContextType 类型化枚举键（新增 context 类型不再静默误归类）
+- 提取 cmd 中公共 form→target 转换逻辑
+- 处理 inject/auth/analyze 中被吞掉的错误
+- WAF 检测优化：添加 DetectWAFWithLower 避免三次 body 小写
+- 正则提升到包级别：isUUID、routePatternRe、sitemapLocRE
+- 移除未使用的 fieldPattern 死代码
+
+**v0.6.0** — 初始公开发布
+
 ---
 
 ## 免责声明

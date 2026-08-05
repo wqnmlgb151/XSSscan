@@ -13,7 +13,7 @@ import (
 type WAFTracker struct {
 	detected int64
 	nameOnce sync.Once
-	name     string
+	name     atomic.Value // stores string
 	bypassed int64
 }
 
@@ -24,7 +24,7 @@ func (t *WAFTracker) Report(detected bool, name string, bypassed bool) {
 	}
 	atomic.StoreInt64(&t.detected, 1)
 	if name != "" {
-		t.nameOnce.Do(func() { t.name = name })
+		t.nameOnce.Do(func() { t.name.Store(name) })
 	}
 	if bypassed {
 		atomic.StoreInt64(&t.bypassed, 1)
@@ -37,7 +37,7 @@ func (t *WAFTracker) Result() *model.WAFInfo {
 		return nil
 	}
 	return &model.WAFInfo{
-		Name:     t.name,
+		Name:     t.name.Load().(string),
 		Bypassed: atomic.LoadInt64(&t.bypassed) == 1,
 	}
 }

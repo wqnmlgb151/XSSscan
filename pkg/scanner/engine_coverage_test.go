@@ -119,7 +119,7 @@ func TestNewEngine_Defaults(t *testing.T) {
 	if engine.verifier == nil {
 		t.Error("Expected verifier to be initialized")
 	}
-	if engine.mutator != nil {
+	if engine.mutator.Load() != nil {
 		t.Error("Expected mutator to be nil when WAFBypass is false")
 	}
 }
@@ -128,7 +128,7 @@ func TestNewEngine_WAFBypassEnabled(t *testing.T) {
 	cfg := Config{WAFBypass: true}
 	engine := NewEngine(cfg, nil, nil)
 
-	if engine.mutator == nil {
+	if engine.mutator.Load() == nil {
 		t.Error("Expected mutator to be initialized when WAFBypass is true")
 	}
 }

@@ -26,6 +26,7 @@ type wafSignature struct {
 	Name             string
 	Headers          []string
 	BodyPatterns     []string
+	BodyPatternsLower []string // pre-lowercased at init
 	StatusCodes      []int
 	BypassStrategies []payload.MutationType
 }
@@ -101,9 +102,16 @@ func GetWAFStrategies(wafName string) []payload.MutationType {
 }
 
 // DetectWAF checks if a response shows signs of WAF interception.
+// Callers that already have a lowercased body should use DetectWAFWithLower
+// to avoid a redundant full-body lowercase copy.
 func DetectWAF(resp *http.Response, body string) WAFResult {
-	bodyLower := strings.ToLower(body)
+	return DetectWAFWithLower(resp, strings.ToLower(body), body)
+}
 
+// DetectWAFWithLower checks for WAF interception using a pre-lowercased body.
+// bodyLower must be strings.ToLower(body). body (original case) is only used
+// for the status-code corroboration length check.
+func DetectWAFWithLower(resp *http.Response, bodyLower string, body string) WAFResult {
 	for _, sig := range wafSignatures {
 		// Check response header names only — matching values causes false positives
 		// when header values happen to contain WAF-like substrings (e.g., UUIDs).
@@ -115,9 +123,9 @@ func DetectWAF(resp *http.Response, body string) WAFResult {
 			}
 		}
 
-		// Check body patterns (using pre-lowercased body)
-		for _, pattern := range sig.BodyPatterns {
-			if strings.Contains(bodyLower, strings.ToLower(pattern)) {
+		// Check body patterns (patterns pre-lowercased at init)
+		for _, pattern := range sig.BodyPatternsLower {
+			if strings.Contains(bodyLower, pattern) {
 				return WAFResult{true, sig.Name, "body: " + pattern}
 			}
 		}
@@ -126,8 +134,8 @@ func DetectWAF(resp *http.Response, body string) WAFResult {
 		if len(body) < 5000 {
 			for _, code := range sig.StatusCodes {
 				if resp.StatusCode == code {
-					for _, pattern := range sig.BodyPatterns {
-						if strings.Contains(bodyLower, strings.ToLower(pattern)) {
+					for _, pattern := range sig.BodyPatternsLower {
+						if strings.Contains(bodyLower, pattern) {
 							return WAFResult{true, sig.Name, "status+body: " + pattern}
 						}
 					}
@@ -137,5 +145,15 @@ func DetectWAF(resp *http.Response, body string) WAFResult {
 	}
 
 	return WAFResult{Detected: false}
+}
+
+func init() {
+	for i := range wafSignatures {
+		sig := &wafSignatures[i]
+		sig.BodyPatternsLower = make([]string, len(sig.BodyPatterns))
+		for j, p := range sig.BodyPatterns {
+			sig.BodyPatternsLower[j] = strings.ToLower(p)
+		}
+	}
 }
 

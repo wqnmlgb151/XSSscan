@@ -197,11 +197,11 @@ var payloadTemplates = map[context.ContextType][]PayloadTemplate{
 	},
 }
 
-func GetTemplates(ctx context.ContextType) []PayloadTemplate {
-	if templates, ok := payloadTemplates[ctx]; ok {
-		return templates
+func GetTemplates(ctxType context.ContextType) []PayloadTemplate {
+	templates := payloadTemplates[ctxType]
+	// Merge extended wordlist (dalfox, PortSwigger, OWASP imports)
+	if ext, ok := extendedPayloads[ctxType]; ok {
+		templates = append(templates, ext...)
 	}
-	// No fallback to HTMLBody — each context must have its own templates.
-	// Falling back causes false positives (HTML payloads tested in CSS/Entity contexts).
-	return nil
+	return templates
 }

@@ -145,13 +145,20 @@ func TestSemanticDedup_DifferentVectors(t *testing.T) {
 		},
 	}
 
-	// All three are tag_injection in html_execute — should collapse to 1
+	// All are tag_injection + html_execute, but exploit classes differ:
+	// event (onerror/onload) vs script (<script>) — keep both groups, 2 findings
 	result := SemanticDedup(findings)
-	if len(result) != 1 {
-		t.Fatalf("expected 1 finding (all same vector class), got %d", len(result))
+	if len(result) != 2 {
+		t.Fatalf("expected 2 findings (event vs script exploit class), got %d", len(result))
 	}
-	if result[0].Confidence != 0.9 {
-		t.Errorf("expected highest confidence 0.9, got %f", result[0].Confidence)
+	found := false
+	for _, r := range result {
+		if r.Confidence == 0.9 && r.Payload == `<script>alert(1)</script>` {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected <script> finding to survive dedup")
 	}
 }
 

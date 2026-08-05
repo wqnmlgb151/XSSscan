@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"net/url"
 	"regexp"
 	"strings"
 
@@ -123,17 +124,93 @@ func primaryContextClass(contexts []ctx.ContextType) contextClass {
 	return best
 }
 
+// exploitClass categorizes the technical mechanism used by a payload.
+// Unlike attackVectorClass (which detects the broad attack surface: tag, event, URI),
+// exploitClass groups payloads by the specific technique, enabling finer dedup.
+type exploitClass string
+
+const (
+	ExploitScriptTag   exploitClass = "script"   // <script>, <svg><script>, </script><script>
+	ExploitEventHandle exploitClass = "event"    // onerror, onload, onfocus, ontoggle, etc.
+	ExploitProtocol    exploitClass = "protocol" // javascript:, data:, vbscript:
+	ExploitNestedExec  exploitClass = "nested"   // srcdoc, annotation-xml, foreignObject
+	ExploitBreakout    exploitClass = "breakout" // </textarea>, </title>, -->, close-tag breakout
+	ExploitImport      exploitClass = "import"   // <link import, @import, <base href=
+	ExploitMetaRefresh exploitClass = "meta"     // <meta refresh, CSP bypass via meta
+	ExploitOther       exploitClass = "other"
+)
+
+// classifyExploit determines the specific technical mechanism of a payload.
+func classifyExploit(payload string) exploitClass {
+	p := strings.TrimSpace(payload)
+
+	// Breakout payloads start with closing tags or comment terminators
+	if strings.HasPrefix(p, "</") || strings.HasPrefix(p, "-->") || strings.HasPrefix(p, "*/") {
+		return ExploitBreakout
+	}
+
+	// Protocol-based execution
+	lower := strings.ToLower(p)
+	if strings.Contains(lower, "javascript:") || strings.Contains(lower, "data:") || strings.Contains(lower, "vbscript:") {
+		if !strings.Contains(lower, "onerror") && !strings.Contains(lower, "onload") {
+			return ExploitProtocol
+		}
+	}
+
+	// Nested execution contexts
+	if strings.Contains(lower, "srcdoc") || strings.Contains(lower, "annotation-xml") ||
+		strings.Contains(lower, "foreignobject") {
+		return ExploitNestedExec
+	}
+
+	// Script tags
+	if strings.Contains(lower, "<script") || (strings.Contains(lower, "<svg") && strings.Contains(lower, "<script")) {
+		return ExploitScriptTag
+	}
+
+	// Meta/refresh
+	if strings.Contains(lower, "<meta") || strings.Contains(lower, "refresh") {
+		return ExploitMetaRefresh
+	}
+
+	// Import/link/base
+	if strings.Contains(lower, "<link ") || strings.Contains(lower, "@import") || strings.Contains(lower, "<base ") {
+		return ExploitImport
+	}
+
+	// Event handlers
+	if regexp.MustCompile(`(?i)\bon\w+\s*=|\bon\w+\s*:`).MatchString(p) {
+		return ExploitEventHandle
+	}
+
+	return ExploitOther
+}
+
 // dedupKey represents the semantic identity of a finding for deduplication.
+// normalizeURL strips query and fragment for dedup comparison,
+// so payload-specific URL encoding doesn't create unique keys per payload.
+func normalizeURL(rawURL string) string {
+	if u, err := url.Parse(rawURL); err == nil {
+		u.RawQuery = ""
+		u.Fragment = ""
+		return u.String()
+	}
+	return rawURL
+}
+
 type dedupKey struct {
-	url          string
+	baseURL      string
 	param        string
 	contextClass string
 	vectorClass  string
+	exploitClass string
 }
 
 // SemanticDedup performs deduplication keeping the highest-confidence finding
-// per semantic key (URL + parameter + context class + attack vector class).
-// This replaces crude prefix-based dedup with semantic understanding.
+// per semantic key (URL + parameter + context + vector + exploit class).
+// The exploitClass differentiates payloads using different technical mechanisms
+// even when they share the same broad attack vector — reducing noise from
+// "49 findings" to ~5 exploit variants.
 func SemanticDedup(findings []model.Finding) []model.Finding {
 	seen := make(map[dedupKey]*model.Finding)
 
@@ -141,10 +218,11 @@ func SemanticDedup(findings []model.Finding) []model.Finding {
 		f := &findings[i]
 
 		key := dedupKey{
-			url:          f.URL,
+			baseURL:      normalizeURL(f.URL),
 			param:        f.Parameter,
 			contextClass: string(primaryContextClass(parseContextTypes(f.Contexts))),
 			vectorClass:  string(classifyAttackVector(f.Payload)),
+			exploitClass: string(classifyExploit(f.Payload)),
 		}
 
 		if existing, ok := seen[key]; ok {

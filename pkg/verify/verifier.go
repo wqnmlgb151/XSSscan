@@ -84,9 +84,11 @@ func (v *Verifier) VerifyWithThreshold(respBody, bodyLower string, p payload.Pay
 	syntaxValid := v.checkSyntaxValidity(respBody, p.Value)
 	lengthLimited := v.checkLengthLimited(respBody, p.Value)
 
+	contextBreak := checkContextBreak(p.Context, csp) && !sanitized
+
 	factors := Factors{
 		Reflected:      true,
-		ContextBreak:   true,
+		ContextBreak:   contextBreak,
 		SyntaxValid:    syntaxValid,
 		NoSanitization: !sanitized,
 		WAFBlocked:     wafResult.Detected,

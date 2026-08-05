@@ -283,7 +283,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	}
 
 	if callbackSrv != nil {
-		collectBlindXSSCallbacks(callbackSrv, &allFindings, cfg.Callback)
+		collectBlindXSSCallbacks(callbackSrv, &allFindings, cfg.Callback, urls)
 	}
 
 	return reportScanResults(allFindings, totalStats, urls, startTime)
@@ -697,7 +697,7 @@ func stripANSI(s string) string {
 	return ansiEscapeRE.ReplaceAllString(s, "")
 }
 
-func collectBlindXSSCallbacks(srv *callback.Server, allFindings *[]model.Finding, callbackURL string) {
+func collectBlindXSSCallbacks(srv *callback.Server, allFindings *[]model.Finding, callbackURL string, targetURLs []string) {
 	if srv.Count() == 0 {
 		color.Cyan("[*] Waiting 30s for blind XSS callbacks...")
 		srv.WaitFor(1, 30*time.Second)
@@ -719,16 +719,33 @@ func collectBlindXSSCallbacks(srv *callback.Server, allFindings *[]model.Finding
 			}
 		}
 		for _, cb := range srv.Callbacks() {
+			confidence := 0.9
+			desc := fmt.Sprintf("Blind XSS callback received from %s", cb.RemoteAddr)
+			// Validate Referer matches a scanned target to prevent callback poisoning
+			refererMatch := false
+			if cb.Referer != "" {
+				for _, tu := range targetURLs {
+					if ssrfguard.HostsMatch(cb.Referer, tu) {
+						refererMatch = true
+						break
+					}
+				}
+			}
+			if !refererMatch {
+				confidence = 0.4
+				desc += " (WARNING: Referer does not match any scanned target — may be spoofed)"
+				color.Yellow("      [!] Referer does not match any scanned target — marking as low confidence\n")
+			}
 			*allFindings = append(*allFindings, model.Finding{
 				ID:          "BLIND-" + cb.Timestamp.Format("20060102-150405"),
 				Type:        model.BlindXSS,
 				Severity:    model.High,
-				Confidence:  0.9,
+				Confidence:  confidence,
 				URL:         cb.Referer,
 				Parameter:   "blind-xss",
 				Payload:     "<script src=\"" + callbackURL + "\"></script>",
 				Contexts:    []string{"blind"},
-				Description: fmt.Sprintf("Blind XSS callback received from %s", cb.RemoteAddr),
+				Description: desc,
 				CWE:         "CWE-79",
 				Timestamp:   cb.Timestamp,
 			})

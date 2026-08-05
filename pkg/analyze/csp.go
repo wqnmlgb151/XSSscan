@@ -102,6 +102,19 @@ func (a *CSPAnalyzer) evaluate(policy *CSPPolicy) CSPScore {
 		if slices.Contains(scriptSrc, "'strict-dynamic'") {
 			score += 10
 		}
+		// Nonce/hash sources: script-src with 'nonce-*' or 'sha256-*'/'sha384-*'/'sha512-*'
+		// without 'unsafe-inline' means inline injection is blocked unless nonce/hash is known.
+		hasNonceOrHash := false
+		for _, v := range scriptSrc {
+			if strings.HasPrefix(v, "'nonce-") || strings.HasPrefix(v, "'sha256-") ||
+				strings.HasPrefix(v, "'sha384-") || strings.HasPrefix(v, "'sha512-") {
+				hasNonceOrHash = true
+				break
+			}
+		}
+		if hasNonceOrHash && !slices.Contains(scriptSrc, "'unsafe-inline'") {
+			score += 15
+		}
 	}
 
 	if objSrc, ok := policy.Directives["object-src"]; ok && slices.Contains(objSrc, "'none'") {

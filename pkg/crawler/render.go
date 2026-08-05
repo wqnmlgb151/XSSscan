@@ -3,8 +3,12 @@ package crawler
 import (
 	"context"
 	"fmt"
+	"io"
+	"log"
+	"net/url"
 	"time"
 
+	"github.com/chromedp/cdproto/fetch"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 )
@@ -38,13 +42,45 @@ func RenderPage(ctx context.Context, targetURL string, headers map[string]string
 	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, opts...)
 	defer allocCancel()
 
-	tabCtx, tabCancel := chromedp.NewContext(allocCtx)
+	// Suppress CDP parse errors (malformed cookies etc.) via a no-op error logger
+	logCtx := chromedp.WithErrorf(log.New(io.Discard, "", 0).Printf)
+	tabCtx, tabCancel := chromedp.NewContext(allocCtx, logCtx)
 	defer tabCancel()
 
 	tctx, cancel := context.WithTimeout(tabCtx, timeout)
 	defer cancel()
 
-	actions := []chromedp.Action{network.Enable()}
+	// Parse target host to determine same-origin for request blocking
+	targetHost := ""
+	if u, err := url.Parse(targetURL); err == nil {
+		targetHost = u.Host
+	}
+
+	actions := []chromedp.Action{
+		network.Enable(),
+		// Block cross-origin subrequests (iframes, images, scripts) for safety:
+		// prevents loading external malware/redirectors embedded in target pages.
+		fetch.Enable().WithHandleAuthRequests(true),
+	}
+	actions = append(actions, chromedp.ActionFunc(func(ctx context.Context) error {
+		chromedp.ListenTarget(ctx, func(ev interface{}) {
+			if e, ok := ev.(*fetch.EventRequestPaused); ok {
+				go func() {
+					reqHost := ""
+					if u, err := url.Parse(e.Request.URL); err == nil {
+						reqHost = u.Host
+					}
+					// Only allow same-origin and same-host subrequests
+					if reqHost != "" && reqHost != targetHost {
+						fetch.FailRequest(e.RequestID, network.ErrorReasonBlockedByClient).Do(ctx)
+					} else {
+						fetch.ContinueRequest(e.RequestID).Do(ctx)
+					}
+				}()
+			}
+		})
+		return nil
+	}))
 	if len(headers) > 0 {
 		h := make(network.Headers)
 		for k, v := range headers {
@@ -58,8 +94,7 @@ func RenderPage(ctx context.Context, targetURL string, headers map[string]string
 	var renderedHTML string
 	actions = append(actions,
 		chromedp.Navigate(targetURL),
-		chromedp.WaitReady("body", chromedp.ByQuery),
-		chromedp.Sleep(2*time.Second), // wait for async JS rendering
+		chromedp.Sleep(3*time.Second),
 		chromedp.OuterHTML("html", &renderedHTML),
 	)
 

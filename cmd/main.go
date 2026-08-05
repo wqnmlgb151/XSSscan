@@ -622,7 +622,7 @@ func discoverFormsFromPage(ctx context.Context, client *http.Client, tgt model.T
 	}
 	if len(forms) == 0 && renderSPA {
 		color.Cyan("[*] No static forms found — attempting JS rendering...\n")
-		rendered, err := crawler.RenderPage(ctx, tgt.URL, 15*time.Second)
+		rendered, err := crawler.RenderPage(ctx, tgt.URL, tgt.Headers, 0)
 		if err != nil {
 			color.Yellow("[!] JS rendering failed: %v\n", err)
 			return nil
@@ -735,20 +735,21 @@ func collectBlindXSSCallbacks(srv *callback.Server, allFindings *[]model.Finding
 		for _, cb := range srv.Callbacks() {
 			confidence := 0.9
 			desc := fmt.Sprintf("Blind XSS callback received from %s", cb.RemoteAddr)
-			// Validate Referer matches a scanned target to prevent callback poisoning
-			refererMatch := false
+			// Validate Referer matches a scanned target to prevent callback poisoning.
+			// Empty Referer (stripped by Referrer-Policy) is treated as unknown — not spoofed.
 			if cb.Referer != "" {
+				refererMatch := false
 				for _, tu := range targetURLs {
 					if ssrfguard.HostsMatch(cb.Referer, tu) {
 						refererMatch = true
 						break
 					}
 				}
-			}
-			if !refererMatch {
-				confidence = 0.4
-				desc += " (WARNING: Referer does not match any scanned target — may be spoofed)"
-				color.Yellow("      [!] Referer does not match any scanned target — marking as low confidence\n")
+				if !refererMatch {
+					confidence = 0.4
+					desc += " (WARNING: Referer does not match any scanned target — may be spoofed)"
+					color.Yellow("      [!] Referer does not match any scanned target — marking as low confidence\n")
+				}
 			}
 			*allFindings = append(*allFindings, model.Finding{
 				ID:          "BLIND-" + cb.Timestamp.Format("20060102-150405"),

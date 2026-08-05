@@ -155,8 +155,8 @@ func TestRunContextProbe(t *testing.T) {
 
 			engine := newTestEngine(server.URL)
 			got := engine.runContextProbe(context.Background(), injection, "127.0.0.1")
-			if got != tt.wantPass {
-				t.Errorf("runContextProbe(%s) = %v, want %v", tt.name, got, tt.wantPass)
+			if (got != nil) != tt.wantPass {
+				t.Errorf("runContextProbe(%s) = %v, want %v", tt.name, got != nil, tt.wantPass)
 			}
 		})
 	}
@@ -186,7 +186,7 @@ func TestRunContextProbe_MultipleContextsPicksBest(t *testing.T) {
 	}
 
 	got := engine.runContextProbe(context.Background(), injection, "127.0.0.1")
-	if !got {
+	if got == nil {
 		t.Error("Expected probe to pass (highest-priority exploitable context should be tested)")
 	}
 }
@@ -206,7 +206,7 @@ func TestRunContextProbe_NoContextsFailOpen(t *testing.T) {
 	}
 
 	got := engine.runContextProbe(context.Background(), injection, "127.0.0.1")
-	if !got {
+	if got == nil {
 		t.Error("Expected fail-open when no contexts are present")
 	}
 }
@@ -228,7 +228,7 @@ func TestRunContextProbe_OnlyNonExploitableFailOpen(t *testing.T) {
 	}
 
 	got := engine.runContextProbe(context.Background(), injection, "127.0.0.1")
-	if !got {
+	if got == nil {
 		t.Error("Expected fail-open when only non-exploitable contexts are present")
 	}
 }
@@ -252,7 +252,7 @@ func TestRunContextProbe_JSStringContext(t *testing.T) {
 	}
 
 	got := engine.runContextProbe(context.Background(), injection, "127.0.0.1")
-	if !got {
+	if got == nil {
 		t.Error("Expected JS string probe to pass when reflection is unescaped")
 	}
 }
@@ -276,7 +276,7 @@ func TestRunContextProbe_JSONContext(t *testing.T) {
 	}
 
 	got := engine.runContextProbe(context.Background(), injection, "127.0.0.1")
-	if !got {
+	if got == nil {
 		t.Error("Expected JSON probe to pass when reflection is unescaped")
 	}
 }
@@ -294,7 +294,7 @@ func TestRunContextProbe_NetworkErrorFailOpen(t *testing.T) {
 	}
 
 	got := engine.runContextProbe(context.Background(), injection, "127.0.0.1")
-	if !got {
+	if got == nil {
 		t.Error("Expected fail-open on network error")
 	}
 }

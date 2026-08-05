@@ -190,49 +190,56 @@ func validateJSONBreakout(body string) bool {
 	return strings.Contains(body, jsonProbeValue)
 }
 
-/* runContextProbe sends a context-specific probe for the injection point and
-checks whether the reflection is exploitable. Returns true if the probe passes
-or if no probe is defined for the context (fail-open). Returns false if the
-probe definitively fails — the injection point should be skipped. */
+/* runContextProbe sends context-specific probes for each exploitable context
+in the injection point. Returns the subset of contexts that passed validation.
+If no probe is defined for any context, returns the original contexts (fail-open).
+If ALL probed contexts fail, returns nil. */
 
-func (e *Engine) runContextProbe(stdctx context.Context, injection model.InjectionPoint, host string) bool {
-	/* Select the highest-priority exploitable context. */
-	var bestCtx *ctx.Context
-	for i := range injection.Contexts {
-		c := &injection.Contexts[i]
+func (e *Engine) runContextProbe(stdctx context.Context, injection model.InjectionPoint, host string) []ctx.Context {
+	// Separate contexts into probed and unprobed categories
+	var probed, unprobed []ctx.Context
+	for _, c := range injection.Contexts {
 		if !c.IsExploitable() {
 			continue
 		}
-		if _, ok := GetProbeForContext(c.Type); !ok {
+		if _, ok := GetProbeForContext(c.Type); ok {
+			probed = append(probed, c)
+		} else {
+			unprobed = append(unprobed, c)
+		}
+	}
+
+	if len(probed) == 0 {
+		return injection.Contexts // fail-open: nothing to probe
+	}
+
+	// Test each probed context; keep those that pass
+	var passed []ctx.Context
+	for _, c := range probed {
+		probe, _ := GetProbeForContext(c.Type)
+		body, err := e.sendProbeRequest(stdctx, injection, probe.Probe, host)
+		if err != nil {
+			e.logger.Debug("probe request failed (fail open)", zap.Error(err),
+				zap.String("param", injection.Parameter.Name),
+				zap.String("context", c.Type.String()))
+			passed = append(passed, c) // fail-open on network errors
 			continue
 		}
-		if bestCtx == nil || c.Priority > bestCtx.Priority {
-			bestCtx = c
+		if probe.Validator(body) {
+			passed = append(passed, c)
+		} else {
+			e.logger.Debug("context probe failed",
+				zap.String("param", injection.Parameter.Name),
+				zap.String("context", c.Type.String()),
+				zap.String("probe", probe.Probe))
 		}
 	}
 
-	if bestCtx == nil {
-		return true
+	// Only fail if ALL probed contexts failed AND no unprobed contexts remain
+	if len(passed) == 0 && len(unprobed) == 0 {
+		return nil
 	}
-
-	probe, _ := GetProbeForContext(bestCtx.Type)
-	body, err := e.sendProbeRequest(stdctx, injection, probe.Probe, host)
-	if err != nil {
-		e.logger.Debug("probe request failed (fail open)", zap.Error(err),
-			zap.String("param", injection.Parameter.Name),
-			zap.String("context", bestCtx.Type.String()))
-		return true
-	}
-
-	if !probe.Validator(body) {
-		e.logger.Debug("context probe failed",
-			zap.String("param", injection.Parameter.Name),
-			zap.String("context", bestCtx.Type.String()),
-			zap.String("probe", probe.Probe))
-		return false
-	}
-
-	return true
+	return append(passed, unprobed...)
 }
 
 /* sendProbeRequest injects a probe payload and sends the request, returning

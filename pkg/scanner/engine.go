@@ -174,7 +174,9 @@ func (e *Engine) Run(ctx context.Context, target model.Target) (*model.ScanResul
 		preFilterCount := len(analysisResult.InjectionPoints)
 		filtered := make([]model.InjectionPoint, 0, preFilterCount)
 		for _, injection := range analysisResult.InjectionPoints {
-			if e.runContextProbe(ctx, injection, host) {
+			kept := e.runContextProbe(ctx, injection, host)
+			if kept != nil {
+				injection.Contexts = kept
 				filtered = append(filtered, injection)
 			} else {
 				e.logger.Info("Injection point filtered by context probe",

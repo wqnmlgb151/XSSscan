@@ -39,6 +39,9 @@ type Callback struct {
 	Referer   string            `json:"referer"`
 }
 
+// maxCallbacks limits the callback buffer to prevent memory exhaustion from floods.
+const maxCallbacks = 1000
+
 // Server is an HTTP server that captures blind XSS callbacks.
 type Server struct {
 	addr      string
@@ -187,7 +190,9 @@ func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.mu.Lock()
-	s.callbacks = append(s.callbacks, cb)
+	if len(s.callbacks) < maxCallbacks {
+		s.callbacks = append(s.callbacks, cb)
+	}
 	s.mu.Unlock()
 	s.cond.Broadcast() // Wake any WaitFor callers
 

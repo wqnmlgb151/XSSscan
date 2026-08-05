@@ -187,18 +187,7 @@ func djangoPayloads() []PayloadTemplate {
 }
 
 func jinjaPayloads() []PayloadTemplate {
-	return []PayloadTemplate{
-		{
-			Value:    `{{config.__class__.__init__.__globals__.os.popen('alert(1)').read()}}`,
-			Context:  context.ContextTemplate,
-			Severity: model.Critical,
-			Desc:     "Jinja2: SSTI to RCE via config class chain",
-		},
-		{
-			Value:    `{{request.application.__globals__.__builtins__.__import__('os').popen('id').read()}}`,
-			Context:  context.ContextTemplate,
-			Severity: model.Critical,
-			Desc:     "Jinja2: SSTI via request.application chain",
-		},
-	}
+	// Jinja2 SSTI→RCE payloads removed — these are server-side template injection,
+	// not XSS, and would generate false positives in an XSS scanner.
+	return nil
 }

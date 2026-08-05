@@ -380,11 +380,12 @@ func doubleURLEncode(s string) string {
 
 // toFullwidth converts ASCII to fullwidth Unicode equivalents (U+FF01–U+FF5E).
 // Some WAFs don't normalize these before matching.
+// Offset: U+FF01 (fullwidth '!') − U+0021 (ASCII '!') = 0xFEE0
 func toFullwidth(s string) string {
 	var b strings.Builder
 	for _, ch := range s {
 		if ch >= 0x21 && ch <= 0x7E {
-			b.WriteRune(ch - 0x20 + 0xFF01)
+			b.WriteRune(ch + 0xFEE0)
 		} else {
 			b.WriteRune(ch)
 		}
@@ -423,15 +424,15 @@ func encodeHexEntities(s string) string {
 	return s
 }
 
-// injectNullByte inserts a null byte after the opening tag to truncate
+// injectNullByte inserts a null byte after the opening tag name to truncate
 // legacy WAF pattern matching without affecting browser parsing.
 func injectNullByte(s string) string {
 	idx := strings.Index(s, "<")
 	if idx < 0 {
 		return s
 	}
-	// Find end of tag name
-	end := strings.IndexAny(s[idx:], " >\t\n")
+	// Find end of tag name — include '/' for self-closing/slash-form payloads
+	end := strings.IndexAny(s[idx:], " >\t\n/")
 	if end < 0 {
 		return s
 	}

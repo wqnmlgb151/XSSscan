@@ -54,6 +54,16 @@ var payloadPatterns = []struct {
 }
 
 // contextClassification maps context types to execution capability classes.
+var eventHandlerRe = regexp.MustCompile(`(?i)\bon\w+\s*=|\bon\w+\s*:`)
+
+var contextPriority = map[contextClass]int{
+	ContextHTMLExecute: 5,
+	ContextJSExecute:   4,
+	ContextURL:         3,
+	ContextBreakout:    2,
+	ContextLimited:     1,
+}
+
 var contextClassification = map[ctx.ContextType]contextClass{
 	ctx.ContextHTMLBody:          ContextHTMLExecute,
 	ctx.ContextHTMLTag:           ContextHTMLExecute,
@@ -108,16 +118,9 @@ func classifyContext(ct ctx.ContextType) contextClass {
 // primaryContextClass returns the highest-capability context class from a list.
 func primaryContextClass(contexts []ctx.ContextType) contextClass {
 	best := ContextLimited
-	priority := map[contextClass]int{
-		ContextHTMLExecute: 5,
-		ContextJSExecute:   4,
-		ContextURL:         3,
-		ContextBreakout:    2,
-		ContextLimited:     1,
-	}
 	for _, c := range contexts {
 		cl := classifyContext(c)
-		if priority[cl] > priority[best] {
+		if contextPriority[cl] > contextPriority[best] {
 			best = cl
 		}
 	}
@@ -149,27 +152,30 @@ func classifyExploit(payload string) exploitClass {
 		return ExploitBreakout
 	}
 
-	// Protocol-based execution
 	lower := strings.ToLower(p)
-	if strings.Contains(lower, "javascript:") || strings.Contains(lower, "data:") || strings.Contains(lower, "vbscript:") {
-		if !strings.Contains(lower, "onerror") && !strings.Contains(lower, "onload") {
-			return ExploitProtocol
-		}
-	}
 
-	// Nested execution contexts
+	// Nested execution contexts — check before protocol, since srcdoc payloads
+	// can also contain javascript: strings
 	if strings.Contains(lower, "srcdoc") || strings.Contains(lower, "annotation-xml") ||
 		strings.Contains(lower, "foreignobject") {
 		return ExploitNestedExec
 	}
 
-	// Script tags
-	if strings.Contains(lower, "<script") || (strings.Contains(lower, "<svg") && strings.Contains(lower, "<script")) {
+	// Script tags — check before protocol for mixed script+URI payloads
+	if strings.Contains(lower, "<script") {
 		return ExploitScriptTag
 	}
 
+	// Protocol-based execution — only classify as protocol if it's NOT already
+	// an event-handler payload (event handlers take precedence)
+	if strings.Contains(lower, "javascript:") || strings.Contains(lower, "data:") || strings.Contains(lower, "vbscript:") {
+		if !eventHandlerRe.MatchString(p) {
+			return ExploitProtocol
+		}
+	}
+
 	// Meta/refresh
-	if strings.Contains(lower, "<meta") || strings.Contains(lower, "refresh") {
+	if strings.Contains(lower, "<meta ") || strings.Contains(lower, "http-equiv") {
 		return ExploitMetaRefresh
 	}
 
@@ -178,8 +184,8 @@ func classifyExploit(payload string) exploitClass {
 		return ExploitImport
 	}
 
-	// Event handlers
-	if regexp.MustCompile(`(?i)\bon\w+\s*=|\bon\w+\s*:`).MatchString(p) {
+	// Event handlers — use precompiled package-level regex
+	if eventHandlerRe.MatchString(p) {
 		return ExploitEventHandle
 	}
 
@@ -193,6 +199,8 @@ func normalizeURL(rawURL string) string {
 	if u, err := url.Parse(rawURL); err == nil {
 		u.RawQuery = ""
 		u.Fragment = ""
+		u.ForceQuery = false
+		u.RawFragment = ""
 		return u.String()
 	}
 	return rawURL

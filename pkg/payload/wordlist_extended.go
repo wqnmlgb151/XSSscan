@@ -7,8 +7,7 @@ import (
 
 // extendedPayloads are additional payloads imported from community wordlists
 // (dalfox, PortSwigger XSS cheat sheet, OWASP) and reclassified for xsscan's
-// 19 injection contexts. Merged into the core wordlist at scan time via
-// mergePayloadMaps in generator.go.
+// 19 injection contexts. Pre-merged into payloadTemplates in wordlist.go init().
 var extendedPayloads = map[context.ContextType][]PayloadTemplate{
 	context.ContextHTMLBody: {
 		// Additional event handlers (mobile, pointer, transition)

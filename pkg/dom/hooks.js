@@ -14,7 +14,8 @@
     if (!MARKER || MARKER.length < 6) { return; }
 
     function record(sinkName, value) {
-        if (value && typeof value === 'string' && value.indexOf(MARKER) !== -1) {
+        if (sinks.length >= 100) { return; }
+        if (value && typeof value === 'string' && value.length >= MARKER.length && value.indexOf(MARKER) !== -1) {
             sinks.push({sink: sinkName, value: value.substring(0, 300)});
         }
     }
@@ -75,7 +76,6 @@
     // --- Function constructor ---
     try {
         var origFunc = Function;
-        window.__xsscan_func = origFunc;
         Function = function() {
             var args = Array.prototype.slice.call(arguments);
             var body = args.pop() || '';

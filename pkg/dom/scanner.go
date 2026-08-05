@@ -176,7 +176,7 @@ func (s *Scanner) DetectDOMXSS(ctx context.Context, target model.Target, payload
 	var allFindings []model.Finding
 
 	for _, test := range tests {
-		findings, err := s.runSingleDOMTest(ctx, target, test, marker)
+		findings, err := s.runSingleDOMTest(ctx, target, test, marker, payload)
 		if err != nil {
 			continue // skip failed tests, don't fail the entire scan
 		}
@@ -309,7 +309,7 @@ func buildURLWithJavascriptHref(u *url.URL, marker, payload string) string {
 }
 
 // runSingleDOMTest navigates to a URL and checks if the payload reaches a DOM sink.
-func (s *Scanner) runSingleDOMTest(ctx context.Context, target model.Target, test domXSSTest, marker string) ([]model.Finding, error) {
+func (s *Scanner) runSingleDOMTest(ctx context.Context, target model.Target, test domXSSTest, marker, payload string) ([]model.Finding, error) {
 	tabCtx, tabCancel := chromedp.NewContext(s.allocCtx)
 	defer tabCancel()
 
@@ -436,7 +436,7 @@ func (s *Scanner) runSingleDOMTest(ctx context.Context, target model.Target, tes
 				URL:         test.NavURL,
 				Parameter:   fmt.Sprintf("DOM (%s)", test.Name),
 				ParamType:   model.ParamQuery,
-				Payload:     test.NavURL,
+				Payload:     payload,
 				Contexts:    []string{"dom"},
 				Description: fmt.Sprintf("DOM XSS via %s: marker reached %s sink", test.Source, hit.Sink),
 				Remediation: "Use safe DOM APIs (textContent instead of innerHTML). Implement Trusted Types.",
@@ -470,7 +470,7 @@ func (s *Scanner) runSingleDOMTest(ctx context.Context, target model.Target, tes
 			URL:         test.NavURL,
 			Parameter:   fmt.Sprintf("DOM (%s)", test.Name),
 			ParamType:   model.ParamQuery,
-			Payload:     test.NavURL,
+			Payload:     payload,
 			Contexts:    []string{"dom"},
 			Description: fmt.Sprintf("DOM XSS via %s: payload reached sink(s): %s", test.Source, sinkHit),
 			Remediation: "Use safe DOM APIs (textContent instead of innerHTML). Sanitize all client-side input. Implement Trusted Types.",
@@ -494,7 +494,7 @@ func (s *Scanner) runSingleDOMTest(ctx context.Context, target model.Target, tes
 				URL:         test.NavURL,
 				Parameter:   fmt.Sprintf("DOM (%s/console)", test.Name),
 				ParamType:   model.ParamQuery,
-				Payload:     test.NavURL,
+				Payload:     payload,
 				Contexts:    []string{"dom"},
 				Description: fmt.Sprintf("DOM XSS indicator via %s: payload in console: %s", test.Source, text.Truncate(msg, 100)),
 				Remediation: "Review client-side JavaScript that processes URL input.",

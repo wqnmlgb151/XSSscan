@@ -626,53 +626,6 @@ func collectFormInputs(formNode *html.Node) []string {
 	walk(formNode)
 	return inputs
 }
-
-// extractSPALinks finds links that SPAs embed in HTML but are not standard hrefs.
-// Returns relative or absolute path strings (not fully resolved URLs).
-//
-// Supported patterns:
-//   - Angular: ng-href, [routerLink] attributes
-//   - Vue: to attribute on <router-link> elements
-//   - React/generic: data-href, data-link, data-url attributes
-func extractSPALinks(body string, baseURL *url.URL) []string {
-	doc, err := html.Parse(strings.NewReader(body))
-	if err != nil {
-		return nil
-	}
-
-	seen := make(map[string]bool)
-	var links []string
-
-	var walk func(*html.Node)
-	walk = func(n *html.Node) {
-		if n.Type == html.ElementNode {
-			for _, attr := range n.Attr {
-				lowerKey := strings.ToLower(attr.Key)
-				var val string
-				switch lowerKey {
-				case "ng-href", "[routerlink]", "[router-link]",
-					"data-href", "data-link", "data-url":
-					val = attr.Val
-				case "to":
-					if strings.EqualFold(n.Data, "router-link") {
-						val = attr.Val
-					}
-				}
-				if val != "" && !seen[val] {
-					seen[val] = true
-					links = append(links, val)
-				}
-			}
-		}
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			walk(c)
-		}
-	}
-	walk(doc)
-
-	return links
-}
-
 // extractRoutePatterns parses JavaScript blocks for common SPA route definitions.
 var (
 	routePatternRe  = regexp.MustCompile(`path\s*:\s*['"]([^'"]+)['"]`)

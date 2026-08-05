@@ -9,9 +9,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
-	"time"
-
-	"github.com/chromedp/chromedp"
 
 	"github.com/xsscan/xsscan/pkg/internal/request"
 	"github.com/xsscan/xsscan/pkg/model"
@@ -152,40 +149,3 @@ func buildHTMLPOC(payload string) string {
 </html>`, escaped)
 }
 
-// VerifyViaDataURL creates a data: URL with the payload embedded as HTML.
-// This is a fallback for complex injection scenarios.
-func (v *Verifier) VerifyViaDataURL(ctx context.Context, payload string) (*ExecutionResult, error) {
-	result := &ExecutionResult{}
-
-	tabCtx, tabCancel := chromedp.NewContext(v.allocCtx)
-	defer tabCancel()
-
-	tctx, cancel := context.WithTimeout(tabCtx, v.timeout)
-	defer cancel()
-
-	// Build a data URL with the payload
-	dataURL := "data:text/html," + url.QueryEscape(buildHTMLPOC(payload))
-
-	dialogDetected := make(chan dialogInfo, 1)
-	v.installDialogHandlers(tctx, dialogDetected)
-
-	err := chromedp.Run(tctx,
-		chromedp.Navigate(dataURL),
-		chromedp.Sleep(2*time.Second),
-	)
-
-	if err != nil {
-		result.LoadError = err.Error()
-	}
-
-	select {
-	case d := <-dialogDetected:
-		result.Executed = true
-		result.DialogType = d.dialogType
-		result.DialogMessage = d.message
-		result.Confidence = 0.95
-	case <-time.After(100 * time.Millisecond):
-	}
-
-	return result, nil
-}

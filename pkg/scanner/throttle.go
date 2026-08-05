@@ -35,11 +35,7 @@ func (t *Throttle) Wait(ctx context.Context, host string) error {
 	t.mu.Lock()
 	l, ok := t.hostLimiters[host]
 	if !ok {
-		hostRPS := t.defaultRPS / 2
-		if hostRPS < 1 {
-			hostRPS = 1
-		}
-		l = rate.NewLimiter(hostRPS, t.burst/2+1)
+		l = t.newHostLimiter()
 		t.hostLimiters[host] = l
 	}
 	t.mu.Unlock()

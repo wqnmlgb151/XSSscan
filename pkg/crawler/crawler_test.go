@@ -394,47 +394,6 @@ func TestNormalizeURL(t *testing.T) {
 	}
 }
 
-// ===== SPA Link Extraction Tests =====
-
-func TestExtractSPALinks_VueRouter(t *testing.T) {
-	html := `<html><body><router-link to="/dashboard">Dashboard</router-link></body></html>`
-	base, _ := url.Parse("http://example.com/")
-	links := extractSPALinks(html, base)
-	if len(links) != 1 || links[0] != "/dashboard" {
-		t.Errorf("Expected [/dashboard], got %v", links)
-	}
-}
-
-func TestExtractSPALinks_AngularRouter(t *testing.T) {
-	html := `<html><body><a ng-href="/admin">Admin</a><a [routerLink]="/users">Users</a></body></html>`
-	base, _ := url.Parse("http://example.com/")
-	links := extractSPALinks(html, base)
-	if len(links) != 2 {
-		t.Errorf("Expected 2 links, got %d: %v", len(links), links)
-	}
-	expected := map[string]bool{"/admin": true, "/users": true}
-	for _, l := range links {
-		if !expected[l] {
-			t.Errorf("Unexpected link: %s", l)
-		}
-	}
-}
-
-func TestExtractSPALinks_ReactDataHref(t *testing.T) {
-	html := `<html><body><div data-href="/page">Page</div><span data-link="/other">Other</span></body></html>`
-	base, _ := url.Parse("http://example.com/")
-	links := extractSPALinks(html, base)
-	if len(links) != 2 {
-		t.Errorf("Expected 2 links, got %d: %v", len(links), links)
-	}
-	expected := map[string]bool{"/page": true, "/other": true}
-	for _, l := range links {
-		if !expected[l] {
-			t.Errorf("Unexpected link: %s", l)
-		}
-	}
-}
-
 // ===== Route Pattern Extraction Tests =====
 
 func TestExtractRoutePatterns_VueRouter(t *testing.T) {

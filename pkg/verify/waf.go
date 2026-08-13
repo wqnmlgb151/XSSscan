@@ -74,6 +74,30 @@ var wafSignatures = []wafSignature{
 		BodyPatterns:     []string{"wordfence", "your access to this site has been limited"},
 		StatusCodes:      []int{403, 503},
 	},
+	{
+		Name:             "Aliyun WAF",
+		Headers:          []string{"x-waf-error", "x-waf-status", "aliyun-waf", "x-aliyun-waf"},
+		BodyPatterns:     []string{"aliyun waf", "blocked by alibaba cloud", "waf intercept"},
+		StatusCodes:      []int{403, 405},
+	},
+	{
+		Name:             "Tencent WAF",
+		Headers:          []string{"x-waf-uuid", "tx-waf", "waf-request-id"},
+		BodyPatterns:     []string{"tencent cloud waf", "waf.tencent", "访问被拒绝"},
+		StatusCodes:      []int{403},
+	},
+	{
+		Name:             "Safedog",
+		Headers:          []string{"safedog", "x-safe-dog"},
+		BodyPatterns:     []string{"safedog", "waf/2.0"},
+		StatusCodes:      []int{403},
+	},
+	{
+		Name:             "BaoTa WAF",
+		Headers:          []string{"btwaf"},
+		BodyPatterns:     []string{"btwaf", "宝塔", "您的请求带有不合法参数"},
+		StatusCodes:      []int{403, 444},
+	},
 }
 
 // GetWAFStrategies returns the recommended bypass strategy names for a detected WAF.

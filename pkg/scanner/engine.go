@@ -387,6 +387,19 @@ func (e *Engine) generatePayloads(injection model.InjectionPoint, frameworks []a
 			payload.FrameworkPayloads(strings.ToLower(fw.Name)),
 			payload.PayloadTypeReflected, 0.75)...)
 
+		// Version-aware payload sets: Vue 2 sandbox escapes are dead in Vue 3
+		// (sandbox removed); React SSR breakout applies to SSR-rendered apps.
+		if strings.HasPrefix(fw.Name, "Vue") && strings.HasPrefix(fw.Version, "2") {
+			payloads = append(payloads, payloadsFromTemplates(
+				payload.Vue2SandboxPayloads(),
+				payload.PayloadTypeReflected, 0.85)...)
+		}
+		if strings.HasPrefix(fw.Name, "React") {
+			payloads = append(payloads, payloadsFromTemplates(
+				payload.ReactSSRPayloads(),
+				payload.PayloadTypeReflected, 0.85)...)
+		}
+
 		if hasRisk, sinks := fw.RiskInfo(); hasRisk {
 			for _, sink := range sinks {
 				payloads = append(payloads, payload.Payload{
@@ -1026,6 +1039,12 @@ func (e *Engine) injectPayload(target model.Target, param model.Parameter, paylo
 		}
 		values := u.Query()
 		if e.config.TestHPP {
+			// HPP WAF bypass: prepend a clean value — WAFs inspect the FIRST
+			// occurrence while backends (PHP/ASP.NET/JSP) differ on which
+			// value wins. ?q=clean&q=<payload> slips the WAF and reaches the app.
+			if !values.Has(param.Name) {
+				values.Set(param.Name, "test")
+			}
 			values.Add(param.Name, payloadVal)
 		} else {
 			values.Set(param.Name, payloadVal)

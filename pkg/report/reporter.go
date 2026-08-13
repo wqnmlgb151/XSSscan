@@ -184,7 +184,7 @@ details summary{cursor:pointer;color:#666;margin-top:8px}
 <strong>Context:</strong> %s</p>
 `, i+1, safeDesc, safeType, safeSev, safeSev, f.Confidence*100, execBadge, safeURL, safeParam, safeContexts)
 
-			// CSP bypass badges
+			// CSP bypass badges + executable exploit payloads
 			if len(f.CSPBypasses) > 0 {
 				b.WriteString(`<div style="margin-top:8px;padding:8px;background:#fff3cd;border-radius:3px;font-size:.85em">`)
 				b.WriteString(`<strong>🛡️ CSP Bypasses:</strong> `)
@@ -194,6 +194,13 @@ details summary{cursor:pointer;color:#666;margin-top:8px}
 					b.WriteString(fmt.Sprintf(`<span class="badge badge-partial" title="%s">%s</span> `, safeDesc, safeType))
 				}
 				b.WriteString(`</div>`)
+				for _, cb := range f.CSPBypasses {
+					if cb.Exploit == "" {
+						continue
+					}
+					safeExploit := html.EscapeString(cb.Exploit)
+					b.WriteString(fmt.Sprintf(`<div class="code" style="margin-top:4px">%s</div>`, safeExploit))
+				}
 			}
 
 			fmt.Fprintf(&b, `<p><strong>Payload:</strong></p>

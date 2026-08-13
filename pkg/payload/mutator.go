@@ -325,6 +325,22 @@ func GetWAFStrategies(wafName string) []MutationType {
 		return []MutationType{MutationCaseMix, MutationSpaceToSlash, MutationTabInjection, MutationAltFunction, MutationEntityAngleBrackets, MutationNullByteInjection, MutationDoubleURLEncode}
 	case "Wordfence":
 		return []MutationType{MutationEntityAngleBrackets, MutationEntityPlusCase, MutationBreakoutTextarea, MutationCommentInjection, MutationStringConcat, MutationUnicodeFullwidth, MutationHexEntityMixed}
+	case "Aliyun WAF":
+		// Aliyun rules are regex-heavy and decode once — double encoding and
+		// parameter-level tricks work best.
+		return []MutationType{MutationDoubleURLEncode, MutationHTMLEntityNested, MutationUnicodeEscapeJS, MutationHexEntityMixed, MutationCaseMix}
+	case "Tencent WAF":
+		// Tencent WAF matches line-based rules — newline/tab splitting and
+		// fullwidth folding are the known bypasses.
+		return []MutationType{MutationNewlineInjection, MutationTabInjection, MutationUnicodeFullwidth, MutationCommentInjection, MutationSpaceToSlash}
+	case "Safedog":
+		// Safedog keyword rules are case-sensitive in places — case mixing
+		// and entity encoding are the classic bypasses.
+		return []MutationType{MutationCaseMix, MutationEntityAngleBrackets, MutationEntityPlusCase, MutationAltFunction, MutationSpaceToSlash}
+	case "BaoTa WAF":
+		// BaoTa intercepts keyword blocks — string concat and backtick calls
+		// slip its literal-match rules.
+		return []MutationType{MutationStringConcat, MutationBacktickFn, MutationCaseMix, MutationEntityAngleBrackets, MutationNullByteInjection}
 	}
 	return nil
 }

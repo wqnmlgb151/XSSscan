@@ -94,6 +94,16 @@ func NewFrameworkDetector() *FrameworkDetector {
 	}
 }
 
+// versionPatterns extract framework versions from script URLs and markers.
+// Version info enables version-specific payloads (e.g., Vue 2 sandbox
+// escapes are dead in Vue 3 — sandbox removed).
+var versionPatterns = map[string]*regexp.Regexp{
+	"React":    regexp.MustCompile(`react(?:-dom)?(?:\.min)?\.js(?:\?|@)v?=?([0-9]+\.[0-9]+\.[0-9]+)`),
+	"Vue":      regexp.MustCompile(`vue(?:\.min)?\.js(?:\?|@)v?=?([0-9]+\.[0-9]+\.[0-9]+)`),
+	"Angular":  regexp.MustCompile(`angular(?:\.min)?\.js(?:\?|@)v?=?([0-9]+\.[0-9]+\.[0-9]+)`),
+	"jQuery":   regexp.MustCompile(`jquery(?:\.min)?\.js(?:\?|@)v?=?([0-9]+\.[0-9]+\.[0-9]+)`),
+}
+
 // Detect scans the response for framework signatures
 func (fd *FrameworkDetector) Detect(resp *http.Response, body string) []FrameworkInfo {
 	seen := make(map[string]int)
@@ -115,11 +125,23 @@ func (fd *FrameworkDetector) Detect(resp *http.Response, body string) []Framewor
 			confidence := float64(matchCount) / float64(total[name])
 			results = append(results, FrameworkInfo{
 				Name:       name,
+				Version:    extractVersion(name, body),
 				Confidence: confidence,
 			})
 		}
 	}
 	return results
+}
+
+// extractVersion pulls a version string from the response body for the
+// named framework (script URL query/fragment or attribute markers).
+func extractVersion(name, body string) string {
+	if re, ok := versionPatterns[name]; ok {
+		if m := re.FindStringSubmatch(body); m != nil {
+			return m[1]
+		}
+	}
+	return ""
 }
 
 // RiskInfo returns whether the framework has DOM XSS risk and its sinks

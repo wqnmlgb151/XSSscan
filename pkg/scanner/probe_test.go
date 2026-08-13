@@ -420,3 +420,36 @@ func TestSendProbeRequestInjectError(t *testing.T) {
 		t.Fatal("Expected error for unsupported parameter type")
 	}
 }
+
+func TestValidateQuoteBreakouts(t *testing.T) {
+	tests := []struct {
+		name  string
+		body  string
+		check func(string) bool
+		want  bool
+	}{
+		{"double quote breakout", `<input value=""xsscan"="">`, validateDoubleQuoteBreakout, true},
+		{"double quote escaped", `value="&quot;xsscan&quot;="`, validateDoubleQuoteBreakout, false},
+		{"double quote absent", `value="nothing"`, validateDoubleQuoteBreakout, false},
+		{"single quote breakout", "<input value=''xsscan'=''>", validateSingleQuoteBreakout, true},
+		{"single quote escaped", `value="&#39;xsscan&#39;="`, validateSingleQuoteBreakout, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.check(tt.body); got != tt.want {
+				t.Errorf("got %v, want %v (body=%q)", got, tt.want, tt.body)
+			}
+		})
+	}
+}
+
+func TestGetProbesForContext_AttrValueMultiDimension(t *testing.T) {
+	probes := GetProbesForContext(ctx.ContextHTMLAttrValue)
+	if len(probes) < 3 {
+		t.Fatalf("expected ≥3 probe dimensions for attr value, got %d", len(probes))
+	}
+	// Primary probe must remain the structural breakout
+	if probes[0].Probe != " xsscan>" {
+		t.Errorf("primary probe = %q, want %q", probes[0].Probe, " xsscan>")
+	}
+}

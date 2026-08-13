@@ -169,8 +169,15 @@ func (e *Engine) Run(ctx context.Context, target model.Target) (*model.ScanResul
 	/* Context-probe filtering: before generating payloads, verify each
 	injection point's reflection context is actually exploitable. This
 	skips points where the marker reflects but real payload chars (< > \")
-	would be escaped — the marker->payload assumption gap. */
-	if e.config.EnableProbe {
+	would be escaped — the marker->payload assumption gap.
+
+	Framework exception: when a framework is detected (Angular/Vue/React),
+	the probe is skipped entirely. Probes validate HTML structural chars
+	(< > "), but framework template expressions ({{...}}) need none of
+	those — a probe failure here would discard injection points whose
+	framework payloads are the correct attack vector (e.g., ng-include).
+	Execution is still gated by the verifier + confidence threshold. */
+	if e.config.EnableProbe && len(analysisResult.Frameworks) == 0 {
 		preFilterCount := len(analysisResult.InjectionPoints)
 		filtered := make([]model.InjectionPoint, 0, preFilterCount)
 		for _, injection := range analysisResult.InjectionPoints {

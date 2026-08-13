@@ -6,6 +6,8 @@ import (
 	"io"
 	"strings"
 
+	"golang.org/x/net/html"
+
 	ctx "github.com/xsscan/xsscan/pkg/context"
 	"github.com/xsscan/xsscan/pkg/httpclient"
 	"github.com/xsscan/xsscan/pkg/model"
@@ -27,103 +29,132 @@ type ContextProbe struct {
 	Validator  func(body string) bool
 }
 
-/* GetProbeForContext returns the probe for a given context type.
-The second return value is false if no probe is defined for the context. */
+/* GetProbeForContext returns the FIRST probe for a given context type.
+The second return value is false if no probe is defined for the context.
+Use GetProbesForContext to test all probe dimensions. */
 
 func GetProbeForContext(ct ctx.ContextType) (ContextProbe, bool) {
-	probe, ok := probeLibrary[ct]
-	return probe, ok
+	probes, ok := probeLibrary[ct]
+	if !ok || len(probes) == 0 {
+		return ContextProbe{}, false
+	}
+	return probes[0], true
 }
 
-/* probeLibrary maps each context type to its probe payload and validator.
-Probes are SAFE: no alert(), no side effects, just structural tests. */
+/* GetProbesForContext returns all probe dimensions for a context type.
+A context is considered exploitable if ANY dimension's validator passes —
+real payloads may use a different breakout mechanism than the primary probe. */
 
-var probeLibrary = map[ctx.ContextType]ContextProbe{
-	ctx.ContextHTMLBody: {
+func GetProbesForContext(ct ctx.ContextType) []ContextProbe {
+	return probeLibrary[ct]
+}
+
+/* probeLibrary maps each context type to its probe dimensions.
+Probes are SAFE: no alert(), no side effects, just structural tests.
+The first entry is the primary probe; additional entries test alternative
+breakout mechanisms (e.g., quote breakout when angle brackets are stripped). */
+
+var probeLibrary = map[ctx.ContextType][]ContextProbe{
+	ctx.ContextHTMLBody: {{
 		ContextType: ctx.ContextHTMLBody,
 		Probe:      "<xsscan>",
 		Validator:  validateUnescapedProbe("<xsscan>"),
-	},
-	ctx.ContextHTMLComment: {
+	}},
+	ctx.ContextHTMLComment: {{
 		ContextType: ctx.ContextHTMLComment,
 		Probe:      "--><xsscan><!--",
 		Validator:  validateCommentBreakout,
-	},
-	ctx.ContextHTMLTag: {
+	}},
+	ctx.ContextHTMLTag: {{
 		ContextType: ctx.ContextHTMLTag,
 		Probe:      "xsscan",
 		Validator:  validateUnescapedProbe("xsscan"),
-	},
-	ctx.ContextHTMLAttrName: {
+	}},
+	ctx.ContextHTMLAttrName: {{
 		ContextType: ctx.ContextHTMLAttrName,
 		Probe:      "xsscan",
 		Validator:  validateUnescapedProbe("xsscan"),
-	},
+	}},
 	ctx.ContextHTMLAttrValue: {
-		ContextType: ctx.ContextHTMLAttrValue,
-		Probe:      " xsscan>",
-		Validator:  validateAttrBreakout,
+		{
+			ContextType: ctx.ContextHTMLAttrValue,
+			Probe:      " xsscan>",
+			Validator:  validateAttrBreakout,
+		},
+		// Quote-only breakout: servers that strip < > but preserve quotes
+		// are still exploitable via event-handler attribute injection
+		// (" onmouseover=alert(1) x="). These probes validate that dimension.
+		{
+			ContextType: ctx.ContextHTMLAttrValue,
+			Probe:      `"xsscan"=`,
+			Validator:  validateDoubleQuoteBreakout,
+		},
+		{
+			ContextType: ctx.ContextHTMLAttrValue,
+			Probe:      `'xsscan'=`,
+			Validator:  validateSingleQuoteBreakout,
+		},
 	},
-	ctx.ContextHTMLEntity: {
+	ctx.ContextHTMLEntity: {{
 		ContextType: ctx.ContextHTMLEntity,
 		Probe:      "xsscan",
 		Validator:  validateUnescapedProbe("xsscan"),
-	},
-	ctx.ContextJSString: {
+	}},
+	ctx.ContextJSString: {{
 		ContextType: ctx.ContextJSString,
 		Probe:      jsStringProbeValue,
 		Validator:  validateUnescapedProbe(jsStringProbeValue),
-	},
-	ctx.ContextJSComment: {
+	}},
+	ctx.ContextJSComment: {{
 		ContextType: ctx.ContextJSComment,
 		Probe:      "/*xsscan*/",
 		Validator:  validateUnescapedProbe("xsscan"),
-	},
-	ctx.ContextJSBlock: {
+	}},
+	ctx.ContextJSBlock: {{
 		ContextType: ctx.ContextJSBlock,
 		Probe:      "</script><xsscan>",
 		Validator:  validateUnescapedProbe("<xsscan>"),
-	},
-	ctx.ContextCSSValue: {
+	}},
+	ctx.ContextCSSValue: {{
 		ContextType: ctx.ContextCSSValue,
 		Probe:      "xsscan",
 		Validator:  validateUnescapedProbe("xsscan"),
-	},
-	ctx.ContextCSSBlock: {
+	}},
+	ctx.ContextCSSBlock: {{
 		ContextType: ctx.ContextCSSBlock,
 		Probe:      "</style><xsscan><style>",
 		Validator:  validateUnescapedProbe("<xsscan>"),
-	},
-	ctx.ContextURLAttr: {
+	}},
+	ctx.ContextURLAttr: {{
 		ContextType: ctx.ContextURLAttr,
 		Probe:      "javascript:xsscan",
 		Validator:  validateURLBreakout,
-	},
-	ctx.ContextTemplate: {
+	}},
+	ctx.ContextTemplate: {{
 		ContextType: ctx.ContextTemplate,
 		Probe:      "{{xsscan}}",
 		Validator:  validateUnescapedProbe("xsscan"),
-	},
-	ctx.ContextSVGContainer: {
+	}},
+	ctx.ContextSVGContainer: {{
 		ContextType: ctx.ContextSVGContainer,
 		Probe:      "<xsscan>",
 		Validator:  validateUnescapedProbe("<xsscan>"),
-	},
-	ctx.ContextMathMLContainer: {
+	}},
+	ctx.ContextMathMLContainer: {{
 		ContextType: ctx.ContextMathMLContainer,
 		Probe:      "<xsscan>",
 		Validator:  validateUnescapedProbe("<xsscan>"),
-	},
-	ctx.ContextJSONValue: {
+	}},
+	ctx.ContextJSONValue: {{
 		ContextType: ctx.ContextJSONValue,
 		Probe:      jsonProbeValue,
 		Validator:  validateJSONBreakout,
-	},
-	ctx.ContextJSTemplateLiteral: {
+	}},
+	ctx.ContextJSTemplateLiteral: {{
 		ContextType: ctx.ContextJSTemplateLiteral,
 		Probe:      templateLiteralProbeValue,
 		Validator:  validateUnescapedProbe(templateLiteralProbeValue),
-	},
+	}},
 }
 
 /*
@@ -177,6 +208,50 @@ func validateAttrBreakout(body string) bool {
 	return strings.Contains(body, "xsscan>")
 }
 
+/* validateQuoteBreakout confirms the probe's quote actually broke out of an
+attribute value: the HTML tokenizer must find a tag attribute NAMED xsscan.
+Naive substring checks produce false positives when quotes reflect raw in
+body text (inert) or inside attribute values without breaking out. */
+
+func validateQuoteBreakout(body string) bool {
+	z := html.NewTokenizer(strings.NewReader(body))
+	for {
+		tt := z.Next()
+		switch tt {
+		case html.ErrorToken:
+			return false
+		case html.StartTagToken, html.SelfClosingTagToken:
+			// TagAttr must be consumed directly — z.Token() would advance
+			// the tokenizer past the tag and corrupt attribute reading.
+			for {
+				key, _, more := z.TagAttr()
+				// HTML5 parses the injected quote as part of the attribute
+				// name (parse error but tolerated): value=""xsscan"=" becomes
+				// attribute `xsscan"`. Trim quotes before comparison.
+				name := strings.Trim(string(key), `"'`)
+				if strings.EqualFold(name, "xsscan") {
+					return true
+				}
+				if !more {
+					break
+				}
+			}
+		}
+	}
+}
+
+/* validateDoubleQuoteBreakout and validateSingleQuoteBreakout both delegate
+to the tokenizer check — the quote character itself doesn't change the
+semantic: an attribute named xsscan proves the value was broken out. */
+
+func validateDoubleQuoteBreakout(body string) bool {
+	return validateQuoteBreakout(body)
+}
+
+func validateSingleQuoteBreakout(body string) bool {
+	return validateQuoteBreakout(body)
+}
+
 /* validateURLBreakout confirms javascript: protocol injection was reflected. */
 
 func validateURLBreakout(body string) bool {
@@ -202,7 +277,7 @@ func (e *Engine) runContextProbe(stdctx context.Context, injection model.Injecti
 		if !c.IsExploitable() {
 			continue
 		}
-		if _, ok := GetProbeForContext(c.Type); ok {
+		if probes := GetProbesForContext(c.Type); len(probes) > 0 {
 			probed = append(probed, c)
 		} else {
 			unprobed = append(unprobed, c)
@@ -213,25 +288,33 @@ func (e *Engine) runContextProbe(stdctx context.Context, injection model.Injecti
 		return injection.Contexts // fail-open: nothing to probe
 	}
 
-	// Test each probed context; keep those that pass
+	// Test each probed context across ALL probe dimensions; keep those
+	// where at least one dimension passes. Real payloads may exploit a
+	// different breakout mechanism than the primary probe (e.g., quote
+	// injection when angle brackets are stripped).
 	var passed []ctx.Context
 	for _, c := range probed {
-		probe, _ := GetProbeForContext(c.Type)
-		body, err := e.sendProbeRequest(stdctx, injection, probe.Probe, host)
-		if err != nil {
-			e.logger.Debug("probe request failed (fail open)", zap.Error(err),
-				zap.String("param", injection.Parameter.Name),
-				zap.String("context", c.Type.String()))
-			passed = append(passed, c) // fail-open on network errors
-			continue
-		}
-		if probe.Validator(body) {
-			passed = append(passed, c)
-		} else {
-			e.logger.Debug("context probe failed",
+		contextPassed := false
+		for _, probe := range GetProbesForContext(c.Type) {
+			body, err := e.sendProbeRequest(stdctx, injection, probe.Probe, host)
+			if err != nil {
+				e.logger.Debug("probe request failed (fail open)", zap.Error(err),
+					zap.String("param", injection.Parameter.Name),
+					zap.String("context", c.Type.String()))
+				contextPassed = true // fail-open on network errors
+				break
+			}
+			if probe.Validator(body) {
+				contextPassed = true
+				break
+			}
+			e.logger.Debug("context probe dimension failed",
 				zap.String("param", injection.Parameter.Name),
 				zap.String("context", c.Type.String()),
 				zap.String("probe", probe.Probe))
+		}
+		if contextPassed {
+			passed = append(passed, c)
 		}
 	}
 

@@ -551,33 +551,51 @@ func scanAllTargets(ctx context.Context, engine *scanner.Engine, client *http.Cl
 			color.Yellow("[!] Scan failed for %s: %v — continuing\n", scanURL, err)
 		}
 
+		// Combined page discovery: ONE fetch yields forms + link parameters.
+		// Split into the form block (query-less URLs only, render-spa fallback)
+		// and the param-mining block, both fed by the same response body.
+		var pageInfo *crawler.PageInfo
+		if cfg.Body == "" {
+			pageInfo, _ = crawler.ExtractPageInfo(ctx, client, scanTarget.URL, scanTarget.Headers)
+		}
+
 		// Auto-discover forms when URL has no query params and no explicit --data.
 		if cfg.Body == "" && !hasQueryParams(scanTarget.URL) {
-			formTargets := discoverFormsFromPage(ctx, client, scanTarget, cfg.RenderSPA)
+			var formTargets []model.Target
+			if pageInfo != nil && len(pageInfo.Forms) > 0 {
+				color.Cyan("[*] Discovered %d form(s) on target page\n", len(pageInfo.Forms))
+				for _, form := range dedupForms(pageInfo.Forms) {
+					formTargets = append(formTargets, formToTarget(scanTarget, form))
+				}
+			}
+			// SPA fallback: static forms empty → render with headless Chrome.
+			if len(formTargets) == 0 && cfg.RenderSPA {
+				formTargets = discoverFormsFromPage(ctx, client, scanTarget, cfg.RenderSPA)
+			}
 			for _, ft := range formTargets {
 				if err := scanOneTarget(ctx, engine, ft, allFindings, totalStats); err != nil {
 					color.Yellow("[!] Form scan failed for %s: %v\n", ft.URL, err)
 				}
+			}
+			if len(formTargets) == 0 {
+				color.Yellow("[!] No HTML forms found on target page\n")
 			}
 		}
 
 		// Link parameter mining: pages whose only injectable surface appears
 		// in <a href="...?param=value"> links (no forms). Extracts param names
 		// from same-host links and scans those targets (dalfox Grep feature).
-		if cfg.Body == "" {
-			paramTargets, err := crawler.ExtractParamTargetsFromPage(ctx, client, scanTarget.URL, scanTarget.Headers)
-			if err == nil {
-				for _, pt := range paramTargets {
-					// Skip the seed URL itself
-					if normalizeForCompare(pt.URL) == normalizeForCompare(scanTarget.URL) {
-						continue
-					}
-					ptTarget := scanTarget
-					ptTarget.URL = pt.URL
-					ptTarget.URL = appendQueryParams(ptTarget.URL, pt.Params)
-					if err := scanOneTarget(ctx, engine, ptTarget, allFindings, totalStats); err != nil {
-						color.Yellow("[!] Param-target scan failed for %s: %v\n", pt.URL, err)
-					}
+		if cfg.Body == "" && pageInfo != nil {
+			for _, pt := range pageInfo.ParamTargets {
+				// Skip the seed URL itself
+				if normalizeForCompare(pt.URL) == normalizeForCompare(scanTarget.URL) {
+					continue
+				}
+				ptTarget := scanTarget
+				ptTarget.URL = pt.URL
+				ptTarget.URL = appendQueryParams(ptTarget.URL, pt.Params)
+				if err := scanOneTarget(ctx, engine, ptTarget, allFindings, totalStats); err != nil {
+					color.Yellow("[!] Param-target scan failed for %s: %v\n", pt.URL, err)
 				}
 			}
 		}

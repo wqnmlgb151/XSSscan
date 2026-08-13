@@ -24,7 +24,7 @@ func TestDetectFilterProfile(t *testing.T) {
 		},
 		{
 			name: "encodes double quotes only",
-			body: `value="xsscan<>"&quot;'()=onerror=alert(javascript:"`,
+			body: `value="xsscan<>&quot;'()=onerror=alert(javascript:"`,
 			check: func(p *FilterProfile) bool {
 				return p != nil && p.EncodesDoubleQuote && !p.EncodesSingleQuote &&
 					p.AllowsSingleQuote() && !p.AllowsDoubleQuote()

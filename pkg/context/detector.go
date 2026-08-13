@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/xsscan/xsscan/pkg/internal/text"
+	"github.com/xsscan/xsscan/pkg/internal/xsspatterns"
 	"golang.org/x/net/html"
 )
 
@@ -31,7 +32,7 @@ func NewDetector() *Detector {
 		templateRe:  regexp.MustCompile(`\{\{(.*?)\}\}`),
 		angularRe:   regexp.MustCompile(`\[([a-zA-Z-]+)\]\s*=\s*["']([^"']*)["']`),
 		scriptRe:    regexp.MustCompile(`(?s)<script[^>]*>(.*?)</script>`),
-		eventAttrRe: regexp.MustCompile(`(?i)^on\w+$`),
+		eventAttrRe: xsspatterns.EventHandlerAttrRe,
 	}
 }
 

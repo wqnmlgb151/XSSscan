@@ -22,9 +22,9 @@ import (
 )
 
 const (
-	defaultMaxDepth    = 2
-	defaultMaxPages    = 50
-	parallelWorkers    = 10
+	defaultMaxDepth = 2
+	defaultMaxPages = 50
+	parallelWorkers = 10
 )
 
 // Crawler performs breadth-first same-host link discovery.
@@ -467,7 +467,6 @@ func resolveURL(base *url.URL, href string) string {
 	return resolved.String()
 }
 
-
 func getAttr(n *html.Node, key string) string {
 	for _, a := range n.Attr {
 		if strings.EqualFold(a.Key, key) {
@@ -477,17 +476,17 @@ func getAttr(n *html.Node, key string) string {
 	return ""
 }
 
-// ExtractFormsFromPage fetches a URL and extracts HTML forms with their input fields.
-// Optional headers (e.g., Authorization, JWT, custom) are applied after User-Agent.
-// Returns nil if the page is not HTML or no forms are found.
-func ExtractFormsFromPage(ctx context.Context, client *http.Client, pageURL string, headers map[string]string) ([]FormInfo, error) {
+// fetchPage fetches a URL with optional headers and returns the raw body.
+// Shared by all page-extraction functions so a single page fetch can feed
+// form discovery, link-parameter mining, and any future extractors.
+func fetchPage(ctx context.Context, client *http.Client, pageURL string, headers map[string]string) (string, error) {
 	if err := ssrfguard.IsURLTargetAllowed(pageURL); err != nil {
-		return nil, fmt.Errorf("ssrf blocked: %w", err)
+		return "", fmt.Errorf("ssrf blocked: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	req.Header.Set("User-Agent", httpclient.DefaultUA)
 	for k, v := range headers {
@@ -496,29 +495,60 @@ func ExtractFormsFromPage(ctx context.Context, client *http.Client, pageURL stri
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	defer resp.Body.Close()
 
 	switch resp.StatusCode {
 	case http.StatusOK:
 	case http.StatusUnauthorized, http.StatusForbidden:
-		return nil, fmt.Errorf("HTTP %d — target requires authentication (use --login-url, --cookie, --header, or --jwt)", resp.StatusCode)
+		return "", fmt.Errorf("HTTP %d — target requires authentication (use --login-url, --cookie, --header, or --jwt)", resp.StatusCode)
 	default:
-		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+		return "", fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
 	ct := resp.Header.Get("Content-Type")
 	if ct != "" && !strings.Contains(ct, "text/html") && !strings.Contains(ct, "application/xhtml") {
-		return nil, fmt.Errorf("non-HTML content: %s", ct)
+		return "", fmt.Errorf("non-HTML content: %s", ct)
 	}
 
 	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, httpclient.MaxResponseSize))
 	if err != nil {
+		return "", err
+	}
+	return string(bodyBytes), nil
+}
+
+// PageInfo is the combined extraction result of a single page fetch.
+type PageInfo struct {
+	Forms        []FormInfo
+	ParamTargets []ParamTarget
+}
+
+// ExtractPageInfo fetches a page ONCE and extracts both HTML forms and link
+// query parameters. Callers needing both avoid the double GET that
+// ExtractFormsFromPage + ExtractParamTargetsFromPage would otherwise cause.
+func ExtractPageInfo(ctx context.Context, client *http.Client, pageURL string, headers map[string]string) (*PageInfo, error) {
+	body, err := fetchPage(ctx, client, pageURL, headers)
+	if err != nil {
 		return nil, err
 	}
+	info := &PageInfo{}
+	info.Forms, _ = extractForms(body, pageURL)
+	info.ParamTargets = extractParamTargets(body, pageURL)
+	return info, nil
+}
 
-	return extractForms(string(bodyBytes), pageURL)
+// ExtractFormsFromPage fetches a URL and extracts HTML forms with their input fields.
+// Optional headers (e.g., Authorization, JWT, custom) are applied after User-Agent.
+// Returns nil if the page is not HTML or no forms are found.
+// Prefer ExtractPageInfo when both forms and param targets are needed.
+func ExtractFormsFromPage(ctx context.Context, client *http.Client, pageURL string, headers map[string]string) ([]FormInfo, error) {
+	body, err := fetchPage(ctx, client, pageURL, headers)
+	if err != nil {
+		return nil, err
+	}
+	return extractForms(body, pageURL)
 }
 
 // extractForms parses HTML and extracts form details: action URL, method, and input field names.
@@ -614,10 +644,11 @@ func collectFormInputs(formNode *html.Node) []string {
 	walk(formNode)
 	return inputs
 }
+
 // extractRoutePatterns parses JavaScript blocks for common SPA route definitions.
 var (
-	routePatternRe  = regexp.MustCompile(`path\s*:\s*['"]([^'"]+)['"]`)
-	sitemapLocRE    = regexp.MustCompile(`<loc>\s*(.*?)\s*</loc>`)
+	routePatternRe = regexp.MustCompile(`path\s*:\s*['"]([^'"]+)['"]`)
+	sitemapLocRE   = regexp.MustCompile(`<loc>\s*(.*?)\s*</loc>`)
 )
 
 func extractRoutePatterns(body string) []string {
@@ -634,8 +665,6 @@ func extractRoutePatterns(body string) []string {
 
 	return routes
 }
-
-
 
 // DiscoverFromRobotsContext fetches /robots.txt and extracts Sitemap directives and Allow paths.
 func DiscoverFromRobotsContext(ctx context.Context, client *http.Client, baseURL string) ([]string, error) {

@@ -8,6 +8,7 @@ import (
 
 	"golang.org/x/net/html"
 
+	"github.com/xsscan/xsscan/pkg/analyze"
 	ctx "github.com/xsscan/xsscan/pkg/context"
 	"github.com/xsscan/xsscan/pkg/httpclient"
 	"github.com/xsscan/xsscan/pkg/model"
@@ -57,28 +58,28 @@ breakout mechanisms (e.g., quote breakout when angle brackets are stripped). */
 var probeLibrary = map[ctx.ContextType][]ContextProbe{
 	ctx.ContextHTMLBody: {{
 		ContextType: ctx.ContextHTMLBody,
-		Probe:       "<xsscan>",
-		Validator:   validateUnescapedProbe("<xsscan>"),
+		Probe:       "<" + analyze.MarkerPrefix + ">",
+		Validator:   validateUnescapedProbe("<" + analyze.MarkerPrefix + ">"),
 	}},
 	ctx.ContextHTMLComment: {{
 		ContextType: ctx.ContextHTMLComment,
-		Probe:       "--><xsscan><!--",
+		Probe:       "--><" + analyze.MarkerPrefix + "><!--",
 		Validator:   validateCommentBreakout,
 	}},
 	ctx.ContextHTMLTag: {{
 		ContextType: ctx.ContextHTMLTag,
-		Probe:       "xsscan",
-		Validator:   validateUnescapedProbe("xsscan"),
+		Probe:       analyze.MarkerPrefix,
+		Validator:   validateUnescapedProbe(analyze.MarkerPrefix),
 	}},
 	ctx.ContextHTMLAttrName: {{
 		ContextType: ctx.ContextHTMLAttrName,
-		Probe:       "xsscan",
-		Validator:   validateUnescapedProbe("xsscan"),
+		Probe:       analyze.MarkerPrefix,
+		Validator:   validateUnescapedProbe(analyze.MarkerPrefix),
 	}},
 	ctx.ContextHTMLAttrValue: {
 		{
 			ContextType: ctx.ContextHTMLAttrValue,
-			Probe:       " xsscan>",
+			Probe:       " " + analyze.MarkerPrefix + ">",
 			Validator:   validateAttrBreakout,
 		},
 		// Quote-only breakout: servers that strip < > but preserve quotes
@@ -86,19 +87,19 @@ var probeLibrary = map[ctx.ContextType][]ContextProbe{
 		// (" onmouseover=alert(1) x="). These probes validate that dimension.
 		{
 			ContextType: ctx.ContextHTMLAttrValue,
-			Probe:       `"xsscan"=`,
+			Probe:       `"` + analyze.MarkerPrefix + `"=`,
 			Validator:   validateDoubleQuoteBreakout,
 		},
 		{
 			ContextType: ctx.ContextHTMLAttrValue,
-			Probe:       `'xsscan'=`,
+			Probe:       `'` + analyze.MarkerPrefix + `'=`,
 			Validator:   validateSingleQuoteBreakout,
 		},
 	},
 	ctx.ContextHTMLEntity: {{
 		ContextType: ctx.ContextHTMLEntity,
-		Probe:       "xsscan",
-		Validator:   validateUnescapedProbe("xsscan"),
+		Probe:       analyze.MarkerPrefix,
+		Validator:   validateUnescapedProbe(analyze.MarkerPrefix),
 	}},
 	ctx.ContextJSString: {{
 		ContextType: ctx.ContextJSString,
@@ -107,43 +108,43 @@ var probeLibrary = map[ctx.ContextType][]ContextProbe{
 	}},
 	ctx.ContextJSComment: {{
 		ContextType: ctx.ContextJSComment,
-		Probe:       "/*xsscan*/",
-		Validator:   validateUnescapedProbe("xsscan"),
+		Probe:       "/*" + analyze.MarkerPrefix + "*/",
+		Validator:   validateUnescapedProbe(analyze.MarkerPrefix),
 	}},
 	ctx.ContextJSBlock: {{
 		ContextType: ctx.ContextJSBlock,
-		Probe:       "</script><xsscan>",
-		Validator:   validateUnescapedProbe("<xsscan>"),
+		Probe:       "</script><" + analyze.MarkerPrefix + ">",
+		Validator:   validateUnescapedProbe("<" + analyze.MarkerPrefix + ">"),
 	}},
 	ctx.ContextCSSValue: {{
 		ContextType: ctx.ContextCSSValue,
-		Probe:       "xsscan",
-		Validator:   validateUnescapedProbe("xsscan"),
+		Probe:       analyze.MarkerPrefix,
+		Validator:   validateUnescapedProbe(analyze.MarkerPrefix),
 	}},
 	ctx.ContextCSSBlock: {{
 		ContextType: ctx.ContextCSSBlock,
-		Probe:       "</style><xsscan><style>",
-		Validator:   validateUnescapedProbe("<xsscan>"),
+		Probe:       "</style><" + analyze.MarkerPrefix + "><style>",
+		Validator:   validateUnescapedProbe("<" + analyze.MarkerPrefix + ">"),
 	}},
 	ctx.ContextURLAttr: {{
 		ContextType: ctx.ContextURLAttr,
-		Probe:       "javascript:xsscan",
+		Probe:       "javascript:" + analyze.MarkerPrefix,
 		Validator:   validateURLBreakout,
 	}},
 	ctx.ContextTemplate: {{
 		ContextType: ctx.ContextTemplate,
-		Probe:       "{{xsscan}}",
-		Validator:   validateUnescapedProbe("xsscan"),
+		Probe:       "{{" + analyze.MarkerPrefix + "}}",
+		Validator:   validateUnescapedProbe(analyze.MarkerPrefix),
 	}},
 	ctx.ContextSVGContainer: {{
 		ContextType: ctx.ContextSVGContainer,
-		Probe:       "<xsscan>",
-		Validator:   validateUnescapedProbe("<xsscan>"),
+		Probe:       "<" + analyze.MarkerPrefix + ">",
+		Validator:   validateUnescapedProbe("<" + analyze.MarkerPrefix + ">"),
 	}},
 	ctx.ContextMathMLContainer: {{
 		ContextType: ctx.ContextMathMLContainer,
-		Probe:       "<xsscan>",
-		Validator:   validateUnescapedProbe("<xsscan>"),
+		Probe:       "<" + analyze.MarkerPrefix + ">",
+		Validator:   validateUnescapedProbe("<" + analyze.MarkerPrefix + ">"),
 	}},
 	ctx.ContextJSONValue: {{
 		ContextType: ctx.ContextJSONValue,
@@ -165,13 +166,13 @@ from runes at package init so the probe table stays readable.
 
 var (
 	/* jsStringProbeValue = ';xsscan// — breaks out of a single-quoted JS string. */
-	jsStringProbeValue = string(rune(0x27)) + ";xsscan" + string([]byte{0x2F, 0x2F})
+	jsStringProbeValue = string(rune(0x27)) + ";" + analyze.MarkerPrefix + string([]byte{0x2F, 0x2F})
 
 	/* jsonProbeValue = "xsscan" — breaks out of a JSON string value. */
-	jsonProbeValue = string(rune(0x22)) + "xsscan" + string(rune(0x22))
+	jsonProbeValue = string(rune(0x22)) + analyze.MarkerPrefix + string(rune(0x22))
 
 	/* templateLiteralProbeValue = ${xsscan} — tests expression breakout. */
-	templateLiteralProbeValue = "${xsscan}"
+	templateLiteralProbeValue = "${" + analyze.MarkerPrefix + "}"
 )
 
 /* validateUnescapedProbe checks that expected appears in the response body
@@ -199,13 +200,13 @@ func validateUnescapedProbe(expected string) func(body string) bool {
 /* validateCommentBreakout confirms the probe broke out of an HTML comment. */
 
 func validateCommentBreakout(body string) bool {
-	return strings.Contains(body, "<xsscan>")
+	return strings.Contains(body, "<"+analyze.MarkerPrefix+">")
 }
 
 /* validateAttrBreakout confirms the probe escaped the attribute value context. */
 
 func validateAttrBreakout(body string) bool {
-	return strings.Contains(body, "xsscan>")
+	return strings.Contains(body, analyze.MarkerPrefix+">")
 }
 
 /* validateQuoteBreakout confirms the probe's quote actually broke out of an
@@ -229,7 +230,7 @@ func validateQuoteBreakout(body string) bool {
 				// name (parse error but tolerated): value=""xsscan"=" becomes
 				// attribute `xsscan"`. Trim quotes before comparison.
 				name := strings.Trim(string(key), `"'`)
-				if strings.EqualFold(name, "xsscan") {
+				if strings.EqualFold(name, analyze.MarkerPrefix) {
 					return true
 				}
 				if !more {

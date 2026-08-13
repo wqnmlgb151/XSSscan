@@ -18,48 +18,85 @@ type FilterProfile struct {
 
 // FilterProbeValue contains one occurrence of every metacharacter whose
 // fate the profile needs to determine.
-const FilterProbeValue = "xsscan<>\"'()=onerror=alert(javascript:"
+const FilterProbeValue = MarkerPrefix + `<>"'()=onerror=alert(javascript:`
 
-// filterWindow is the body region around the probe reflection used for
+// filterWindow is the body region around each probe reflection used for
 // detection. Scanning the full response (up to 10MB) is wasteful and
 // page markup elsewhere would false-positive entity checks.
 const filterWindow = 2048
 
 // DetectFilterProfile analyzes a response body containing the reflection of
-// FilterProbeValue. Detection runs on a windowed slice around the reflection
-// so unrelated page markup cannot skew the result. Returns nil if the probe
-// value cannot be located.
+// FilterProbeValue. A page can reflect the same input in MULTIPLE places
+// with different escaping (e.g., escaped in body text, raw in an attribute) —
+// detection therefore scans every reflection occurrence and reports the
+// MOST PERMISSIVE behavior: a capability is only marked blocked when EVERY
+// occurrence blocks it. This prevents pruning payloads that work against
+// the raw reflection point. Returns nil if the probe value cannot be located.
 func DetectFilterProfile(body string) *FilterProfile {
-	idx := strings.Index(body, "xsscan")
-	if idx < 0 {
+	angleRaw := false
+	angleEncoded := false
+	angleStrippedAll := true
+	doubleRaw := false
+	singleRaw := false
+	anyOccurrence := false
+
+	searchFrom := 0
+	for {
+		idx := strings.Index(body[searchFrom:], MarkerPrefix)
+		if idx < 0 {
+			break
+		}
+		idx += searchFrom
+		anyOccurrence = true
+
+		// Examine only the probe tail — the characters immediately after
+		// the marker (up to ~32 chars). The windowed approach failed
+		// because surrounding attribute delimiters polluted raw-quote
+		// detection; the probe's own chars are unambiguous.
+		end := idx + len(MarkerPrefix) + 32
+		if end > len(body) {
+			end = len(body)
+		}
+		fragment := body[idx+len(MarkerPrefix) : end]
+
+		if strings.Contains(fragment, "<") || strings.Contains(fragment, ">") {
+			angleRaw = true
+		}
+		if strings.Contains(fragment, "&lt;") || strings.Contains(fragment, "&gt;") {
+			angleEncoded = true
+		}
+		if !angleRaw && !angleEncoded {
+			angleStrippedAll = angleStrippedAll && true
+		} else {
+			angleStrippedAll = false
+		}
+		if strings.Contains(fragment, "\"") {
+			doubleRaw = true
+		}
+		if strings.Contains(fragment, "'") {
+			singleRaw = true
+		}
+
+		searchFrom = idx + len(MarkerPrefix)
+	}
+
+	if !anyOccurrence {
 		return nil
 	}
-	start := idx - filterWindow
-	if start < 0 {
-		start = 0
-	}
-	end := idx + filterWindow
-	if end > len(body) {
-		end = len(body)
-	}
-	window := body[start:end]
 
 	p := &FilterProfile{}
-
-	// Angle brackets: encoded vs stripped (only detectable within the
-	// window — the raw body is full of page markup).
-	switch {
-	case strings.Contains(window, "&lt;") || strings.Contains(window, "&gt;"):
+	// Aggregate to the most permissive profile: a capability is blocked
+	// only when no occurrence preserved it.
+	if angleEncoded && !angleRaw {
 		p.EncodesAngleBrackets = true
-	case !strings.Contains(window, "<") && !strings.Contains(window, ">"):
+	}
+	if angleStrippedAll && !angleRaw && !angleEncoded {
 		p.StripsAngleBrackets = true
 	}
-
-	// Quotes: per-type encoding.
-	if strings.Contains(window, "&quot;") || strings.Contains(window, "&#34;") {
+	if !doubleRaw {
 		p.EncodesDoubleQuote = true
 	}
-	if strings.Contains(window, "&#39;") || strings.Contains(window, "&#x27;") {
+	if !singleRaw {
 		p.EncodesSingleQuote = true
 	}
 

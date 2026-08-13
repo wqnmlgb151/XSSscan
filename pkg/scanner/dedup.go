@@ -6,6 +6,7 @@ import (
 
 	ctx "github.com/xsscan/xsscan/pkg/context"
 	"github.com/xsscan/xsscan/pkg/internal/urlutil"
+	"github.com/xsscan/xsscan/pkg/internal/xsspatterns"
 	"github.com/xsscan/xsscan/pkg/model"
 )
 
@@ -47,14 +48,14 @@ var payloadPatterns = []struct {
 	{VectorJSBreakout, regexp.MustCompile(`^['";\s]['"]?[-;]`)}, // ';alert(1)// — JS context breakout
 	{VectorCommentBreakout, regexp.MustCompile(`-->|/\*`)},      // HTML/JS comment breakout
 	{VectorTagInjection, regexp.MustCompile(`(?i)^<\s*(script|img|svg|details|math|body|iframe|object|embed|video|audio|source|marquee|link|base|meta|style)`)},
-	{VectorEventHandler, regexp.MustCompile(`(?i)\bon\w+\s*=`)},       // onerror=, onload=, etc.
+	{VectorEventHandler, xsspatterns.EventHandlerAssignRe},           // onerror=, onload=, etc.
 	{VectorTemplateInject, regexp.MustCompile(`\{\{.*\}\}|\$\{.*\}`)}, // {{ }}, ${ }
 	{VectorURIInjection, regexp.MustCompile(`(?i)^(javascript|data|vbscript|blob|filesystem):`)},
 	{VectorCSSInjection, regexp.MustCompile(`(?i)(expression\s*\(|url\s*\(\s*['"]?javascript)`)},
 }
 
 // contextClassification maps context types to execution capability classes.
-var eventHandlerRe = regexp.MustCompile(`(?i)\bon\w+\s*=|\bon\w+\s*:`)
+var eventHandlerRe = xsspatterns.EventHandlerAssignColonRe
 
 var contextPriority = map[contextClass]int{
 	ContextHTMLExecute: 5,

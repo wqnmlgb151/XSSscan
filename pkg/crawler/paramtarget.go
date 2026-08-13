@@ -2,16 +2,12 @@ package crawler
 
 import (
 	"context"
-	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"regexp"
 	"sort"
 	"strings"
 
-	"github.com/xsscan/xsscan/pkg/httpclient"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
 	"golang.org/x/net/html"
 )
 
@@ -29,27 +25,13 @@ const maxParamTargets = 20
 
 // ExtractParamTargetsFromPage fetches a page and extracts query parameter
 // names from same-host links. Parameters are deduplicated per base URL.
+// Prefer ExtractPageInfo when both forms and param targets are needed.
 func ExtractParamTargetsFromPage(ctx context.Context, client *http.Client, pageURL string, headers map[string]string) ([]ParamTarget, error) {
-	if err := ssrfguard.IsURLTargetAllowed(pageURL); err != nil {
-		return nil, fmt.Errorf("ssrf blocked: %w", err)
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
+	body, err := fetchPage(ctx, client, pageURL, headers)
 	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
+		return nil, err
 	}
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("fetch page: %w", err)
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, httpclient.MaxResponseSize))
-	if err != nil {
-		return nil, fmt.Errorf("read body: %w", err)
-	}
-	return extractParamTargets(string(body), pageURL), nil
+	return extractParamTargets(body, pageURL), nil
 }
 
 // extractParamTargets parses HTML and finds same-host links whose query

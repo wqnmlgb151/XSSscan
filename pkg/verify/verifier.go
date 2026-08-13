@@ -7,6 +7,7 @@ import (
 	"github.com/xsscan/xsscan/pkg/analyze"
 	"github.com/xsscan/xsscan/pkg/context"
 	"github.com/xsscan/xsscan/pkg/internal/text"
+	"github.com/xsscan/xsscan/pkg/internal/xsspatterns"
 	"github.com/xsscan/xsscan/pkg/model"
 	"github.com/xsscan/xsscan/pkg/payload"
 )
@@ -47,7 +48,7 @@ func NewVerifier() *Verifier {
 	return &Verifier{
 		scorer:      NewConfidenceScorer(),
 		tagStripper: regexp.MustCompile(`<[^>]*>`),
-		eventFilter: regexp.MustCompile(`(?i)on\w+\s*=`),
+		eventFilter: xsspatterns.EventHandlerAssignRe,
 	}
 }
 

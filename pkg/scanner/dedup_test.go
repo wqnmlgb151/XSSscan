@@ -405,10 +405,12 @@ func TestAggregateFindings_CollapsesSameParamContext(t *testing.T) {
 }
 
 // TestAggregateFindings_VerifiedPromotes verifies a verified variant in the
-// group marks the aggregated finding as execution-verified.
+// group marks the aggregated finding as execution-verified, propagates the
+// execution confidence, and leads the variant list with the proven payload
+// (the primary may be a different, unverified entry).
 func TestAggregateFindings_VerifiedPromotes(t *testing.T) {
 	findings := []model.Finding{
-		{URL: "http://a.com/p?q=1", Parameter: "q", Type: model.ReflectedXSS, Payload: `<script>alert(1)</script>`, Contexts: []string{"html_body"}, Confidence: 0.85, Severity: model.High, ExecutionVerified: true},
+		{URL: "http://a.com/p?q=1", Parameter: "q", Type: model.ReflectedXSS, Payload: `<script>alert(1)</script>`, Contexts: []string{"html_body"}, Confidence: 0.85, Severity: model.High, ExecutionVerified: true, ExecutionConfidence: 0.95},
 		{URL: "http://a.com/p?q=2", Parameter: "q", Type: model.ReflectedXSS, Payload: `<img src=x onerror=alert(1)>`, Contexts: []string{"html_body"}, Confidence: 0.9, Severity: model.High},
 	}
 	result := AggregateFindings(findings)
@@ -417,5 +419,15 @@ func TestAggregateFindings_VerifiedPromotes(t *testing.T) {
 	}
 	if !result[0].ExecutionVerified {
 		t.Error("verified variant should promote the aggregated finding")
+	}
+	if result[0].ExecutionConfidence != 0.95 {
+		t.Errorf("expected execution confidence 0.95 propagated, got %f", result[0].ExecutionConfidence)
+	}
+	// Primary is the 0.9 unverified entry, but the proven payload must lead.
+	if result[0].Payload != `<img src=x onerror=alert(1)>` {
+		t.Errorf("primary payload = %q, want the 0.9 entry", result[0].Payload)
+	}
+	if len(result[0].Payloads) != 2 || result[0].Payloads[0] != `<script>alert(1)</script>` {
+		t.Errorf("verified payload must lead variants, got %v", result[0].Payloads)
 	}
 }

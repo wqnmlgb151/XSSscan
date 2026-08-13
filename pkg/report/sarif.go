@@ -63,9 +63,10 @@ func (r *Reporter) generateSARIF(data *ScanData) ([]byte, error) {
 				},
 			},
 			Properties: sarifProperties{
-				Tags:       f.Contexts,
-				Payload:    f.Payload,
-				Severity:   f.Severity,
+				Tags:        f.Contexts,
+				Payload:     f.Payload,
+				Payloads:    f.Payloads,
+				Severity:    f.Severity,
 				CSPBypasses: formatCSPBypassesForSARIF(f.CSPBypasses),
 			},
 		}
@@ -136,11 +137,11 @@ type sarifConfiguration struct {
 }
 
 type sarifResult struct {
-	RuleID     string           `json:"ruleId"`
-	Level      string           `json:"level,omitempty"`
-	Message    sarifMessage     `json:"message"`
-	Locations  []sarifLocation  `json:"locations,omitempty"`
-	Properties sarifProperties  `json:"properties,omitempty"`
+	RuleID     string          `json:"ruleId"`
+	Level      string          `json:"level,omitempty"`
+	Message    sarifMessage    `json:"message"`
+	Locations  []sarifLocation `json:"locations,omitempty"`
+	Properties sarifProperties `json:"properties,omitempty"`
 }
 
 type sarifMessage struct {
@@ -167,6 +168,7 @@ type sarifRegion struct {
 type sarifProperties struct {
 	Tags        []string `json:"tags,omitempty"`
 	Payload     string   `json:"payload,omitempty"`
+	Payloads    []string `json:"payloads,omitempty"`
 	Severity    string   `json:"severity,omitempty"`
 	CSPBypasses string   `json:"csp_bypasses,omitempty"`
 }
@@ -208,6 +210,12 @@ func (r *Reporter) generateJUnit(data *ScanData) string {
 			safeDesc, f.Type)
 		fmt.Fprintf(&b, "        Parameter: %s\n", safeParam)
 		fmt.Fprintf(&b, "        Payload: %s\n", safePayload)
+		// Variants excluding the primary payload (already printed above)
+		for _, v := range f.Payloads {
+			if v != f.Payload {
+				fmt.Fprintf(&b, "        Variant: %s\n", html.EscapeString(v))
+			}
+		}
 		fmt.Fprintf(&b, "        Severity: %s\n", f.Severity)
 		fmt.Fprintf(&b, "        Confidence: %.0f%%\n", f.Confidence*100)
 		fmt.Fprintf(&b, "        Contexts: %s\n", strings.Join(f.Contexts, ", "))
@@ -219,4 +227,3 @@ func (r *Reporter) generateJUnit(data *ScanData) string {
 	b.WriteString("</testsuites>\n")
 	return b.String()
 }
-

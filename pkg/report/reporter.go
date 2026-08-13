@@ -83,10 +83,20 @@ func (r *Reporter) generateMarkdown(data *ScanData) string {
 		fmt.Fprintf(&b, "- **URL:** %s\n", text.EscapeMarkdown(f.URL))
 		fmt.Fprintf(&b, "- **Parameter:** %s\n", text.EscapeMarkdown(f.Parameter))
 		fmt.Fprintf(&b, "- **Payload:** `%s`\n", text.EscapeMarkdown(f.Payload))
-		if len(f.Payloads) > 1 {
+		// Variants exclude the primary payload — it is printed above.
+		hasVariants := false
+		for _, v := range f.Payloads {
+			if v != f.Payload {
+				hasVariants = true
+				break
+			}
+		}
+		if hasVariants {
 			b.WriteString("- **Payload Variants:**\n")
 			for _, v := range f.Payloads {
-				fmt.Fprintf(&b, "  - `%s`\n", text.EscapeMarkdown(v))
+				if v != f.Payload {
+					fmt.Fprintf(&b, "  - `%s`\n", text.EscapeMarkdown(v))
+				}
 			}
 		}
 		if len(f.CSPBypasses) > 0 {
@@ -213,11 +223,19 @@ details summary{cursor:pointer;color:#666;margin-top:8px}
 <div class="code">%s</div>
 `, safePayload)
 
-			// Aggregated variants (same param + context, multiple payloads)
-			if len(f.Payloads) > 1 {
-				b.WriteString(`<details><summary>Payload variants (` + fmt.Sprint(len(f.Payloads)) + `)</summary>` + "\n")
+			// Aggregated variants excluding the primary payload (printed above)
+			variantCount := 0
+			for _, v := range f.Payloads {
+				if v != f.Payload {
+					variantCount++
+				}
+			}
+			if variantCount > 0 {
+				b.WriteString(`<details><summary>Payload variants (` + fmt.Sprint(variantCount) + `)</summary>` + "\n")
 				for _, v := range f.Payloads {
-					fmt.Fprintf(&b, `<div class="code" style="margin-top:4px">%s</div>`+"\n", html.EscapeString(v))
+					if v != f.Payload {
+						fmt.Fprintf(&b, `<div class="code" style="margin-top:4px">%s</div>`+"\n", html.EscapeString(v))
+					}
 				}
 				b.WriteString("</details>\n")
 			}

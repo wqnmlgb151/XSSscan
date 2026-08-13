@@ -1,7 +1,8 @@
 package verify
 
 // ConfidenceScorer calculates confidence scores for findings.
-// Score ranges from 0.0 (definitely not exploitable) to 1.0 (definitely exploitable).
+// Structural scores range from 0.0 to MaxUnverifiedConfidence (0.90);
+// 1.0 is reachable only after browser execution verification.
 type ConfidenceScorer struct{}
 
 const (
@@ -34,9 +35,13 @@ const (
 	// context + no sanitization) cannot honestly claim certainty: the payload
 	// may still be neutralized client-side (framework escaping, DOM
 	// sanitizers, browser XSS auditor). Only --verify-execution pushes a
-	// finding past this cap (engine adds +0.15 on verification, reaching
-	// 1.0 for confirmed payloads).
+	// finding past this cap: engine.go adds VerificationBoost on verification
+	// (min-capped at 1.0), reaching 1.0 for confirmed payloads.
 	MaxUnverifiedConfidence = 0.90
+
+	// VerificationBoost is the confidence added by --verify-execution when a
+	// payload actually executes in a real browser (engine.go).
+	VerificationBoost = 0.15
 )
 
 // Factors are the individual signals that contribute to confidence
@@ -54,11 +59,12 @@ func NewConfidenceScorer() *ConfidenceScorer {
 	return &ConfidenceScorer{}
 }
 
-// Score calculates a confidence score from 0.0 to 1.0.
+// Score calculates a confidence score capped at MaxUnverifiedConfidence.
 //
 // The model uses additive positive weights (summing to 1.0) with two
 // interaction effects that discount signals when contradicting evidence is
-// present, then applies penalties as multiplicative factors:
+// present. The additive sum is capped BEFORE penalties, then penalties are
+// applied as multiplicative factors:
 //
 //   - WAFBlocked → NoSanitization weight is multiplied by 0.3 (a WAF that
 //     intercepts requests is effectively sanitizing input).

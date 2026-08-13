@@ -272,3 +272,32 @@ func TestJSStringTemplates_NoInertPayloads(t *testing.T) {
 		}
 	}
 }
+
+// TestCuratedJSStringLists_NoInertPayloads extends the guard to the curated
+// lists that also feed js_string injections (polyglot, WAF bypass, framework
+// sets): none may carry ${...} interpolation or */ comment breakouts while
+// claiming ContextJSString — the quote-type gate cannot save those (they are
+// inert in BOTH quote types).
+func TestCuratedJSStringLists_NoInertPayloads(t *testing.T) {
+	lists := map[string][]PayloadTemplate{
+		"polyglot":  PolyglotPayloads(),
+		"wafbypass": AllWAFBypassPayloads(),
+		"react":     FrameworkPayloads("react"),
+		"vue":       FrameworkPayloads("vue"),
+		"angular":   FrameworkPayloads("angular"),
+		"svelte":    FrameworkPayloads("svelte"),
+		"jquery":    FrameworkPayloads("jquery"),
+		"vue2":      Vue2SandboxPayloads(),
+		"reactssr":  ReactSSRPayloads(),
+	}
+	for name, list := range lists {
+		for _, tmpl := range list {
+			if tmpl.Context != context.ContextJSString {
+				continue
+			}
+			if strings.Contains(tmpl.Value, "${") || strings.HasPrefix(tmpl.Value, "*/") {
+				t.Errorf("%s js_string template %q is inert in quoted strings", name, tmpl.Value)
+			}
+		}
+	}
+}

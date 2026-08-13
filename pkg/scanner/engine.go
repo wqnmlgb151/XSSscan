@@ -411,7 +411,7 @@ func (e *Engine) generatePayloads(injection model.InjectionPoint, frameworks []a
 
 	for _, fw := range frameworks {
 		for _, tmpl := range payload.FrameworkPayloads(strings.ToLower(fw.Name)) {
-			if contextSet[tmpl.Context] {
+			if quoteOK(tmpl) {
 				payloads = append(payloads, payloadFromTemplate(tmpl, payload.PayloadTypeReflected, 0.75))
 			}
 		}
@@ -421,14 +421,14 @@ func (e *Engine) generatePayloads(injection model.InjectionPoint, frameworks []a
 		// (Next.js is React-based SSR and gets the same treatment).
 		if strings.HasPrefix(fw.Name, "Vue") && strings.HasPrefix(fw.Version, "2") {
 			for _, tmpl := range payload.Vue2SandboxPayloads() {
-				if contextSet[tmpl.Context] {
+				if quoteOK(tmpl) {
 					payloads = append(payloads, payloadFromTemplate(tmpl, payload.PayloadTypeReflected, 0.85))
 				}
 			}
 		}
 		if strings.HasPrefix(fw.Name, "React") || fw.Name == "Next.js" {
 			for _, tmpl := range payload.ReactSSRPayloads() {
-				if contextSet[tmpl.Context] {
+				if quoteOK(tmpl) {
 					payloads = append(payloads, payloadFromTemplate(tmpl, payload.PayloadTypeReflected, 0.85))
 				}
 			}
@@ -635,7 +635,7 @@ func (e *Engine) applyVerificationResult(f *model.Finding, result *execverify.Ex
 		f.ExecutionConfidence = result.Confidence
 		f.ScreenshotPath = result.ScreenshotPath
 		// Boost confidence for browser-verified findings
-		f.Confidence = min(f.Confidence+0.15, 1.0)
+		f.Confidence = min(f.Confidence+verify.VerificationBoost, 1.0)
 		e.logger.Info("Execution VERIFIED in browser",
 			zap.String("param", f.Parameter),
 			zap.String("dialog", result.DialogType),

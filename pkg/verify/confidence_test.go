@@ -185,7 +185,7 @@ func TestScoreInteractionCompounding(t *testing.T) {
 		SyntaxValid:    true,
 		NoSanitization: true,
 	}
-	scoreBaseline := cs.Score(baseline) // 1.0
+	scoreBaseline := cs.Score(baseline) // 0.90 (capped)
 
 	// Only WAFBlocked (SyntaxValid=true, NoSanitization=true)
 	onlyWAF := Factors{
@@ -296,7 +296,7 @@ func TestScoreOrderingInvariant(t *testing.T) {
 	perfect := cs.Score(Factors{
 		Reflected: true, ContextBreak: true, SyntaxValid: true,
 		NoSanitization: true, CSPWeak: true,
-	}) // 1.0
+	}) // 0.90 (MaxUnverifiedConfidence cap)
 
 	// Single length penalty (multiplicative 0.9, applied after the 0.90 cap)
 	withLength := cs.Score(Factors{
@@ -334,16 +334,13 @@ func TestScoreOrderingInvariant(t *testing.T) {
 func TestScoreNeverExceeds1(t *testing.T) {
 	cs := NewConfidenceScorer()
 
-	// All positive factors active — this is the theoretical maximum.
+	// All positive factors active — the structural maximum is the cap.
 	score := cs.Score(Factors{
 		Reflected: true, ContextBreak: true, SyntaxValid: true,
 		NoSanitization: true, CSPWeak: true,
 	})
-	if score > 1.0 {
-		t.Errorf("Score %.6f exceeds 1.0 — clamping invariant broken", score)
-	}
 	// Unverified findings cap at MaxUnverifiedConfidence; only execution
-	// verification (+0.15 in the engine) can reach 1.0.
+	// verification (+VerificationBoost in the engine) can reach 1.0.
 	if math.Abs(score-MaxUnverifiedConfidence) > 0.001 {
 		t.Errorf("All-positive score should be exactly %.2f, got %.6f", MaxUnverifiedConfidence, score)
 	}

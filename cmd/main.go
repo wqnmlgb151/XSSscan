@@ -113,7 +113,7 @@ const (
 //	make build VERSION=1.0.0
 //
 // x.y.z: x = major (architectural redesign), y = feature, z = bug fix.
-var Version = "0.9.6"
+var Version = "0.9.7"
 
 var cfg ScanConfig
 
@@ -124,7 +124,7 @@ var rootCmd = &cobra.Command{
 
 支持反射型 XSS 检测，上下文感知 payload 生成，
 前端框架识别，CSP 分析和 WAF 绕过。
-支持存储型 XSS 检测（需要 --stored 和 --trigger-url）。
+支持存储型 XSS 检测（--stored；--trigger-url 可省略，自动同域爬虫发现）。
 
 支持 Query、POST Body (JSON/Form)、Header、Cookie 参数注入。
 支持管道输入：echo http://target | xsscan
@@ -1065,8 +1065,15 @@ func printResults(result *model.ScanResult, duration time.Duration) {
 		fmt.Printf("      Param: %s | Confidence: %.0f%% | Context: %v\n",
 			f.Parameter, f.Confidence*100, f.Contexts)
 		fmt.Printf("      Payload: %s\n", f.Payload)
-		if len(f.Payloads) > 1 {
-			fmt.Printf("      Variants (%d): %s\n", len(f.Payloads), truncateStr(strings.Join(f.Payloads, ", "), 120))
+		// Variants exclude the primary payload — it is printed above.
+		variants := make([]string, 0, len(f.Payloads))
+		for _, v := range f.Payloads {
+			if v != f.Payload {
+				variants = append(variants, v)
+			}
+		}
+		if len(variants) > 0 {
+			fmt.Printf("      Variants (%d): %s\n", len(variants), truncateStr(strings.Join(variants, ", "), 120))
 		}
 		fmt.Println()
 	}

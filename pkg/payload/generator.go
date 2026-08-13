@@ -179,6 +179,11 @@ func (g *Generator) Generate(injection model.InjectionPoint) []Payload {
 				if custom.isHTML && isJSOnlyContext(ctx.Type) {
 					continue
 				}
+				// Quote-type gate applies to custom payloads too: a
+				// double-quote breakout is inert in a single-quoted string.
+				if !QuoteCompatible(custom.Value, ctx.Type, ctx.QuoteChar) {
+					continue
+				}
 				ctxPayload := custom
 				ctxPayload.Context = ctx.Type
 				payloads = append(payloads, ctxPayload)

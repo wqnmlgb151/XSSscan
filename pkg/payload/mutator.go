@@ -278,6 +278,22 @@ func (m *Mutator) MutateTargeted(payload string, contextType ctx.ContextType, wa
 	return filtered
 }
 
+// IsEncodingMutation reports whether a mutation transforms the payload's
+// representation (encoding layer). Encoding mutations require server-side
+// normalization (double decoding, entity decoding, fullwidth folding) to
+// actually execute — browsers do NOT interpret the encoded forms directly.
+// Structural mutations (case mixing, tab injection, etc.) are tolerated by
+// browsers natively and need no server cooperation.
+func IsEncodingMutation(mt MutationType) bool {
+	switch mt {
+	case MutationDoubleURLEncode, MutationUnicodeFullwidth, MutationHTMLEntityNested,
+		MutationUnicodeEscapeJS, MutationHexEntityMixed, MutationNullByteInjection,
+		MutationEntityAngleBrackets, MutationEntityPlusCase:
+		return true
+	}
+	return false
+}
+
 // GetWAFStrategies maps a WAF name to its effective mutation types.
 //
 // NOTE: This mapping parallels BypassStrategies in pkg/verify/waf.go.

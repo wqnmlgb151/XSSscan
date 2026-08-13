@@ -586,6 +586,13 @@ func (e *Engine) scanPayload(ctx context.Context, injection model.InjectionPoint
 				}
 				mutFinding.Description = findingDescription(injection, mutatedPayload) + " [WAF bypass: " + string(mut.Type) + "]"
 				mutFinding.Payload = mut.Value
+				// Encoding mutations (fullwidth, entity, double-encode) only execute
+				// if the server normalizes them — the scanner cannot verify that,
+				// so discount confidence and mark the uncertainty.
+				if payload.IsEncodingMutation(mut.Type) {
+					mutFinding.Confidence *= 0.7
+					mutFinding.Description += " (requires server-side normalization)"
+				}
 				return mutFinding, nil
 			}
 		}

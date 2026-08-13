@@ -40,6 +40,10 @@ func AllocatorOptions(custom ...ext.ExecAllocatorOption) []ext.ExecAllocatorOpti
 func NewExecAllocator(ctx context.Context, custom ...ext.ExecAllocatorOption) (context.Context, context.CancelFunc) {
 	if browser.ChromePath != "" {
 		custom = append(custom, ext.ExecPath(browser.ChromePath))
+	} else if found, err := browser.FindChrome(); err == nil {
+		// Pin the detected binary so the pre-flight warning and the actual
+		// launch always agree (chromedp's own lookup may differ).
+		custom = append(custom, ext.ExecPath(found))
 	}
 	return ext.NewExecAllocator(ctx, AllocatorOptions(custom...)...)
 }

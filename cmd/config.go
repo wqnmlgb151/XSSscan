@@ -43,6 +43,9 @@ type FileConfig struct {
 	PayloadPreset   string   `yaml:"payload-preset"`
 	PayloadWordlist string   `yaml:"payload-wordlist"`
 	Headless        bool     `yaml:"headless"`
+	RenderSPA       bool     `yaml:"render-spa"`
+	VerifyExecution bool     `yaml:"verify-execution"`
+	ChromePath      string   `yaml:"chrome-path"`
 	JWT             string   `yaml:"jwt"`
 }
 
@@ -164,6 +167,15 @@ func (fc *FileConfig) ApplyTo(cfg *ScanConfig, flags map[string]bool) {
 	}
 	if fc.Headless && !flags["headless"] {
 		cfg.Headless = fc.Headless
+	}
+	if fc.RenderSPA && !flags["render-spa"] {
+		cfg.RenderSPA = fc.RenderSPA
+	}
+	if fc.VerifyExecution && !flags["verify-execution"] {
+		cfg.VerifyExecution = fc.VerifyExecution
+	}
+	if fc.ChromePath != "" && !flags["chrome-path"] {
+		cfg.ChromePath = fc.ChromePath
 	}
 	if fc.JWT != "" && !flags["jwt"] {
 		cfg.JWT = fc.JWT

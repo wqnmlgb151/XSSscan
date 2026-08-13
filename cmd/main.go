@@ -22,11 +22,11 @@ import (
 	"github.com/xsscan/xsscan/pkg/analyze"
 	"github.com/xsscan/xsscan/pkg/auth"
 	"github.com/xsscan/xsscan/pkg/auth/oauth"
+	"github.com/xsscan/xsscan/pkg/browser"
 	"github.com/xsscan/xsscan/pkg/callback"
 	"github.com/xsscan/xsscan/pkg/crawler"
 	"github.com/xsscan/xsscan/pkg/dom"
 	"github.com/xsscan/xsscan/pkg/httpclient"
-	"github.com/xsscan/xsscan/pkg/browser"
 	"github.com/xsscan/xsscan/pkg/model"
 	"github.com/xsscan/xsscan/pkg/payload"
 	"github.com/xsscan/xsscan/pkg/report"
@@ -43,51 +43,51 @@ const (
 
 // ScanConfig holds all CLI flags
 type ScanConfig struct {
-	URL        string
-	Method     string
-	Headers    []string
-	Body       string
-	Cookies    []string
-	Output     string
-	Format     string
-	Workers    int
-	RateLimit  int
-	Timeout    int
-	MaxPayload int
-	Callback   string
-	Verbose    bool
-	LoginURL      string
-	Username      string
-	Password      string
-	TestHPP       bool
-	WAFBypass     bool
-	ConfidenceMin float64
-	AllowPrivate  bool
-	Proxy         string
-	ProxyUsername string
-	ProxyPassword string
-	ProxyInsecure bool
-	Crawl         bool
-	CrawlDepth    int
-	CrawlMaxPages int
-	TargetsFile   string
-	RandomUA      bool
-	AdaptiveRate  bool
-	PayloadPreset  string
-	PayloadWordlist string
-	Headless       bool
-	RenderSPA      bool
-	ChromePath     string
-	ConfigFile     string
-	JWT            string
-	Silent         bool
-	NoColor        bool
-	EnableProbe      bool
-	VerifyExecution  bool
-	VerifyTimeout    int
-	DiscoverHeaders  bool
-	EnableStored     bool
-	TriggerURLs    []string
+	URL                string
+	Method             string
+	Headers            []string
+	Body               string
+	Cookies            []string
+	Output             string
+	Format             string
+	Workers            int
+	RateLimit          int
+	Timeout            int
+	MaxPayload         int
+	Callback           string
+	Verbose            bool
+	LoginURL           string
+	Username           string
+	Password           string
+	TestHPP            bool
+	WAFBypass          bool
+	ConfidenceMin      float64
+	AllowPrivate       bool
+	Proxy              string
+	ProxyUsername      string
+	ProxyPassword      string
+	ProxyInsecure      bool
+	Crawl              bool
+	CrawlDepth         int
+	CrawlMaxPages      int
+	TargetsFile        string
+	RandomUA           bool
+	AdaptiveRate       bool
+	PayloadPreset      string
+	PayloadWordlist    string
+	Headless           bool
+	RenderSPA          bool
+	ChromePath         string
+	ConfigFile         string
+	JWT                string
+	Silent             bool
+	NoColor            bool
+	EnableProbe        bool
+	VerifyExecution    bool
+	VerifyTimeout      int
+	DiscoverHeaders    bool
+	EnableStored       bool
+	TriggerURLs        []string
 	StoredPollInterval int
 	StoredMaxPolls     int
 	CSRFToken          string
@@ -113,7 +113,7 @@ const (
 //	make build VERSION=1.0.0
 //
 // x.y.z: x = major (architectural redesign), y = feature, z = bug fix.
-var Version = "0.6.0"
+var Version = "0.9.2"
 
 var cfg ScanConfig
 
@@ -236,7 +236,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 	// Pre-flight Chrome check for browser-dependent features: warn with
 	// installation guidance but degrade gracefully instead of failing.
-	if cfg.Headless || cfg.VerifyExecution || cfg.RenderSPA {
+	if cfg.Headless || cfg.VerifyExecution {
 		if err := browser.EnsureChrome(); err != nil {
 			color.Yellow("[!] %v\n", err)
 			color.Yellow("[!] Browser-dependent features (--headless/--verify-execution/--render-spa) will be skipped\n")
@@ -714,7 +714,6 @@ func dedupForms(forms []crawler.FormInfo) []crawler.FormInfo {
 	return out
 }
 
-
 func buildFormBody(inputs []string) string {
 	vals := make(url.Values, len(inputs))
 	for _, name := range inputs {
@@ -737,7 +736,6 @@ func appendQueryParams(rawURL string, inputs []string) string {
 	parsed.RawQuery = q.Encode()
 	return parsed.String()
 }
-
 
 // normalizeForCompare strips query and fragment for URL identity checks.
 // Local copy of urlutil.NormalizeForDedup — cmd cannot import pkg/internal.

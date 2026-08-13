@@ -7,29 +7,28 @@ import (
 	"github.com/xsscan/xsscan/pkg/model"
 )
 
+// frameworkPayloadCache pre-builds framework template lists once at init to
+// avoid per-injection-point slice allocation. READ-ONLY contract.
+var frameworkPayloadCache = map[string][]PayloadTemplate{}
+
+func init() {
+	frameworkPayloadCache["react"] = reactPayloads()
+	frameworkPayloadCache["vue"] = vuePayloads()
+	frameworkPayloadCache["vue.js"] = frameworkPayloadCache["vue"]
+	frameworkPayloadCache["angular"] = angularPayloads()
+	frameworkPayloadCache["svelte"] = sveltePayloads()
+	frameworkPayloadCache["jquery"] = jqueryPayloads()
+	frameworkPayloadCache["htmx"] = htmxPayloads()
+	frameworkPayloadCache["django"] = djangoPayloads()
+	frameworkPayloadCache["flask"] = jinjaPayloads()
+	frameworkPayloadCache["jinja2"] = frameworkPayloadCache["flask"]
+}
+
 // FrameworkPayloads returns payloads specific to a detected framework.
 // These target known XSS vectors in popular JavaScript frameworks.
+// Returns the cached list (read-only).
 func FrameworkPayloads(framework string) []PayloadTemplate {
-	switch strings.ToLower(framework) {
-	case "react":
-		return reactPayloads()
-	case "vue", "vue.js":
-		return vuePayloads()
-	case "angular":
-		return angularPayloads()
-	case "svelte":
-		return sveltePayloads()
-	case "jquery":
-		return jqueryPayloads()
-	case "htmx":
-		return htmxPayloads()
-	case "django":
-		return djangoPayloads()
-	case "flask", "jinja2":
-		return jinjaPayloads()
-	default:
-		return nil
-	}
+	return frameworkPayloadCache[strings.ToLower(framework)]
 }
 
 func reactPayloads() []PayloadTemplate {

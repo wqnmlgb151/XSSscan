@@ -356,16 +356,22 @@ func prunePayloads(payloads []payload.Payload, profile *analyze.FilterProfile) [
 func payloadsFromTemplates(tmpls []payload.PayloadTemplate, pt payload.PayloadType, score float64) []payload.Payload {
 	result := make([]payload.Payload, 0, len(tmpls))
 	for _, tmpl := range tmpls {
-		result = append(result, payload.Payload{
-			Value:    tmpl.Value,
-			Context:  tmpl.Context,
-			Type:     pt,
-			Score:    score,
-			Desc:     tmpl.Desc,
-			Severity: tmpl.Severity,
-		})
+		result = append(result, payloadFromTemplate(tmpl, pt, score))
 	}
 	return result
+}
+
+// payloadFromTemplate converts a single template without the slice-wrapper
+// allocation that payloadsFromTemplates([]T{tmpl}) would incur.
+func payloadFromTemplate(tmpl payload.PayloadTemplate, pt payload.PayloadType, score float64) payload.Payload {
+	return payload.Payload{
+		Value:    tmpl.Value,
+		Context:  tmpl.Context,
+		Type:     pt,
+		Score:    score,
+		Desc:     tmpl.Desc,
+		Severity: tmpl.Severity,
+	}
 }
 
 func (e *Engine) generatePayloads(injection model.InjectionPoint, frameworks []analyze.FrameworkInfo) []payload.Payload {
@@ -404,18 +410,14 @@ func (e *Engine) generatePayloads(injection model.InjectionPoint, frameworks []a
 
 	for _, tmpl := range payload.PolyglotPayloads() {
 		if contextSet[tmpl.Context] {
-			payloads = append(payloads, payloadsFromTemplates(
-				[]payload.PayloadTemplate{tmpl},
-				payload.PayloadTypeReflected, 0.8)...)
+			payloads = append(payloads, payloadFromTemplate(tmpl, payload.PayloadTypeReflected, 0.8))
 		}
 	}
 
 	if e.config.WAFBypass {
 		for _, tmpl := range payload.AllWAFBypassPayloads() {
 			if contextSet[tmpl.Context] {
-				payloads = append(payloads, payloadsFromTemplates(
-					[]payload.PayloadTemplate{tmpl},
-					payload.PayloadTypeReflected, 0.7)...)
+				payloads = append(payloads, payloadFromTemplate(tmpl, payload.PayloadTypeReflected, 0.7))
 			}
 		}
 	}

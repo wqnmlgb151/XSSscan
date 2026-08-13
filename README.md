@@ -75,7 +75,7 @@
 ```bash
 # 需要 Go 1.22+
 git clone https://github.com/wqnmlgb151/XSSscan.git
-cd xsscan
+cd XSSscan
 make build
 ```
 
@@ -301,6 +301,13 @@ cat urls.txt | ./xsscan --targets-file - --silent -o report.json
 # 限制每个参数的 payload 数量
 ./xsscan --url "http://target.com/page?q=test" \
   --max-payloads 5
+```
+
+### 浏览器路径
+
+```bash
+# 手动指定 Chrome/Chromium 二进制（自动检测失败时）
+./xsscan --url "http://target.com/page?q=test" --headless   --chrome-path "C:\Program Files\Google\Chrome\Application\chrome.exe"
 ```
 
 ### 浏览器执行验证

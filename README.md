@@ -89,7 +89,7 @@ docker run --rm xsscan --url "http://target.com/page?q=test"
 ### 依赖
 
 - Go 1.22+（`go.mod` 声明 1.22；依赖 `golang.org/x/sys v0.16.0` 兼容）
-- Chrome/Chromium（可选，用于 `--headless`、`--verify-execution`）
+- Chrome/Chromium（可选，用于 `--headless`、`--verify-execution`、`--render-spa`；未安装时自动检测并降级跳过，可用 `--chrome-path` 手动指定）
 
 ---
 
@@ -567,8 +567,8 @@ make coverage
 make coverage-scanner   # 仅 scanner 包
 make coverage-cli       # 仅 cmd 包
 
-# 开发模式（不编译直接运行）
-make dev -- --url "http://target.com/page?q=test"
+# 开发模式（不编译直接运行；dev target 不转发参数，带 flag 时用 go run）
+go run ./cmd -- --url "http://target.com/page?q=test"
 
 # 静态检查
 make lint

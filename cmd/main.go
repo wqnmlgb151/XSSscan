@@ -26,6 +26,7 @@ import (
 	"github.com/xsscan/xsscan/pkg/crawler"
 	"github.com/xsscan/xsscan/pkg/dom"
 	"github.com/xsscan/xsscan/pkg/httpclient"
+	"github.com/xsscan/xsscan/pkg/browser"
 	"github.com/xsscan/xsscan/pkg/model"
 	"github.com/xsscan/xsscan/pkg/payload"
 	"github.com/xsscan/xsscan/pkg/report"
@@ -76,6 +77,7 @@ type ScanConfig struct {
 	PayloadWordlist string
 	Headless       bool
 	RenderSPA      bool
+	ChromePath     string
 	ConfigFile     string
 	JWT            string
 	Silent         bool
@@ -163,7 +165,7 @@ func init() {
 	rootCmd.Flags().StringVarP(&cfg.Body, "data", "d", "", "POST body (form-urlencoded or JSON)")
 	rootCmd.Flags().StringArrayVarP(&cfg.Cookies, "cookie", "c", nil, "Pre-authenticated cookies (Name=Value, seeds cookie jar)")
 	rootCmd.Flags().StringVarP(&cfg.Output, "output", "o", "", "Output file path")
-	rootCmd.Flags().StringVarP(&cfg.Format, "format", "f", "json", "Output format: json, markdown, html")
+	rootCmd.Flags().StringVarP(&cfg.Format, "format", "f", "json", "Output format: json, markdown, html, sarif, junit")
 	rootCmd.Flags().IntVarP(&cfg.Workers, "workers", "w", 10, "Concurrent workers")
 	rootCmd.Flags().IntVar(&cfg.RateLimit, "rate-limit", 100, "Max requests per second")
 	rootCmd.Flags().IntVarP(&cfg.Timeout, "timeout", "t", 30, "Request timeout (seconds)")
@@ -190,6 +192,7 @@ func init() {
 	rootCmd.Flags().StringVar(&cfg.PayloadPreset, "payload-preset", "standard", "Payload preset: minimal, standard, full")
 	rootCmd.Flags().BoolVar(&cfg.Headless, "headless", false, "Enable headless browser for DOM XSS detection (requires Chrome)")
 	rootCmd.Flags().BoolVar(&cfg.RenderSPA, "render-spa", false, "Use headless Chrome to render SPA pages for form discovery (requires Chrome)")
+	rootCmd.Flags().StringVar(&cfg.ChromePath, "chrome-path", "", "Path to Chrome/Chromium binary (auto-detected if empty)")
 	rootCmd.Flags().StringVar(&cfg.PayloadWordlist, "payload-wordlist", "", "Path to custom payload wordlist (one payload per line)")
 	rootCmd.Flags().StringVar(&cfg.ConfigFile, "config", "", "Path to YAML config file")
 	rootCmd.Flags().StringVar(&cfg.JWT, "jwt", "", "JWT token (sent as Bearer in Authorization header)")
@@ -226,6 +229,18 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 	if err := loadAndValidateConfig(cmd); err != nil {
 		return err
+	}
+
+	// Pin the Chrome binary location when --chrome-path is given.
+	browser.ChromePath = cfg.ChromePath
+
+	// Pre-flight Chrome check for browser-dependent features: warn with
+	// installation guidance but degrade gracefully instead of failing.
+	if cfg.Headless || cfg.VerifyExecution || cfg.RenderSPA {
+		if err := browser.EnsureChrome(); err != nil {
+			color.Yellow("[!] %v\n", err)
+			color.Yellow("[!] Browser-dependent features (--headless/--verify-execution/--render-spa) will be skipped\n")
+		}
 	}
 	logger := setupLogger()
 	defer logger.Sync()

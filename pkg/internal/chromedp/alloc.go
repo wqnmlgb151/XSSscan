@@ -4,12 +4,17 @@
 // same hardening options. Centralizing them here prevents drift and fixes
 // the option-ordering bug where custom options were silently overridden by
 // chromedp defaults (chromedp applies options in order, later wins).
+//
+// Chrome binary detection lives in pkg/browser (importable from cmd/, which
+// cannot import this package due to the internal rule).
 package chromedp
 
 import (
 	"context"
 
 	ext "github.com/chromedp/chromedp"
+
+	"github.com/xsscan/xsscan/pkg/browser"
 )
 
 // StandardHeadlessOptions are the hardening options shared by all call sites.
@@ -30,7 +35,11 @@ func AllocatorOptions(custom ...ext.ExecAllocatorOption) []ext.ExecAllocatorOpti
 }
 
 // NewExecAllocator creates an allocator context with standard options plus
-// any custom overrides applied last.
+// any custom overrides applied last. When browser.ChromePath is set, the
+// binary location is pinned via ExecPath.
 func NewExecAllocator(ctx context.Context, custom ...ext.ExecAllocatorOption) (context.Context, context.CancelFunc) {
+	if browser.ChromePath != "" {
+		custom = append(custom, ext.ExecPath(browser.ChromePath))
+	}
 	return ext.NewExecAllocator(ctx, AllocatorOptions(custom...)...)
 }

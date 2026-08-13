@@ -253,7 +253,6 @@ func TestNewVerifierDefaultTimeout(t *testing.T) {
 func TestNewVerifierWithAuth(t *testing.T) {
 	auth := &AuthState{
 		Cookies: []*http.Cookie{{Name: "session", Value: "abc123"}},
-		Headers: map[string]string{"Authorization": "Bearer xyz"},
 	}
 	v, err := NewVerifierWithAuth(context.Background(), 5*time.Second, auth)
 	if err != nil {

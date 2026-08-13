@@ -360,8 +360,6 @@ func (e *Engine) generatePayloads(injection model.InjectionPoint, frameworks []a
 // works on authenticated pages (post-login scans, OAuth, JWT).
 func buildAuthState(target model.Target) *execverify.AuthState {
 	var cookies []*http.Cookie
-	var headers map[string]string
-
 	if len(target.Cookies) > 0 {
 		cookies = make([]*http.Cookie, len(target.Cookies))
 		for i, c := range target.Cookies {
@@ -370,21 +368,10 @@ func buildAuthState(target model.Target) *execverify.AuthState {
 		}
 	}
 
-	// Carry auth-related headers to the browser
-	// authHeaderNames is hoisted to package level to avoid per-call allocation
-	for _, name := range authHeaderNames {
-		if v, ok := target.Headers[name]; ok && v != "" {
-			if headers == nil {
-				headers = make(map[string]string)
-			}
-			headers[name] = v
-		}
-	}
-
-	if cookies == nil && headers == nil {
+	if cookies == nil {
 		return nil
 	}
-	return &execverify.AuthState{Cookies: cookies, Headers: headers}
+	return &execverify.AuthState{Cookies: cookies}
 }
 
 // verifyFindingsWithAuth runs browser-based execution verification on each finding.
@@ -1076,8 +1063,6 @@ func contextsToStrings(ctxs []ctx.Context) []string {
 
 var idCounter int64
 
-// authHeaderNames lists headers that carry auth state to the browser verifier.
-var authHeaderNames = []string{"Authorization", "Cookie", "X-CSRF-Token", "X-XSRF-Token"}
 
 func generateID() string {
 	count := atomic.AddInt64(&idCounter, 1)

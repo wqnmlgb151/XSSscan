@@ -77,8 +77,8 @@
     try {
         var origFunc = Function;
         Function = function() {
-            var args = Array.prototype.slice.call(arguments);
-            var body = args.pop() || '';
+            // Allocation-free: last argument is the function body
+            var body = arguments.length > 0 ? arguments[arguments.length - 1] : '';
             record('Function', String(body));
             return origFunc.apply(this, arguments);
         };

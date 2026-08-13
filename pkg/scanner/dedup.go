@@ -221,6 +221,7 @@ type dedupKey struct {
 // "49 findings" to ~5 exploit variants.
 func SemanticDedup(findings []model.Finding) []model.Finding {
 	seen := make(map[dedupKey]*model.Finding)
+	var order []dedupKey
 
 	for i := range findings {
 		f := &findings[i]
@@ -244,12 +245,13 @@ func SemanticDedup(findings []model.Finding) []model.Finding {
 			}
 		} else {
 			seen[key] = f
+			order = append(order, key) // preserve first-seen order for deterministic output
 		}
 	}
 
-	result := make([]model.Finding, 0, len(seen))
-	for _, f := range seen {
-		result = append(result, *f)
+	result := make([]model.Finding, 0, len(order))
+	for _, key := range order {
+		result = append(result, *seen[key])
 	}
 	return result
 }

@@ -64,7 +64,6 @@ type Scanner struct {
 // authenticated SPAs and protected endpoints are reachable.
 type AuthState struct {
 	Cookies []*http.Cookie
-	Headers map[string]string
 }
 
 // NewScanner creates a new headless browser scanner.

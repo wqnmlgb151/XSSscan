@@ -133,7 +133,8 @@ var strategies = []mutationStrategy{
 		name:   MutationStringConcat,
 		bypass: "WAF that blocks literal 'alert' but not concatenated strings",
 		applies: func(payload string, _, isJS bool) bool {
-			return isJS && strings.Contains(payload, "alert(")
+			// Only applies to payloads the transform can actually handle
+			return isJS && strings.Contains(payload, "alert(1)")
 		},
 		apply: func(p string) string { return strings.Replace(p, "alert(1)", "eval('ale'+'rt(1)')", 1) },
 	},
@@ -215,7 +216,7 @@ func (m *Mutator) Mutate(payload string, contextType ctx.ContextType, maxVariant
 	isHTML := isHTMLContext(contextType)
 	isJS := isJSContext(contextType)
 
-	var mutations []Mutation
+	mutations := make([]Mutation, 0, len(strategies))
 	for _, s := range strategies {
 		if !s.applies(payload, isHTML, isJS) {
 			continue

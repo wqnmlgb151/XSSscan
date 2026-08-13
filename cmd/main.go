@@ -167,7 +167,7 @@ func init() {
 	rootCmd.Flags().IntVarP(&cfg.Workers, "workers", "w", 10, "Concurrent workers")
 	rootCmd.Flags().IntVar(&cfg.RateLimit, "rate-limit", 100, "Max requests per second")
 	rootCmd.Flags().IntVarP(&cfg.Timeout, "timeout", "t", 30, "Request timeout (seconds)")
-	rootCmd.Flags().IntVar(&cfg.MaxPayload, "max-payloads", 0, "Max payloads per param (0=unlimited)")
+	rootCmd.Flags().IntVar(&cfg.MaxPayload, "max-payloads", defaultMaxPayload, "Max payloads per param (0=unlimited)")
 	rootCmd.Flags().StringVar(&cfg.Callback, "callback", "", "Blind XSS callback URL")
 	rootCmd.Flags().BoolVarP(&cfg.Verbose, "verbose", "v", false, "Verbose output")
 	rootCmd.Flags().StringVar(&cfg.LoginURL, "login-url", "", "Login URL for authenticated scanning")
@@ -531,6 +531,15 @@ func scanAllTargets(ctx context.Context, engine *scanner.Engine, client *http.Cl
 					return nil
 				}
 			}
+			// Headless/stored scans still run for the seed target in crawl mode
+			if err := runHeadlessScan(ctx, client, scanTarget, allFindings); err != nil {
+				color.Yellow("[!] Headless scan error: %v\n", err)
+			}
+			if cfg.EnableStored {
+				if err := runStoredXSSScan(ctx, client, scanTarget, allFindings); err != nil {
+					color.Yellow("[!] Stored XSS scan error: %v\n", err)
+				}
+			}
 			continue
 		}
 
@@ -845,9 +854,10 @@ func validateConfig(cfg *ScanConfig) error {
 	if cfg.Timeout < minTimeout {
 		cfg.Timeout = minTimeout
 	}
-	if cfg.MaxPayload <= 0 {
+	if cfg.MaxPayload < 0 {
 		cfg.MaxPayload = defaultMaxPayload
 	}
+	// MaxPayload == 0 means unlimited (documented behavior)
 	if cfg.LoginURL != "" && cfg.URL != "" {
 		if !ssrfguard.HostsMatch(cfg.URL, cfg.LoginURL) {
 			return fmt.Errorf("--login-url host must match --url host (got %s vs %s)", cfg.LoginURL, cfg.URL)
@@ -1078,13 +1088,8 @@ func runHeadlessScan(ctx context.Context, client *http.Client, tgt model.Target,
 		if parsedURL, parseErr := url.Parse(tgt.URL); parseErr == nil {
 			jarCookies := client.Jar.Cookies(parsedURL)
 			if len(jarCookies) > 0 || len(tgt.Cookies) > 0 {
-				headers := make(map[string]string)
-				if v, ok := tgt.Headers["Authorization"]; ok {
-					headers["Authorization"] = v
-				}
 				authState = &dom.AuthState{
 					Cookies: append(jarCookies, tgt.Cookies...),
-					Headers: headers,
 				}
 			}
 		}

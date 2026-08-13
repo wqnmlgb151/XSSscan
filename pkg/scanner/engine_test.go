@@ -127,7 +127,6 @@ func TestBuildAuthState(t *testing.T) {
 		target     model.Target
 		wantNil    bool
 		wantCookie int
-		wantHeader int
 	}{
 		{
 			name:    "nil everything returns nil",
@@ -143,26 +142,12 @@ func TestBuildAuthState(t *testing.T) {
 			wantCookie: 1,
 		},
 		{
-			name: "auth header only",
+			name: "auth header only returns nil (headers not carried)",
 			target: model.Target{
 				URL:     "http://example.com",
 				Headers: map[string]string{"Authorization": "Bearer token123"},
 			},
-			wantHeader: 1,
-		},
-		{
-			name: "all auth headers captured",
-			target: model.Target{
-				URL: "http://example.com",
-				Headers: map[string]string{
-					"Authorization": "Bearer xyz",
-					"Cookie":        "session=abc",
-					"X-CSRF-Token":  "csrf123",
-					"X-XSRF-Token":  "xsrf456",
-					"User-Agent":    "Mozilla/5.0", // non-auth header, should be skipped
-				},
-			},
-			wantHeader: 4,
+			wantNil: true,
 		},
 		{
 			name: "empty auth header skipped",
@@ -173,14 +158,13 @@ func TestBuildAuthState(t *testing.T) {
 			wantNil: true,
 		},
 		{
-			name: "cookies and headers combined",
+			name: "cookies only counted (headers not carried)",
 			target: model.Target{
 				URL:     "http://example.com",
 				Cookies: []*http.Cookie{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}},
 				Headers: map[string]string{"Authorization": "Bearer x"},
 			},
 			wantCookie: 2,
-			wantHeader: 1,
 		},
 	}
 
@@ -198,9 +182,6 @@ func TestBuildAuthState(t *testing.T) {
 			}
 			if len(got.Cookies) != tt.wantCookie {
 				t.Errorf("cookies = %d, want %d", len(got.Cookies), tt.wantCookie)
-			}
-			if len(got.Headers) != tt.wantHeader {
-				t.Errorf("headers = %d, want %d", len(got.Headers), tt.wantHeader)
 			}
 		})
 	}
@@ -224,26 +205,6 @@ func TestBuildAuthStateCookieIndependence(t *testing.T) {
 
 	if original.Value != "original" {
 		t.Error("buildAuthState did not deep-copy cookies — original was mutated")
-	}
-}
-
-func TestBuildAuthStateHeaderIndependence(t *testing.T) {
-	// Verify that modifying the returned headers doesn't affect the original
-	target := model.Target{
-		URL:     "http://example.com",
-		Headers: map[string]string{"Authorization": "Bearer original"},
-	}
-
-	state := buildAuthState(target)
-	if state == nil {
-		t.Fatal("buildAuthState returned nil")
-	}
-
-	// Mutate the returned header
-	state.Headers["Authorization"] = "Bearer mutated"
-
-	if target.Headers["Authorization"] != "Bearer original" {
-		t.Error("buildAuthState did not copy headers — original was mutated")
 	}
 }
 

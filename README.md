@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-<img src="https://img.shields.io/badge/go-1.26+-00ADD8?logo=go" alt="Go">
+<img src="https://img.shields.io/badge/go-1.22+-00ADD8?logo=go" alt="Go">
 <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
 <img src="https://img.shields.io/badge/tests-19packages--race--passing-brightgreen" alt="Tests">
 <img src="https://img.shields.io/badge/coverage-9%2F19--≥80%25-blue" alt="Coverage">
@@ -73,8 +73,8 @@
 ### 从源码构建
 
 ```bash
-# 需要 Go 1.26+
-git clone https://github.com/xsscan/xsscan.git
+# 需要 Go 1.22+
+git clone https://github.com/wqnmlgb151/XSSscan.git
 cd xsscan
 make build
 ```
@@ -88,7 +88,7 @@ docker run --rm xsscan --url "http://target.com/page?q=test"
 
 ### 依赖
 
-- Go 1.25+（`go.mod` 声明 1.26；依赖 `golang.org/x/sys v0.47.0` 要求 ≥1.25）
+- Go 1.22+（`go.mod` 声明 1.22；依赖 `golang.org/x/sys v0.16.0` 兼容）
 - Chrome/Chromium（可选，用于 `--headless`、`--verify-execution`）
 
 ---

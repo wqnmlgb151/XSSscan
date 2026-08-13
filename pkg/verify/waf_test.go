@@ -204,3 +204,51 @@ func TestDetectWAF_BodyPatternPriority(t *testing.T) {
 		t.Errorf("Expected Akamai/Sucuri/Wordfence for 'access denied', got %s", result.Name)
 	}
 }
+
+func TestWAFStrategies_AllEncodingMutationsCovered(t *testing.T) {
+	encodingMutations := []payload.MutationType{
+		payload.MutationDoubleURLEncode,
+		payload.MutationUnicodeFullwidth,
+		payload.MutationHTMLEntityNested,
+		payload.MutationUnicodeEscapeJS,
+		payload.MutationHexEntityMixed,
+		payload.MutationNullByteInjection,
+	}
+	wafNames := []string{"Cloudflare", "AWS WAF", "Akamai", "ModSecurity", "F5 BIG-IP", "Imperva", "Sucuri", "Wordfence"}
+
+	covered := make(map[payload.MutationType]bool)
+	for _, waf := range wafNames {
+		for _, m := range GetWAFStrategies(waf) {
+			covered[m] = true
+		}
+	}
+	for _, m := range encodingMutations {
+		if !covered[m] {
+			t.Errorf("encoding mutation %s is not referenced by any WAF strategy", m)
+		}
+	}
+}
+
+func TestGetWAFStrategies_IncludesEncodingMutations(t *testing.T) {
+	wafNames := []string{"Cloudflare", "AWS WAF", "Akamai", "ModSecurity", "F5 BIG-IP", "Imperva", "Sucuri", "Wordfence"}
+	encoding := map[payload.MutationType]bool{
+		payload.MutationDoubleURLEncode:  true,
+		payload.MutationUnicodeFullwidth: true,
+		payload.MutationHTMLEntityNested: true,
+		payload.MutationUnicodeEscapeJS:  true,
+		payload.MutationHexEntityMixed:   true,
+		payload.MutationNullByteInjection: true,
+	}
+	for _, waf := range wafNames {
+		has := false
+		for _, m := range GetWAFStrategies(waf) {
+			if encoding[m] {
+				has = true
+				break
+			}
+		}
+		if !has {
+			t.Errorf("WAF %s has no encoding mutation in its strategy list", waf)
+		}
+	}
+}

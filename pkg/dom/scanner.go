@@ -18,6 +18,7 @@ import (
 	"github.com/chromedp/chromedp"
 
 	"github.com/xsscan/xsscan/pkg/analyze"
+	allocopts "github.com/xsscan/xsscan/pkg/internal/chromedp"
 	"github.com/xsscan/xsscan/pkg/internal/text"
 	"github.com/xsscan/xsscan/pkg/model"
 )
@@ -72,17 +73,7 @@ func NewScanner(ctx context.Context, timeout time.Duration) (*Scanner, error) {
 		timeout = 30 * time.Second
 	}
 
-	opts := append([]chromedp.ExecAllocatorOption{
-		chromedp.NoFirstRun,
-		chromedp.NoDefaultBrowserCheck,
-		chromedp.Headless,
-		chromedp.DisableGPU,
-		chromedp.NoSandbox,
-		chromedp.IgnoreCertErrors,
-		chromedp.WindowSize(1280, 800),
-	}, chromedp.DefaultExecAllocatorOptions[:]...)
-
-	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, opts...)
+	allocCtx, allocCancel := allocopts.NewExecAllocator(ctx, allocopts.StandardHeadlessOptions...)
 
 	return &Scanner{
 		allocCtx:    allocCtx,

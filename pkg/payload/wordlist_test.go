@@ -1,6 +1,7 @@
 package payload
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/xsscan/xsscan/pkg/context"
@@ -137,6 +138,33 @@ func TestHTMLBodyPayloadsIncludeBaseVectors(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("Missing required base payload: %s", r)
+		}
+	}
+}
+
+func TestPolyglotExpansion(t *testing.T) {
+	count := 0
+	for _, ct := range []context.ContextType{context.ContextHTMLBody, context.ContextHTMLAttrValue} {
+		for _, tmpl := range GetTemplates(ct) {
+			if strings.HasPrefix(tmpl.Desc, "Polyglot: ") {
+				count++
+			}
+		}
+	}
+	if count < 20 {
+		t.Errorf("expected ≥20 polyglot payloads, got %d", count)
+	}
+}
+
+func TestPayloadTemplates_NoExactDuplicates(t *testing.T) {
+	seen := make(map[string]string)
+	for ct, templates := range payloadTemplates {
+		for _, tmpl := range templates {
+			key := ct.String() + "|" + tmpl.Value
+			if prev, ok := seen[key]; ok {
+				t.Errorf("duplicate payload in %s: %q (already in %s)", ct, tmpl.Value, prev)
+			}
+			seen[key] = ct.String()
 		}
 	}
 }

@@ -262,3 +262,64 @@ func TestSemanticDedup_Single(t *testing.T) {
 		t.Fatalf("expected 1 finding, got %d", len(result))
 	}
 }
+
+func TestNormalizeURL(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{"http://target.com/page?q=test", "http://target.com/page"},
+		{"http://target.com/page?q=test#frag", "http://target.com/page"},
+		{"http://target.com/page#frag", "http://target.com/page"},
+		{"http://target.com/page", "http://target.com/page"},
+		{"http://target.com/page?", "http://target.com/page"},
+		{"://invalid", "://invalid"}, // parse failure → returned as-is
+	}
+	for _, tt := range tests {
+		if got := normalizeURL(tt.in); got != tt.want {
+			t.Errorf("normalizeURL(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestClassifyExploit(t *testing.T) {
+	tests := []struct {
+		payload string
+		want    exploitClass
+	}{
+		{`<script>alert(1)</script>`, ExploitScriptTag},
+		{`</script><script>alert(1)</script>`, ExploitBreakout},
+		{`</textarea><svg onload=alert(1)>`, ExploitBreakout},
+		{`<img src=x onerror=alert(1)>`, ExploitEventHandle},
+		{`" onmouseover="alert(1)" x="`, ExploitEventHandle},
+		{`javascript:alert(1)`, ExploitProtocol},
+		{`data:text/html,<script>alert(1)</script>`, ExploitScriptTag},
+		{`<iframe srcdoc="<script>alert(1)</script>">`, ExploitNestedExec},
+		{`<meta http-equiv=refresh content="0;url=javascript:alert(1)">`, ExploitProtocol},
+		{`<link rel=import href="data:text/html,<script>alert(1)</script>">`, ExploitScriptTag},
+		{`<base href="//evil.com/">`, ExploitImport},
+		{`{{constructor.constructor('alert(1)')()}}`, ExploitOther},
+		{`${alert(1)}`, ExploitOther},
+		{`random text`, ExploitOther},
+	}
+	for _, tt := range tests {
+		if got := classifyExploit(tt.payload); got != tt.want {
+			t.Errorf("classifyExploit(%q) = %q, want %q", tt.payload, got, tt.want)
+		}
+	}
+}
+
+func TestSemanticDedup_NormalizesURL(t *testing.T) {
+	// Same base URL with different query strings must collapse to one key
+	findings := []model.Finding{
+		{URL: "http://target.com/page?q=<script>alert(1)</script>", Parameter: "q", Payload: `<script>alert(1)</script>`, Contexts: []string{"html_body"}, Confidence: 0.7},
+		{URL: "http://target.com/page?q=<script>alert(2)</script>", Parameter: "q", Payload: `<script>alert(1)</script>`, Contexts: []string{"html_body"}, Confidence: 0.8},
+	}
+	result := SemanticDedup(findings)
+	if len(result) != 1 {
+		t.Fatalf("expected 1 finding after URL normalization, got %d", len(result))
+	}
+	if result[0].Confidence != 0.8 {
+		t.Errorf("expected highest confidence 0.8, got %f", result[0].Confidence)
+	}
+}

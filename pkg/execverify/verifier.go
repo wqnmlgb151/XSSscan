@@ -18,6 +18,7 @@ import (
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 
+	allocopts "github.com/xsscan/xsscan/pkg/internal/chromedp"
 	"github.com/xsscan/xsscan/pkg/model"
 )
 
@@ -54,17 +55,7 @@ func NewVerifier(ctx context.Context, timeout time.Duration) (*Verifier, error) 
 		timeout = 15 * time.Second
 	}
 
-	opts := append([]chromedp.ExecAllocatorOption{
-		chromedp.NoFirstRun,
-		chromedp.NoDefaultBrowserCheck,
-		chromedp.Headless,
-		chromedp.DisableGPU,
-		chromedp.NoSandbox,
-		chromedp.IgnoreCertErrors,
-		chromedp.WindowSize(1280, 800),
-	}, chromedp.DefaultExecAllocatorOptions[:]...)
-
-	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, opts...)
+	allocCtx, allocCancel := allocopts.NewExecAllocator(ctx, allocopts.StandardHeadlessOptions...)
 
 	tmpDir := filepath.Join(os.TempDir(), "xsscan-screenshots")
 	os.MkdirAll(tmpDir, 0755)

@@ -11,6 +11,8 @@ import (
 	"github.com/chromedp/cdproto/fetch"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
+
+	allocopts "github.com/xsscan/xsscan/pkg/internal/chromedp"
 )
 
 // RenderedPage holds the forms extracted from a JS-rendered page.
@@ -21,25 +23,31 @@ type RenderedPage struct {
 // renderTimeout is the default timeout for JS page rendering.
 const renderTimeout = 15 * time.Second
 
+// maxFetchWorkers bounds the goroutine count for the Fetch.requestPaused handler.
+const maxFetchWorkers = 16
+
+func renderTimeoutOrDefault(timeout time.Duration) time.Duration {
+	if timeout <= 0 {
+		return renderTimeout
+	}
+	return timeout
+}
+
+func toNetworkHeaders(headers map[string]string) network.Headers {
+	h := make(network.Headers, len(headers))
+	for k, v := range headers {
+		h[k] = v
+	}
+	return h
+}
+
 // RenderPage uses headless Chrome to render a JS-heavy page, then extracts
 // forms from the fully-rendered DOM. Headers are forwarded so authenticated
 // SPA pages are rendered correctly (JWT, OAuth, custom headers).
 func RenderPage(ctx context.Context, targetURL string, headers map[string]string, timeout time.Duration) (*RenderedPage, error) {
-	if timeout <= 0 {
-		timeout = renderTimeout
-	}
+	timeout = renderTimeoutOrDefault(timeout)
 
-	opts := append(chromedp.DefaultExecAllocatorOptions[:],
-		chromedp.NoFirstRun,
-		chromedp.NoDefaultBrowserCheck,
-		chromedp.Headless,
-		chromedp.DisableGPU,
-		chromedp.NoSandbox,
-		chromedp.IgnoreCertErrors,
-		chromedp.WindowSize(1280, 800),
-	)
-
-	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, opts...)
+	allocCtx, allocCancel := allocopts.NewExecAllocator(ctx, allocopts.StandardHeadlessOptions...)
 	defer allocCancel()
 
 	// Suppress CDP parse errors (malformed cookies etc.) via a no-op error logger
@@ -63,29 +71,34 @@ func RenderPage(ctx context.Context, targetURL string, headers map[string]string
 		fetch.Enable().WithHandleAuthRequests(true),
 	}
 	actions = append(actions, chromedp.ActionFunc(func(ctx context.Context) error {
+		sem := make(chan struct{}, maxFetchWorkers)
 		chromedp.ListenTarget(ctx, func(ev interface{}) {
-			if e, ok := ev.(*fetch.EventRequestPaused); ok {
-				go func() {
-					reqHost := ""
-					if u, err := url.Parse(e.Request.URL); err == nil {
-						reqHost = u.Host
-					}
-					// Only allow same-origin and same-host subrequests
-					if reqHost != "" && reqHost != targetHost {
-						fetch.FailRequest(e.RequestID, network.ErrorReasonBlockedByClient).Do(ctx)
-					} else {
-						fetch.ContinueRequest(e.RequestID).Do(ctx)
-					}
-				}()
+			if ctx.Err() != nil {
+				return
 			}
+			e, ok := ev.(*fetch.EventRequestPaused)
+			if !ok {
+				return
+			}
+			sem <- struct{}{} // bounded concurrency for asset-heavy pages
+			go func() {
+				defer func() { <-sem }()
+				reqHost := ""
+				if u, err := url.Parse(e.Request.URL); err == nil {
+					reqHost = u.Host
+				}
+				// Only allow same-origin and same-host subrequests
+				if reqHost != "" && reqHost != targetHost {
+					fetch.FailRequest(e.RequestID, network.ErrorReasonBlockedByClient).Do(ctx)
+				} else {
+					fetch.ContinueRequest(e.RequestID).Do(ctx)
+				}
+			}()
 		})
 		return nil
 	}))
 	if len(headers) > 0 {
-		h := make(network.Headers)
-		for k, v := range headers {
-			h[k] = v
-		}
+		h := toNetworkHeaders(headers)
 		actions = append(actions, chromedp.ActionFunc(func(ctx context.Context) error {
 			return network.SetExtraHTTPHeaders(h).Do(ctx)
 		}))

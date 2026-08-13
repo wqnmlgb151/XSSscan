@@ -284,22 +284,23 @@ func GetWAFStrategies(wafName string) []MutationType {
 	case "Cloudflare":
 		// Cloudflare decodes HTML entities before inspection, so entity_angle_brackets
 		// and entity_plus_case are ineffective. Focus on structural bypasses.
+		// Double URL encoding survives CF's single-decode inspection.
 		// NOTE: Must match BypassStrategies in pkg/verify/waf.go exactly.
-		return []MutationType{MutationCaseMix, MutationCommentInjection, MutationAltFunction, MutationTabInjection, MutationBreakoutTextarea}
+		return []MutationType{MutationCaseMix, MutationCommentInjection, MutationAltFunction, MutationTabInjection, MutationBreakoutTextarea, MutationDoubleURLEncode}
 	case "AWS WAF":
-		return []MutationType{MutationBreakoutTextarea, MutationAltFunction, MutationEntityPlusCase, MutationNewlineInjection, MutationBacktickFn}
+		return []MutationType{MutationBreakoutTextarea, MutationAltFunction, MutationEntityPlusCase, MutationNewlineInjection, MutationBacktickFn, MutationDoubleURLEncode, MutationHexEntityMixed, MutationUnicodeEscapeJS}
 	case "Akamai":
-		return []MutationType{MutationTabInjection, MutationNewlineInjection, MutationCommentInjection, MutationCaseMix, MutationSpaceToSlash}
+		return []MutationType{MutationTabInjection, MutationNewlineInjection, MutationCommentInjection, MutationCaseMix, MutationSpaceToSlash, MutationUnicodeFullwidth, MutationHexEntityMixed}
 	case "ModSecurity":
-		return []MutationType{MutationNewlineInjection, MutationTabInjection, MutationSpaceToSlash, MutationEntityAngleBrackets, MutationStringConcat}
+		return []MutationType{MutationNewlineInjection, MutationTabInjection, MutationSpaceToSlash, MutationEntityAngleBrackets, MutationStringConcat, MutationHTMLEntityNested, MutationNullByteInjection, MutationHexEntityMixed}
 	case "F5 BIG-IP":
-		return []MutationType{MutationCaseMix, MutationCommentInjection, MutationTabInjection, MutationAltFunction, MutationEntityAngleBrackets}
+		return []MutationType{MutationCaseMix, MutationCommentInjection, MutationTabInjection, MutationAltFunction, MutationEntityAngleBrackets, MutationDoubleURLEncode, MutationUnicodeEscapeJS}
 	case "Imperva":
-		return []MutationType{MutationEntityPlusCase, MutationBreakoutTextarea, MutationCommentInjection, MutationNewlineInjection, MutationBacktickFn}
+		return []MutationType{MutationEntityPlusCase, MutationBreakoutTextarea, MutationCommentInjection, MutationNewlineInjection, MutationBacktickFn, MutationDoubleURLEncode, MutationUnicodeFullwidth}
 	case "Sucuri":
-		return []MutationType{MutationCaseMix, MutationSpaceToSlash, MutationTabInjection, MutationAltFunction, MutationEntityAngleBrackets}
+		return []MutationType{MutationCaseMix, MutationSpaceToSlash, MutationTabInjection, MutationAltFunction, MutationEntityAngleBrackets, MutationNullByteInjection, MutationDoubleURLEncode}
 	case "Wordfence":
-		return []MutationType{MutationEntityAngleBrackets, MutationEntityPlusCase, MutationBreakoutTextarea, MutationCommentInjection, MutationStringConcat}
+		return []MutationType{MutationEntityAngleBrackets, MutationEntityPlusCase, MutationBreakoutTextarea, MutationCommentInjection, MutationStringConcat, MutationUnicodeFullwidth, MutationHexEntityMixed}
 	}
 	return nil
 }

@@ -237,3 +237,36 @@ func TestMutatorContextAwareHTMLOnly(t *testing.T) {
 		t.Error("Expected tab_injection mutation for HTML context")
 	}
 }
+
+func TestMutateTargeted_EncodingMutationSelected(t *testing.T) {
+	p := `<img src=x onerror=alert(1)>`
+	tests := []struct {
+		waf      string
+		expected MutationType
+	}{
+		{"Cloudflare", MutationDoubleURLEncode},
+		{"AWS WAF", MutationHexEntityMixed},
+		{"ModSecurity", MutationHTMLEntityNested},
+	}
+	for _, tt := range tests {
+		mutations := NewMutator().MutateTargeted(p, ctx.ContextHTMLBody, tt.waf, 20)
+		found := false
+		for _, m := range mutations {
+			if m.Type == tt.expected {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("MutateTargeted(%s) missing expected mutation %s; got %v", tt.waf, tt.expected, mutationTypes(mutations))
+		}
+	}
+}
+
+func mutationTypes(ms []Mutation) []MutationType {
+	out := make([]MutationType, len(ms))
+	for i, m := range ms {
+		out[i] = m.Type
+	}
+	return out
+}

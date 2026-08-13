@@ -49,7 +49,7 @@
 - **置信度评分** — 0.0–1.0 评分体系，含交互效应（WAF×无净化、语法×上下文逃逸）；结构分析封顶 0.90，浏览器执行验证后才可达 100%
 - **语义去重 + 同参聚合** — 5 元组 key（URL+参数+上下文+向量+exploit 技术）去重后，同参数同上下文折叠为一条 finding，payload 变体作为子项展示
 - **引号类型门控** — 检测到 JS 字符串反射的引号类型后，只发送匹配该引号的逃逸 payload（`"-alert(1)-"` 不再发往单引号反射点）
-- **URL 子上下文分析** — href/src 反射落在已有 URL 的路径/查询串/片段位置（如 `embed src=xsf02.swf?arg=PAYLOAD`）判定为惰性上下文——改不了 scheme 就不生成 `javascript:`/`data:` payload；只有 attribute 值开头（或应用已输出的 `javascript:`/`data:` 前缀后）才按 URL 注入处理
+- **URL 子上下文分析** — href/src 反射只有落在 attribute 值开头或应用已输出的可执行 scheme 前缀后（`javascript:`、`data:image/svg+xml,`、`data:text/html,`）才按 URL 注入处理；落在路径/查询串/片段位置（如 `embed src=xsf02.swf?arg=PAYLOAD`）、非可执行 data: MIME、`http:`/`mailto:` 等固定 scheme 之后一律判定为惰性上下文，不生成 payload
 - **过滤发现** — XSStrike 风格 FilterProfile：探测服务器过滤行为，自动剪枝无效 payload 类
 - **JS 子上下文分析** — 事件属性内 JS 字符串/模板字面量细分（XSStrike 核心思想）
 

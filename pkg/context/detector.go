@@ -221,9 +221,9 @@ func (d *Detector) detectAttrContexts(tokenizer *html.Tokenizer, tagName, value 
 				Enclosed:    true,
 				ParentStack: copyStack(parentStack),
 			}
-			// The inert downgrade must carry Escaped so priority hits 0 and
-			// IsExploitable() reports false — otherwise the verifier would
-			// treat it as exploitable.
+			// ContextHTMLEntity is non-exploitable by type (IsExploitableType);
+			// Escaped only zeroes the ranking priority so the inert context
+			// never outranks a real exploitable reflection of the same param.
 			if ctxType == ContextHTMLEntity {
 				ctx.Escaped = true
 			}
@@ -233,22 +233,29 @@ func (d *Detector) detectAttrContexts(tokenizer *html.Tokenizer, tagName, value 
 }
 
 // analyzeURLContext classifies a reflection inside a URL attribute
-// (href/src/action). Scheme injection (javascript:/data:) only works when
-// the reflection lands at the very start of the attribute value or after a
-// scheme the app already emitted — a reflection inside the path/query/
-// fragment of an existing URL (e.g. xsf02.swf?arg=MARKER) cannot change the
-// scheme and is inert. Exception: a data: prefix already emitted by the app
-// still allows content injection (data:image/svg+xml,<svg onload=...>).
+// (href/src/action). Scheme injection only works when the reflection lands
+// at the very start of the attribute value, or after a scheme the app
+// already emitted. The allowlist is exact: a javascript: prefix executes;
+// a data: prefix executes only for content types that render markup
+// (image/svg+xml / text/html — a png data URL cannot run script). Anything
+// else — path/query/fragment positions (xsf02.swf?arg=MARKER) or opaque
+// schemes (http:, mailto:) — is inert because the scheme cannot change.
 func analyzeURLContext(attrVal, value string) ContextType {
 	idx := strings.Index(attrVal, value)
 	if idx < 0 {
 		return ContextURLAttr
 	}
-	prefix := attrVal[:idx]
-	if strings.ContainsAny(prefix, "/?#") && !strings.HasPrefix(prefix, "data:") {
-		return ContextHTMLEntity // inert: value sits in path/query/fragment
+	prefix := strings.ToLower(attrVal[:idx])
+	switch {
+	case prefix == "":
+		return ContextURLAttr // attribute start — full scheme injection
+	case strings.HasPrefix(prefix, "javascript:"):
+		return ContextURLAttr // app already emitted an executable scheme
+	case strings.HasPrefix(prefix, "data:image/svg+xml,"),
+		strings.HasPrefix(prefix, "data:text/html,"):
+		return ContextURLAttr // executable data: content type
 	}
-	return ContextURLAttr // scheme position (start or after emitted scheme)
+	return ContextHTMLEntity // inert: path/query/fragment/opaque scheme
 }
 
 func (d *Detector) detectJSStringContext(content, value string, contexts *[]Context) {

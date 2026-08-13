@@ -113,7 +113,7 @@ const (
 //	make build VERSION=1.0.0
 //
 // x.y.z: x = major (architectural redesign), y = feature, z = bug fix.
-var Version = "0.9.8"
+var Version = "0.9.9"
 
 var cfg ScanConfig
 
@@ -656,28 +656,6 @@ func scanAllTargets(ctx context.Context, engine *scanner.Engine, client *http.Cl
 			}
 		}
 
-		// Link parameter mining: pages whose only injectable surface appears
-		// in <a href="...?param=value"> links (no forms). Extracts param names
-		// from same-host links and scans those targets (dalfox Grep feature).
-		// Gated behind --crawl: scanning OTHER pages' parameters means
-		// following links off the requested URL — surprising without an
-		// explicit crawl request (scanning level17.php must not silently
-		// scan level18.php).
-		if cfg.Crawl && cfg.Body == "" && pageInfo != nil {
-			for _, pt := range pageInfo.ParamTargets {
-				// Skip the seed URL itself
-				if normalizeForCompare(pt.URL) == normalizeForCompare(scanTarget.URL) {
-					continue
-				}
-				ptTarget := scanTarget
-				ptTarget.URL = pt.URL
-				ptTarget.URL = appendQueryParams(ptTarget.URL, pt.Params)
-				if err := scanOneTarget(ctx, engine, ptTarget, allFindings, totalStats); err != nil {
-					color.Yellow("[!] Param-target scan failed for %s: %v\n", pt.URL, err)
-				}
-			}
-		}
-
 		if err := runHeadlessScan(ctx, client, scanTarget, allFindings); err != nil {
 			color.Yellow("[!] Headless scan error: %v\n", err)
 		}
@@ -740,6 +718,35 @@ func crawlAndScan(ctx context.Context, client *http.Client, engine *scanner.Engi
 		ft := formToTarget(baseTarget, form)
 		if err := scanOneTarget(ctx, engine, ft, allFindings, totalStats); err != nil {
 			color.Yellow("[!] Form scan failed for %s: %v\n", form.Action, err)
+		}
+	}
+
+	// Link parameter mining (dalfox Grep): the seed page may surface
+	// injectable params only inside same-host <a href="...?p=v"> links or
+	// inline JS URL strings — the crawler's URL list carries existing
+	// values; this adds param-NAME targets with test values. Runs only
+	// under --crawl: following links off the requested URL must be an
+	// explicit request (scanning level17.php must not silently scan
+	// level18.php).
+	if cfg.Body == "" {
+		if pageInfo, err := crawler.ExtractPageInfo(ctx, client, scanURL, baseTarget.Headers); err != nil {
+			color.Yellow("[!] Page discovery failed for %s: %v\n", scanURL, err)
+		} else {
+			seedTarget := deriveTarget(baseTarget, scanURL)
+			for _, pt := range pageInfo.ParamTargets {
+				if normalizeForCompare(pt.URL) == normalizeForCompare(scanURL) {
+					continue // skip the seed URL itself
+				}
+				ptTarget := seedTarget
+				ptTarget.URL = pt.URL
+				ptTarget.URL = appendQueryParams(ptTarget.URL, pt.Params)
+				if err := scanOneTarget(ctx, engine, ptTarget, allFindings, totalStats); err != nil {
+					if errors.Is(err, context.Canceled) {
+						return err
+					}
+					color.Yellow("[!] Param-target scan failed for %s: %v\n", pt.URL, err)
+				}
+			}
 		}
 	}
 	return nil

@@ -130,6 +130,13 @@ func (g *Generator) Generate(injection model.InjectionPoint) []Payload {
 	var payloads []Payload
 
 	for _, ctx := range injection.Contexts {
+		// Inert contexts (raw-text elements, URL path/query positions —
+		// ContextHTMLEntity with Escaped) can never pass the verifier's
+		// context gate: generating their breakout payloads only wastes
+		// requests.
+		if !ctx.IsExploitable() {
+			continue
+		}
 		templates := g.filterTemplates(GetTemplates(ctx.Type))
 		for _, tmpl := range templates {
 			if !QuoteCompatible(tmpl.Value, ctx.Type, ctx.QuoteChar) {

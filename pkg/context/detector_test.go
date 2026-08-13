@@ -463,11 +463,19 @@ func TestURLAttrSubContext_QueryPositionInert(t *testing.T) {
 		{"scheme_position_href", `<a href="MARKER">x</a>`, false},
 		{"scheme_position_src", `<img src='MARKER'>`, false},
 		{"emitted_js_scheme", `<a href="javascript:MARKER">x</a>`, false},
+		{"emitted_js_scheme_case", `<a href="JavaScript:MARKER">x</a>`, false},
 		{"query_position_embed", `<embed src=xsf02.swf?arg01=MARKER width=100%>`, true},
 		{"query_position_href", `<a href="/search?q=MARKER">x</a>`, true},
 		{"path_position", `<a href="page/MARKER">x</a>`, true},
 		{"fragment_position", `<a href="/p#MARKER">x</a>`, true},
-		{"data_prefix_exempt", `<img src="data:image/svg+xml,MARKER">`, false},
+		{"absolute_url_path", `<a href="https://host/MARKER">x</a>`, true},
+		{"protocol_relative", `<a href="//host/MARKER">x</a>`, true},
+		{"opaque_scheme_http", `<a href="http:MARKER">x</a>`, true},
+		{"opaque_scheme_mailto", `<a href="mailto:MARKER">x</a>`, true},
+		{"data_svg_exempt", `<img src="data:image/svg+xml,MARKER">`, false},
+		{"data_html_exempt", `<iframe src="data:text/html,MARKER">`, false},
+		{"data_svg_case_insensitive", `<img src="DATA:image/svg+xml,MARKER">`, false},
+		{"data_png_inert", `<img src="data:image/png;base64,MARKER">`, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -476,15 +484,28 @@ func TestURLAttrSubContext_QueryPositionInert(t *testing.T) {
 				t.Fatalf("Detect error: %v", err)
 			}
 			hasURLAttr := false
-			for _, c := range got {
-				if c.Type == ContextURLAttr {
+			var inert *Context
+			for i := range got {
+				if got[i].Type == ContextURLAttr {
 					hasURLAttr = true
 				}
+				if got[i].Type == ContextHTMLEntity && got[i].AttrName != "" {
+					inert = &got[i]
+				}
 			}
-			if tc.wantInert && hasURLAttr {
-				t.Errorf("reflection in query/path should NOT be url_attribute, got %v", got)
-			}
-			if !tc.wantInert && !hasURLAttr {
+			if tc.wantInert {
+				if hasURLAttr {
+					t.Errorf("reflection should NOT be url_attribute, got %v", got)
+				}
+				// The downgrade must be exact: ContextHTMLEntity + Escaped,
+				// not just any non-URLAttr classification.
+				if inert == nil {
+					t.Fatalf("expected ContextHTMLEntity downgrade, got %v", got)
+				}
+				if !inert.Escaped {
+					t.Errorf("downgraded context must carry Escaped=true, got %+v", inert)
+				}
+			} else if !hasURLAttr {
 				t.Errorf("scheme-position reflection should be url_attribute, got %v", got)
 			}
 		})

@@ -31,6 +31,14 @@ func (t *WAFTracker) Report(detected bool, name string, bypassed bool) {
 	}
 }
 
+// ReportBypass records a successful bypass without claiming detection.
+// Used when a mutation succeeds but no WAF was detected on this request
+// (the WAF may have been identified by an earlier request, or --waf-bypass
+// was forced without any detection).
+func (t *WAFTracker) ReportBypass() {
+	atomic.StoreInt64(&t.bypassed, 1)
+}
+
 // Result returns the accumulated WAF info, or nil if no WAF was detected.
 // The name may be empty when Report was called with an empty name
 // (e.g., bypass success before signature identification) — nil-safe.

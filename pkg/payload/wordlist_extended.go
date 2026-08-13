@@ -82,8 +82,6 @@ var extendedPayloads = map[context.ContextType][]PayloadTemplate{
 		{Value: ` autofocus onfocus=alert(1) x=`, Severity: model.High, Desc: "Space breakout (no quotes)"},
 		{Value: `%20autofocus%20onfocus=alert(1)%20`, Severity: model.High, Desc: "URL-encoded space breakout"},
 
-		// Backtick breakout
-		{Value: "` autofocus onfocus=alert(1) `", Severity: model.High, Desc: "Backtick breakout"},
 
 		// Additional event handlers for attr contexts
 		{Value: `" onpointerenter=alert(1) x="`, Severity: model.High, Desc: "Quote breakout + onpointerenter"},

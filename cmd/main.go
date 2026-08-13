@@ -945,7 +945,7 @@ func printResults(result *model.ScanResult, duration time.Duration) {
 		if wafName == "" {
 			wafName = "unknown"
 		}
-		wafColor("  🛡️  WAF: %s — %s\n", wafName, wafStatus)
+		fmt.Println(wafColor("  🛡️  WAF: %s — %s", wafName, wafStatus))
 	}
 
 	if len(result.Findings) == 0 {
@@ -955,7 +955,7 @@ func printResults(result *model.ScanResult, duration time.Duration) {
 
 	for i, f := range result.Findings {
 		severityColor := getSeverityColor(f.Severity)
-		severityColor(fmt.Sprintf("  [%d] [%s] %s", i+1, strings.ToUpper(string(f.Severity)), f.Description))
+		fmt.Println(severityColor(fmt.Sprintf("  [%d] [%s] %s", i+1, strings.ToUpper(string(f.Severity)), f.Description)))
 		fmt.Println()
 		fmt.Printf("      Param: %s | Confidence: %.0f%% | Context: %v\n",
 			f.Parameter, f.Confidence*100, f.Contexts)

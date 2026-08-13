@@ -480,7 +480,7 @@ func (s *Scanner) runSingleDOMTest(ctx context.Context, target model.Target, tes
 			Timestamp: time.Now(),
 		})
 	}
-	} // end if len(hookHits) == 0
+	} // end if !hooksInstalled
 
 	// Check console for payload execution indicators
 	for _, msg := range consoleMsgs {

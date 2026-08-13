@@ -239,15 +239,14 @@ func (m *Mutator) Mutate(payload string, contextType ctx.ContextType, maxVariant
 // This avoids wasting scan requests on mutations that are ineffective against the
 // detected WAF (e.g., entity encoding against a WAF that decodes entities before inspection).
 func (m *Mutator) MutateTargeted(payload string, contextType ctx.ContextType, wafName string, maxVariants int) []Mutation {
-	all := m.Mutate(payload, contextType, 0)
 	if wafName == "" {
-		return all
+		return m.Mutate(payload, contextType, maxVariants)
 	}
 
 	// Filter to WAF-specific strategies when available
 	wafStrategies := GetWAFStrategies(wafName)
 	if len(wafStrategies) == 0 {
-		return all // unknown WAF, try everything
+		return m.Mutate(payload, contextType, maxVariants) // unknown WAF, try everything
 	}
 
 	strategySet := make(map[MutationType]bool, len(wafStrategies))
@@ -255,14 +254,23 @@ func (m *Mutator) MutateTargeted(payload string, contextType ctx.ContextType, wa
 		strategySet[s] = true
 	}
 
-	var filtered []Mutation
-	for _, mut := range all {
-		if strategySet[mut.Type] {
-			filtered = append(filtered, mut)
+	// Apply only the WAF-relevant strategies — avoids computing and discarding
+	// the ~12 non-relevant mutations per payload.
+	isHTML := isHTMLContext(contextType)
+	isJS := isJSContext(contextType)
+	filtered := make([]Mutation, 0, len(wafStrategies))
+	for _, s := range strategies {
+		if !strategySet[s.name] || !s.applies(payload, isHTML, isJS) {
+			continue
 		}
+		filtered = append(filtered, Mutation{
+			Value:  s.apply(payload),
+			Type:   s.name,
+			Bypass: s.bypass,
+		})
 	}
 	if len(filtered) == 0 {
-		return all // all filtered out, fall back to full set
+		return m.Mutate(payload, contextType, maxVariants) // all filtered out, fall back to full set
 	}
 	if maxVariants > 0 && len(filtered) > maxVariants {
 		return filtered[:maxVariants]
@@ -341,7 +349,8 @@ func isHTMLContext(ctxType ctx.ContextType) bool {
 // isJSContext returns true for contexts where JavaScript parsing applies.
 func isJSContext(ctxType ctx.ContextType) bool {
 	switch ctxType {
-	case ctx.ContextJSString, ctx.ContextJSBlock, ctx.ContextJSComment:
+	case ctx.ContextJSString, ctx.ContextJSBlock, ctx.ContextJSComment,
+		ctx.ContextJSTemplateLiteral:
 		return true
 	}
 	return false

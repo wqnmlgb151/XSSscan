@@ -47,7 +47,7 @@ func NewVerifier() *Verifier {
 	return &Verifier{
 		scorer:      NewConfidenceScorer(),
 		tagStripper: regexp.MustCompile(`<[^>]*>`),
-		eventFilter: regexp.MustCompile(`on\w+\s*=`),
+		eventFilter: regexp.MustCompile(`(?i)on\w+\s*=`),
 	}
 }
 

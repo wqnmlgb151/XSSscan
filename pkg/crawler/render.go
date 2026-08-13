@@ -80,9 +80,7 @@ func RenderPage(ctx context.Context, targetURL string, headers map[string]string
 			if !ok {
 				return
 			}
-			sem <- struct{}{} // bounded concurrency for asset-heavy pages
-			go func() {
-				defer func() { <-sem }()
+			handle := func() {
 				reqHost := ""
 				if u, err := url.Parse(e.Request.URL); err == nil {
 					reqHost = u.Host
@@ -93,7 +91,17 @@ func RenderPage(ctx context.Context, targetURL string, headers map[string]string
 				} else {
 					fetch.ContinueRequest(e.RequestID).Do(ctx)
 				}
-			}()
+			}
+			// Non-blocking acquire: the listener runs on chromedp's CDP event
+			// dispatch goroutine — a blocking send here would deadlock message
+			// routing for the in-flight Continue/Fail responses.
+			select {
+			case sem <- struct{}{}:
+				go func() { defer func() { <-sem }(); handle() }()
+			default:
+				// Pool saturated: drop the request rather than block the event loop.
+				fetch.FailRequest(e.RequestID, network.ErrorReasonBlockedByClient).Do(ctx)
+			}
 		})
 		return nil
 	}))

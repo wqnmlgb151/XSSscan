@@ -561,12 +561,12 @@ func (e *Engine) scanPayload(ctx context.Context, injection model.InjectionPoint
 		return finding, nil
 	}
 
-	if e.mutator.Load() != nil {
+	if mutator := e.mutator.Load(); mutator != nil {
 		wafName := ""
 		if wafResult.Detected {
 			wafName = wafResult.Name
 		}
-		mutations := e.mutator.Load().(*payload.Mutator).MutateTargeted(p.Value, p.Context, wafName, 5)
+		mutations := mutator.(*payload.Mutator).MutateTargeted(p.Value, p.Context, wafName, 5)
 		for _, mut := range mutations {
 			mutatedPayload := p
 			mutatedPayload.Value = mut.Value
@@ -579,7 +579,11 @@ func (e *Engine) scanPayload(ctx context.Context, injection model.InjectionPoint
 			}
 			e.trackWAF(mutWAF)
 			if mutFinding != nil {
-				e.wafTracker.Report(true, wafName, true)
+				if wafResult.Detected {
+					e.wafTracker.Report(true, wafName, true)
+				} else if e.wafTracker.Detected() {
+					e.wafTracker.ReportBypass() // WAF known from an earlier request
+				}
 				mutFinding.Description = findingDescription(injection, mutatedPayload) + " [WAF bypass: " + string(mut.Type) + "]"
 				mutFinding.Payload = mut.Value
 				return mutFinding, nil

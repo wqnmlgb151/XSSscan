@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/xsscan/xsscan/pkg/internal/urlutil"
+
 	"github.com/xsscan/xsscan/pkg/ssrfguard"
 )
 
@@ -387,7 +389,7 @@ func TestNormalizeURL(t *testing.T) {
 	}
 	for _, tc := range cases {
 		u, _ := url.Parse(tc.input)
-		result := normalizeURL(u)
+		result := urlutil.NormalizeForCrawl(u)
 		if result != tc.expected {
 			t.Errorf("normalizeURL(%q): expected %q, got %q", tc.input, tc.expected, result)
 		}

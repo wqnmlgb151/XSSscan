@@ -132,12 +132,8 @@ func TestDetectWAF_RealServer(t *testing.T) {
 	}
 }
 
-// TestWAFStrategiesSync verifies that GetWAFStrategies() in pkg/payload
-// matches the BypassStrategies in pkg/verify/wafSignatures for every known WAF.
-//
-// This guards against the two parallel tables drifting apart. Because of the
-// import cycle (verify imports payload), these tables cannot share a single
-// source of truth — so the test enforces synchronization.
+// TestWAFStrategiesSync verifies that verify.GetWAFStrategies delegates to
+// payload.GetWAFStrategies (the single source of truth) for every known WAF.
 func TestWAFStrategiesSync(t *testing.T) {
 	allWAFs := []string{
 		"Cloudflare", "AWS WAF", "Akamai", "ModSecurity",
@@ -146,10 +142,7 @@ func TestWAFStrategiesSync(t *testing.T) {
 
 	for _, wafName := range allWAFs {
 		t.Run(wafName, func(t *testing.T) {
-			// Strategies from verify (single source for detection → bypass mapping)
 			verifyStrategies := GetWAFStrategies(wafName)
-
-			// Strategies from payload (parallel table for targeted mutations)
 			payloadStrategies := payload.GetWAFStrategies(wafName)
 
 			if len(verifyStrategies) != len(payloadStrategies) {

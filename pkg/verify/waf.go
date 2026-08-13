@@ -15,20 +15,14 @@ type WAFResult struct {
 	Evidence string
 }
 
-// wafSignature defines detection patterns and bypass strategies for known WAFs.
-// BypassStrategies lists mutation types (from pkg/payload) that are empirically
-// effective against this WAF. The scanner uses these to prioritize mutations
-// instead of trying all variants blindly.
-//
-// NOTE: pkg/payload/mutator.go has a parallel getWAFStrategies() mapping.
-// The two must be kept in sync — import cycle prevents sharing.
+// wafSignature defines detection patterns for known WAFs.
+// Bypass strategy lists live in payload.GetWAFStrategies (single source of truth).
 type wafSignature struct {
 	Name             string
 	Headers          []string
 	BodyPatterns     []string
 	BodyPatternsLower []string // pre-lowercased at init
 	StatusCodes      []int
-	BypassStrategies []payload.MutationType
 }
 
 var wafSignatures = []wafSignature{
@@ -37,68 +31,55 @@ var wafSignatures = []wafSignature{
 		Headers:          []string{"cf-ray", "__cfduid", "cf-cache-status", "cf-request-id"},
 		BodyPatterns:     []string{"attention required", "cloudflare", "cf-browser-verification", "checking your browser"},
 		StatusCodes:      []int{403, 503, 522, 524},
-		BypassStrategies: []payload.MutationType{payload.MutationCaseMix, payload.MutationCommentInjection, payload.MutationAltFunction, payload.MutationTabInjection, payload.MutationBreakoutTextarea, payload.MutationDoubleURLEncode},
 	},
 	{
 		Name:             "AWS WAF",
 		Headers:          []string{"x-amzn-requestid", "x-amz-cf-id", "x-amzn-waf-action"},
 		BodyPatterns:     []string{"request blocked", "aws waf", "bad request"},
 		StatusCodes:      []int{403},
-		BypassStrategies: []payload.MutationType{payload.MutationBreakoutTextarea, payload.MutationAltFunction, payload.MutationEntityPlusCase, payload.MutationNewlineInjection, payload.MutationBacktickFn, payload.MutationDoubleURLEncode, payload.MutationHexEntityMixed, payload.MutationUnicodeEscapeJS},
 	},
 	{
 		Name:             "Akamai",
 		Headers:          []string{"akamai-grn", "x-akamai-transformed", "akamai-origin-hop"},
 		BodyPatterns:     []string{"reference #", "akamai", "access denied"},
 		StatusCodes:      []int{403, 405},
-		BypassStrategies: []payload.MutationType{payload.MutationTabInjection, payload.MutationNewlineInjection, payload.MutationCommentInjection, payload.MutationCaseMix, payload.MutationSpaceToSlash, payload.MutationUnicodeFullwidth, payload.MutationHexEntityMixed},
 	},
 	{
 		Name:             "ModSecurity",
 		Headers:          []string{"mod_security", "modsecurity"},
 		BodyPatterns:     []string{"not acceptable!", "modsecurity action", "406 not acceptable"},
 		StatusCodes:      []int{403, 406, 501},
-		BypassStrategies: []payload.MutationType{payload.MutationNewlineInjection, payload.MutationTabInjection, payload.MutationSpaceToSlash, payload.MutationEntityAngleBrackets, payload.MutationStringConcat, payload.MutationHTMLEntityNested, payload.MutationNullByteInjection, payload.MutationHexEntityMixed},
 	},
 	{
 		Name:             "F5 BIG-IP",
 		Headers:          []string{"x-cnection", "x-info", "bigip"},
 		BodyPatterns:     []string{"the requested url was rejected", "bigip", "support id"},
 		StatusCodes:      []int{403},
-		BypassStrategies: []payload.MutationType{payload.MutationCaseMix, payload.MutationCommentInjection, payload.MutationTabInjection, payload.MutationAltFunction, payload.MutationEntityAngleBrackets, payload.MutationDoubleURLEncode, payload.MutationUnicodeEscapeJS},
 	},
 	{
 		Name:             "Imperva",
 		Headers:          []string{"x-iinfo", "x-cdn", "incapsula"},
 		BodyPatterns:     []string{"incapsula", "imperva", "request unsuccessful"},
 		StatusCodes:      []int{403},
-		BypassStrategies: []payload.MutationType{payload.MutationEntityPlusCase, payload.MutationBreakoutTextarea, payload.MutationCommentInjection, payload.MutationNewlineInjection, payload.MutationBacktickFn, payload.MutationDoubleURLEncode, payload.MutationUnicodeFullwidth},
 	},
 	{
 		Name:             "Sucuri",
 		Headers:          []string{"x-sucuri-id", "x-sucuri-cache", "sucuri"},
 		BodyPatterns:     []string{"sucuri", "access denied", "blocked"},
 		StatusCodes:      []int{403},
-		BypassStrategies: []payload.MutationType{payload.MutationCaseMix, payload.MutationSpaceToSlash, payload.MutationTabInjection, payload.MutationAltFunction, payload.MutationEntityAngleBrackets, payload.MutationNullByteInjection, payload.MutationDoubleURLEncode},
 	},
 	{
 		Name:             "Wordfence",
 		Headers:          []string{"wordfence"},
 		BodyPatterns:     []string{"wordfence", "your access to this site has been limited"},
 		StatusCodes:      []int{403, 503},
-		BypassStrategies: []payload.MutationType{payload.MutationEntityAngleBrackets, payload.MutationEntityPlusCase, payload.MutationBreakoutTextarea, payload.MutationCommentInjection, payload.MutationStringConcat, payload.MutationUnicodeFullwidth, payload.MutationHexEntityMixed},
 	},
 }
 
 // GetWAFStrategies returns the recommended bypass strategy names for a detected WAF.
-// Returns nil if the WAF is unknown or has no strategies defined.
+// Delegates to payload.GetWAFStrategies — the single source of truth.
 func GetWAFStrategies(wafName string) []payload.MutationType {
-	for _, sig := range wafSignatures {
-		if sig.Name == wafName {
-			return sig.BypassStrategies
-		}
-	}
-	return nil
+	return payload.GetWAFStrategies(wafName)
 }
 
 // DetectWAF checks if a response shows signs of WAF interception.

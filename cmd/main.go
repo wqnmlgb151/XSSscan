@@ -628,20 +628,28 @@ func crawlAndScan(ctx context.Context, client *http.Client, engine *scanner.Engi
 		}
 	}
 
-	seenForms := make(map[string]bool)
-	for _, form := range crawlResult.Forms {
-		formKey := form.Action + "|" + form.Method
-		if seenForms[formKey] {
-			continue
-		}
-		seenForms[formKey] = true
-
+	for _, form := range dedupForms(crawlResult.Forms) {
 		ft := formToTarget(baseTarget, form)
 		if err := scanOneTarget(ctx, engine, ft, allFindings, totalStats); err != nil {
 			color.Yellow("[!] Form scan failed for %s: %v\n", form.Action, err)
 		}
 	}
 	return nil
+}
+
+// dedupForms removes forms with the same action+method, keeping first occurrence.
+func dedupForms(forms []crawler.FormInfo) []crawler.FormInfo {
+	seen := make(map[string]bool, len(forms))
+	out := make([]crawler.FormInfo, 0, len(forms))
+	for _, form := range forms {
+		key := form.Action + "|" + form.Method
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, form)
+	}
+	return out
 }
 
 func discoverFormsFromPage(ctx context.Context, client *http.Client, tgt model.Target, renderSPA bool) []model.Target {
@@ -669,17 +677,8 @@ func discoverFormsFromPage(ctx context.Context, client *http.Client, tgt model.T
 
 	color.Cyan("[*] Discovered %d form(s) on target page\n", len(forms))
 	var targets []model.Target
-	seen := make(map[string]bool)
-
-	for _, form := range forms {
-		formKey := form.Action + "|" + form.Method
-		if seen[formKey] {
-			continue
-		}
-		seen[formKey] = true
-
-		ft := formToTarget(tgt, form)
-		targets = append(targets, ft)
+	for _, form := range dedupForms(forms) {
+		targets = append(targets, formToTarget(tgt, form))
 	}
 	return targets
 }

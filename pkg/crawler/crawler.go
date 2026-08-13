@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/xsscan/xsscan/pkg/httpclient"
+	"github.com/xsscan/xsscan/pkg/internal/urlutil"
 	"github.com/xsscan/xsscan/pkg/ssrfguard"
 	"golang.org/x/net/html"
 )
@@ -390,7 +391,7 @@ func extractLinks(body string, baseURL, startHost string, sameHostOnly bool) ([]
 		if sameHostOnly && u.Host != startHost {
 			return
 		}
-		normalized := normalizeURL(u)
+		normalized := urlutil.NormalizeForCrawl(u)
 		if !seen[normalized] {
 			seen[normalized] = true
 			links = append(links, normalized)
@@ -466,19 +467,6 @@ func resolveURL(base *url.URL, href string) string {
 	return resolved.String()
 }
 
-// normalizeURL removes default ports, strips fragments and trailing slashes.
-// Returns a new string without modifying the input *url.URL.
-func normalizeURL(u *url.URL) string {
-	clone := *u
-	if clone.Scheme == "http" && clone.Port() == "80" {
-		clone.Host = clone.Hostname()
-	} else if clone.Scheme == "https" && clone.Port() == "443" {
-		clone.Host = clone.Hostname()
-	}
-	clone.Fragment = ""
-	clone.Path = strings.TrimRight(clone.Path, "/")
-	return clone.String()
-}
 
 func getAttr(n *html.Node, key string) string {
 	for _, a := range n.Attr {

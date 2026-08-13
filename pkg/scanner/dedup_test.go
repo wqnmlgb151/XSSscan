@@ -3,6 +3,8 @@ package scanner
 import (
 	"testing"
 
+	"github.com/xsscan/xsscan/pkg/internal/urlutil"
+
 	ctx "github.com/xsscan/xsscan/pkg/context"
 	"github.com/xsscan/xsscan/pkg/model"
 )
@@ -276,7 +278,7 @@ func TestNormalizeURL(t *testing.T) {
 		{"://invalid", "://invalid"}, // parse failure → returned as-is
 	}
 	for _, tt := range tests {
-		if got := normalizeURL(tt.in); got != tt.want {
+		if got := urlutil.NormalizeForDedup(tt.in); got != tt.want {
 			t.Errorf("normalizeURL(%q) = %q, want %q", tt.in, got, tt.want)
 		}
 	}
@@ -321,5 +323,36 @@ func TestSemanticDedup_NormalizesURL(t *testing.T) {
 	}
 	if result[0].Confidence != 0.8 {
 		t.Errorf("expected highest confidence 0.8, got %f", result[0].Confidence)
+	}
+}
+
+func TestSemanticDedup_DeterministicOrder(t *testing.T) {
+	findings := []model.Finding{
+		{URL: "http://a.com/p?q=1", Parameter: "q", Payload: `<script>alert(1)</script>`, Contexts: []string{"html_body"}, Confidence: 0.7},
+		{URL: "http://a.com/p?q=2", Parameter: "q", Payload: `<img src=x onerror=alert(1)>`, Contexts: []string{"html_body"}, Confidence: 0.8},
+		{URL: "http://a.com/p?q=3", Parameter: "q", Payload: `javascript:alert(1)`, Contexts: []string{"html_body"}, Confidence: 0.9},
+		{URL: "http://a.com/p?q=4", Parameter: "q", Payload: `<img src=x onerror=confirm(1)>`, Contexts: []string{"html_body"}, Confidence: 0.6},
+	}
+
+	// Determinism: the SAME input must produce the SAME output across runs
+	// (no map-iteration randomness). Output follows first-seen order of the
+	// given input, so different input orderings legitimately differ.
+	for _, input := range [][]model.Finding{
+		findings,
+		{findings[2], findings[0], findings[3], findings[1]},
+	} {
+		first := SemanticDedup(input)
+		for run := 0; run < 3; run++ {
+			got := SemanticDedup(input)
+			if len(got) != len(first) {
+				t.Fatalf("run %d: got %d findings, want %d", run, len(got), len(first))
+			}
+			for i := range first {
+				if got[i].Payload != first[i].Payload {
+					t.Errorf("run %d: position %d payload = %q, want %q (non-deterministic output order)",
+						run, i, got[i].Payload, first[i].Payload)
+				}
+			}
+		}
 	}
 }

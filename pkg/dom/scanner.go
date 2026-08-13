@@ -426,23 +426,13 @@ func (s *Scanner) runSingleDOMTest(ctx context.Context, target model.Target, tes
 		chromedp.Evaluate(`window.__xsscan_hooks || []`, &hookHits),
 	); err == nil {
 		for _, hit := range hookHits {
-			findings = append(findings, model.Finding{
-				Type:        model.DOMXSS,
-				Severity:    model.High,
-				Confidence:  0.85, // higher confidence: proven sink execution
-				URL:         test.NavURL,
-				Parameter:   fmt.Sprintf("DOM (%s)", test.Name),
-				ParamType:   model.ParamQuery,
-				Payload:     payload,
-				Contexts:    []string{"dom"},
-				Description: fmt.Sprintf("DOM XSS via %s: marker reached %s sink", test.Source, hit.Sink),
-				Remediation: "Use safe DOM APIs (textContent instead of innerHTML). Implement Trusted Types.",
-				CWE:         "CWE-79",
-				References: []string{
-					"https://owasp.org/www-community/attacks/DOM_Based_Cross_Site_Scripting",
-				},
-				Timestamp: time.Now(),
-			})
+			findings = append(findings, newDOMFinding(test, payload,
+				fmt.Sprintf("DOM (%s)", test.Name),
+				fmt.Sprintf("DOM XSS via %s: marker reached %s sink", test.Source, hit.Sink),
+				"Use safe DOM APIs (textContent instead of innerHTML). Implement Trusted Types.",
+				0.85,
+				[]string{"https://owasp.org/www-community/attacks/DOM_Based_Cross_Site_Scripting"},
+			))
 		}
 	}
 
@@ -461,48 +451,56 @@ func (s *Scanner) runSingleDOMTest(ctx context.Context, target model.Target, tes
 		}
 
 		if sinkHit != "" {
-		findings = append(findings, model.Finding{
-			Type:        model.DOMXSS,
-			Severity:    model.High,
-			Confidence:  0.75,
-			URL:         test.NavURL,
-			Parameter:   fmt.Sprintf("DOM (%s)", test.Name),
-			ParamType:   model.ParamQuery,
-			Payload:     payload,
-			Contexts:    []string{"dom"},
-			Description: fmt.Sprintf("DOM XSS via %s: payload reached sink(s): %s", test.Source, sinkHit),
-			Remediation: "Use safe DOM APIs (textContent instead of innerHTML). Sanitize all client-side input. Implement Trusted Types.",
-			CWE:         "CWE-79",
-			References: []string{
-				"https://owasp.org/www-community/attacks/DOM_Based_Cross_Site_Scripting",
-				"https://portswigger.net/web-security/dom-based",
-			},
-			Timestamp: time.Now(),
-		})
-	}
+			findings = append(findings, newDOMFinding(test, payload,
+				fmt.Sprintf("DOM (%s)", test.Name),
+				fmt.Sprintf("DOM XSS via %s: payload reached sink(s): %s", test.Source, sinkHit),
+				"Use safe DOM APIs (textContent instead of innerHTML). Sanitize all client-side input. Implement Trusted Types.",
+				0.75,
+				[]string{
+					"https://owasp.org/www-community/attacks/DOM_Based_Cross_Site_Scripting",
+					"https://portswigger.net/web-security/dom-based",
+				},
+			))
+		}
 	} // end if !hooksInstalled
 
 	// Check console for payload execution indicators
 	for _, msg := range consoleMsgs {
 		if strings.Contains(msg, marker) {
-			findings = append(findings, model.Finding{
-				Type:        model.DOMXSS,
-				Severity:    model.Medium,
-				Confidence:  0.60,
-				URL:         test.NavURL,
-				Parameter:   fmt.Sprintf("DOM (%s/console)", test.Name),
-				ParamType:   model.ParamQuery,
-				Payload:     payload,
-				Contexts:    []string{"dom"},
-				Description: fmt.Sprintf("DOM XSS indicator via %s: payload in console: %s", test.Source, text.Truncate(msg, 100)),
-				Remediation: "Review client-side JavaScript that processes URL input.",
-				CWE:         "CWE-79",
-				Timestamp:   time.Now(),
-			})
+			findings = append(findings, newDOMFinding(test, payload,
+				fmt.Sprintf("DOM (%s/console)", test.Name),
+				fmt.Sprintf("DOM XSS indicator via %s: payload in console: %s", test.Source, text.Truncate(msg, 100)),
+				"Review client-side JavaScript that processes URL input.",
+				0.60, nil))
 			break
 		}
 	}
 
 	return findings, nil
+}
+
+// newDOMFinding builds the shared structure for DOM XSS findings. The three
+// detection layers (CDP hooks, post-hoc scan, console indicators) differ only
+// in confidence, parameter suffix, and description.
+func newDOMFinding(test domXSSTest, payload, parameter, description, remediation string, confidence float64, references []string) model.Finding {
+	severity := model.High
+	if confidence < 0.70 {
+		severity = model.Medium
+	}
+	return model.Finding{
+		Type:        model.DOMXSS,
+		Severity:    severity,
+		Confidence:  confidence,
+		URL:         test.NavURL,
+		Parameter:   parameter,
+		ParamType:   model.ParamQuery,
+		Payload:     payload,
+		Contexts:    []string{"dom"},
+		Description: description,
+		Remediation: remediation,
+		CWE:         "CWE-79",
+		References:  references,
+		Timestamp:   time.Now(),
+	}
 }
 

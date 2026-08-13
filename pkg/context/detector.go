@@ -169,8 +169,13 @@ func (d *Detector) detectAttrContexts(tokenizer *html.Tokenizer, tagName, value 
 			ctxType := ContextHTMLAttrValue
 			switch {
 			case d.eventAttrRe.MatchString(attrName):
-				// Event handlers (onclick, onerror, onload, etc.) are JS execution contexts
-				ctxType = ContextJSBlock
+				// Event handlers are JS execution contexts. Analyze the
+				// attribute value for JS sub-context: onclick="foo('PAYLOAD')"
+				// is a JS STRING (quote breakout needed), while
+				// onclick="alert(PAYLOAD)" is a JS BLOCK (direct execution).
+				// XSStrike-style sub-context analysis.
+				sub := analyzeJSStringContext(attrVal, value)
+				ctxType = sub.Type
 			case attrName == "style":
 				ctxType = ContextCSSValue
 			case attrName == "href" || attrName == "src" ||

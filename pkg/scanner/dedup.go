@@ -1,11 +1,11 @@
 package scanner
 
 import (
-	"net/url"
 	"regexp"
 	"strings"
 
 	ctx "github.com/xsscan/xsscan/pkg/context"
+	"github.com/xsscan/xsscan/pkg/internal/urlutil"
 	"github.com/xsscan/xsscan/pkg/model"
 )
 
@@ -15,26 +15,26 @@ import (
 type attackVectorClass string
 
 const (
-	VectorTagInjection   attackVectorClass = "tag_injection"    // <script>, <img>, <svg>, etc.
-	VectorEventHandler   attackVectorClass = "event_handler"    // onerror, onload, onfocus, etc.
-	VectorJSBreakout     attackVectorClass = "js_breakout"      // ';alert(1)// etc.
-	VectorAttrBreakout   attackVectorClass = "attr_breakout"    // "><img, '><svg, etc.
-	VectorTemplateInject attackVectorClass = "template_inject"  // {{ }}, ${ }, etc.
+	VectorTagInjection    attackVectorClass = "tag_injection"    // <script>, <img>, <svg>, etc.
+	VectorEventHandler    attackVectorClass = "event_handler"    // onerror, onload, onfocus, etc.
+	VectorJSBreakout      attackVectorClass = "js_breakout"      // ';alert(1)// etc.
+	VectorAttrBreakout    attackVectorClass = "attr_breakout"    // "><img, '><svg, etc.
+	VectorTemplateInject  attackVectorClass = "template_inject"  // {{ }}, ${ }, etc.
 	VectorCommentBreakout attackVectorClass = "comment_breakout" // -->, /* */
-	VectorURIInjection   attackVectorClass = "uri_injection"    // javascript:, data:, vbscript:
-	VectorCSSInjection   attackVectorClass = "css_injection"    // expression(), url(javascript:)
-	VectorUnknown        attackVectorClass = "unknown"
+	VectorURIInjection    attackVectorClass = "uri_injection"    // javascript:, data:, vbscript:
+	VectorCSSInjection    attackVectorClass = "css_injection"    // expression(), url(javascript:)
+	VectorUnknown         attackVectorClass = "unknown"
 )
 
 // contextClass represents the execution capability of a reflection context.
 type contextClass string
 
 const (
-	ContextHTMLExecute  contextClass = "html_execute"  // HTML body, tag, attr — script can run
-	ContextJSExecute    contextClass = "js_execute"    // JS string, block, template — JS can run
-	ContextBreakout     contextClass = "breakout"      // Attr value, comment, entity — need breakout first
-	ContextURL          contextClass = "url"           // URL attribute — javascript: protocol
-	ContextLimited      contextClass = "limited"       // CSS, entity — limited execution
+	ContextHTMLExecute contextClass = "html_execute" // HTML body, tag, attr — script can run
+	ContextJSExecute   contextClass = "js_execute"   // JS string, block, template — JS can run
+	ContextBreakout    contextClass = "breakout"     // Attr value, comment, entity — need breakout first
+	ContextURL         contextClass = "url"          // URL attribute — javascript: protocol
+	ContextLimited     contextClass = "limited"      // CSS, entity — limited execution
 )
 
 // payloadPatterns for attack vector classification.
@@ -43,12 +43,12 @@ var payloadPatterns = []struct {
 	pattern *regexp.Regexp
 }{
 	// Order matters: more specific patterns first
-	{VectorAttrBreakout, regexp.MustCompile(`^['"]?>\s*<\w`)},              // "><img, '><svg — attribute breakout
-	{VectorJSBreakout, regexp.MustCompile(`^['";\s]['"]?[-;]`)},             // ';alert(1)// — JS context breakout
-	{VectorCommentBreakout, regexp.MustCompile(`-->|/\*`)},                  // HTML/JS comment breakout
+	{VectorAttrBreakout, regexp.MustCompile(`^['"]?>\s*<\w`)},   // "><img, '><svg — attribute breakout
+	{VectorJSBreakout, regexp.MustCompile(`^['";\s]['"]?[-;]`)}, // ';alert(1)// — JS context breakout
+	{VectorCommentBreakout, regexp.MustCompile(`-->|/\*`)},      // HTML/JS comment breakout
 	{VectorTagInjection, regexp.MustCompile(`(?i)^<\s*(script|img|svg|details|math|body|iframe|object|embed|video|audio|source|marquee|link|base|meta|style)`)},
-	{VectorEventHandler, regexp.MustCompile(`(?i)\bon\w+\s*=`)},              // onerror=, onload=, etc.
-	{VectorTemplateInject, regexp.MustCompile(`\{\{.*\}\}|\$\{.*\}`)},       // {{ }}, ${ }
+	{VectorEventHandler, regexp.MustCompile(`(?i)\bon\w+\s*=`)},       // onerror=, onload=, etc.
+	{VectorTemplateInject, regexp.MustCompile(`\{\{.*\}\}|\$\{.*\}`)}, // {{ }}, ${ }
 	{VectorURIInjection, regexp.MustCompile(`(?i)^(javascript|data|vbscript|blob|filesystem):`)},
 	{VectorCSSInjection, regexp.MustCompile(`(?i)(expression\s*\(|url\s*\(\s*['"]?javascript)`)},
 }
@@ -195,17 +195,6 @@ func classifyExploit(payload string) exploitClass {
 // dedupKey represents the semantic identity of a finding for deduplication.
 // normalizeURL strips query and fragment for dedup comparison,
 // so payload-specific URL encoding doesn't create unique keys per payload.
-func normalizeURL(rawURL string) string {
-	if u, err := url.Parse(rawURL); err == nil {
-		u.RawQuery = ""
-		u.Fragment = ""
-		u.ForceQuery = false
-		u.RawFragment = ""
-		return u.String()
-	}
-	return rawURL
-}
-
 type dedupKey struct {
 	baseURL      string
 	param        string
@@ -227,7 +216,7 @@ func SemanticDedup(findings []model.Finding) []model.Finding {
 		f := &findings[i]
 
 		key := dedupKey{
-			baseURL:      normalizeURL(f.URL),
+			baseURL:      urlutil.NormalizeForDedup(f.URL),
 			param:        f.Parameter,
 			contextClass: string(primaryContextClass(parseContextTypes(f.Contexts))),
 			vectorClass:  string(classifyAttackVector(f.Payload)),

@@ -113,7 +113,7 @@ const (
 //	make build VERSION=1.0.0
 //
 // x.y.z: x = major (architectural redesign), y = feature, z = bug fix.
-var Version = "0.9.2"
+var Version = "0.9.5"
 
 var cfg ScanConfig
 
@@ -202,8 +202,8 @@ func init() {
 	rootCmd.Flags().BoolVar(&cfg.VerifyExecution, "verify-execution", false, "Verify XSS execution in real browser (requires Chrome, increases accuracy)")
 	rootCmd.Flags().IntVar(&cfg.VerifyTimeout, "verify-timeout", 15, "Per-finding verification timeout in seconds (with --verify-execution)")
 	rootCmd.Flags().BoolVar(&cfg.DiscoverHeaders, "discover-headers", false, "Auto-discover dangerous headers as injection points (X-Forwarded-Host, Referer, etc.)")
-	rootCmd.Flags().BoolVar(&cfg.EnableStored, "stored", false, "Enable stored XSS detection (requires --trigger-url)")
-	rootCmd.Flags().StringArrayVar(&cfg.TriggerURLs, "trigger-url", nil, "URL(s) where stored content may appear (repeatable, required for --stored)")
+	rootCmd.Flags().BoolVar(&cfg.EnableStored, "stored", false, "Enable stored XSS detection (trigger URLs auto-discovered when --trigger-url is omitted)")
+	rootCmd.Flags().StringArrayVar(&cfg.TriggerURLs, "trigger-url", nil, "URL(s) where stored content may appear (repeatable; optional — auto-discovered via same-host crawl)")
 	rootCmd.Flags().IntVar(&cfg.StoredPollInterval, "stored-poll-interval", 2, "Polling interval in seconds for stored XSS detection")
 	rootCmd.Flags().IntVar(&cfg.StoredMaxPolls, "stored-max-polls", 5, "Max polls per injection for stored XSS detection")
 	rootCmd.Flags().StringVar(&cfg.CSRFToken, "csrf-token", "", "CSRF token for authenticated scanning (auto-detected if not provided)")
@@ -464,16 +464,30 @@ func setupCallbackServer(callbackURL string, engine *scanner.Engine) *callback.S
 	if callbackURL == "" {
 		return nil
 	}
-	parsedURL, err := url.Parse(callbackURL)
-	if err != nil {
+	raw := strings.TrimSpace(callbackURL)
+
+	// Normalize scheme-less input for host/port extraction: url.Parse treats
+	// "example.com:8080" as scheme "example.com", not host. An explicit
+	// scheme makes host/port classification unambiguous. Loopback MUST be
+	// checked before the DNS branch, or bare "localhost"/"127.0.0.1" get
+	// misclassified as dnslog-style exfil targets.
+	parseURL := raw
+	if !strings.Contains(raw, "://") {
+		parseURL = "http://" + raw
+	}
+	parsedURL, err := url.Parse(parseURL)
+	if err != nil || parsedURL.Host == "" {
+		// Unparseable input (e.g. raw IPv6 without brackets): pass it through
+		// as an external callback target rather than failing the scan.
 		engine.SetCallbackURL(callbackURL)
 		return nil
 	}
 
-	// DNS exfil mode: bare hostname (no scheme, no colon) → dnslog-style
-	// subdomain payloads with a run-unique prefix.
-	if parsedURL.Scheme == "" && !strings.Contains(callbackURL, ":") {
-		unique := fmt.Sprintf("xsscan-%d.%s", time.Now().UnixNano()%1e9, callbackURL)
+	// DNS exfil mode: bare hostname with no scheme, port, or path →
+	// dnslog-style subdomain payloads with a run-unique prefix.
+	if !strings.Contains(raw, "://") && parsedURL.Port() == "" && parsedURL.Path == "" &&
+		!isLoopbackHost(parsedURL.Hostname()) {
+		unique := fmt.Sprintf("xsscan-%d.%s", time.Now().UnixNano()%1e9, raw)
 		engine.SetGenerator(payload.NewGeneratorWithDNSCallback(unique))
 		color.Cyan("[*] DNS callback mode: payloads will query %s\n", unique)
 		return nil
@@ -481,13 +495,13 @@ func setupCallbackServer(callbackURL string, engine *scanner.Engine) *callback.S
 
 	// Third-party mode: remote host (Burp Collaborator, xss.ht, etc.) —
 	// use it directly as the payload target; no local listener.
-	if parsedURL.Host != "" && !isLoopbackHost(parsedURL.Hostname()) {
+	if !isLoopbackHost(parsedURL.Hostname()) {
 		engine.SetCallbackURL(callbackURL)
 		color.Cyan("[*] Using external callback target: %s\n", callbackURL)
 		return nil
 	}
 
-	// Local mode: empty/loopback host → start the built-in listener.
+	// Local mode: loopback host → start the built-in listener.
 	callbackPort := parsedURL.Port()
 	if callbackPort == "" {
 		callbackPort = "80"
@@ -955,9 +969,8 @@ func validateConfig(cfg *ScanConfig) error {
 			return fmt.Errorf("--login-url host must match --url host (got %s vs %s)", cfg.LoginURL, cfg.URL)
 		}
 	}
-	if cfg.EnableStored && len(cfg.TriggerURLs) == 0 {
-		return fmt.Errorf("--stored requires at least one --trigger-url")
-	}
+	// --stored without --trigger-url is valid: trigger URLs are
+	// auto-discovered via same-host crawling in pkg/stored.
 	return nil
 }
 

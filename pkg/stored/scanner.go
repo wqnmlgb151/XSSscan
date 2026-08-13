@@ -55,10 +55,9 @@ type Config struct {
 
 // Scanner performs stored XSS detection.
 type Scanner struct {
-	client   *http.Client
-	config   Config
-	logger   *zap.Logger
-	crawler  *crawler.Crawler
+	client *http.Client
+	config Config
+	logger *zap.Logger
 }
 
 // discoverTriggerURLs returns the configured trigger URLs, or — when none are
@@ -66,26 +65,31 @@ type Scanner struct {
 // the injection target). Covers stored reflections into any publicly
 // reachable page (comments on listing pages, profiles, search results)
 // without requiring the user to know the display location in advance.
-func (s *Scanner) discoverTriggerURLs(ctx context.Context, seedURL string, headers map[string]string) []string {
+//
+// Called once per unique target URL (never per injection): crawler visited
+// state is sticky across Crawl calls, so repeated crawls silently degrade to
+// zero results. A fresh crawler per call avoids sharing mutable state.
+func (s *Scanner) discoverTriggerURLs(ctx context.Context, seedURL string, headers map[string]string) ([]string, error) {
 	if len(s.config.TriggerURLs) > 0 {
-		return s.config.TriggerURLs
+		return s.config.TriggerURLs, nil
 	}
-	if s.crawler == nil {
-		s.crawler = crawler.NewCrawlerWithConfig(s.client, crawler.CrawlerConfig{
-			MaxDepth:     2,
-			MaxPages:     20,
-			SameHostOnly: true,
-			ExtraHeaders: headers,
-		})
+	c := crawler.NewCrawlerWithConfig(s.client, crawler.CrawlerConfig{
+		MaxDepth:     2,
+		MaxPages:     20,
+		SameHostOnly: true,
+		ExtraHeaders: headers,
+	})
+	result, err := c.Crawl(ctx, seedURL)
+	if err != nil {
+		return nil, fmt.Errorf("crawl: %w", err)
 	}
-	result, err := s.crawler.Crawl(ctx, seedURL)
-	if err != nil || len(result.URLs) == 0 {
-		return []string{seedURL}
+	if len(result.URLs) == 0 {
+		return []string{seedURL}, nil
 	}
 	s.logger.Info("auto-discovered trigger URLs via crawler",
 		zap.String("seed", seedURL),
 		zap.Int("count", len(result.URLs)))
-	return result.URLs
+	return result.URLs, nil
 }
 
 // Injection represents a single stored XSS test: inject a marker at the entry
@@ -135,12 +139,30 @@ func (s *Scanner) Detect(ctx context.Context, injections []Injection) []model.Fi
 		return nil
 	}
 
-	// Pre-validate trigger URLs once (their SSRF status doesn't change across polls).
-	for _, u := range s.config.TriggerURLs {
-		if err := ssrfguard.IsURLTargetAllowed(u); err != nil {
-			s.logger.Warn("trigger URL failed SSRF check", zap.String("url", u), zap.Error(err))
+	// Resolve trigger URLs ONCE per unique target URL before workers start.
+	// Discovery must not run inside workers: crawler visited state is sticky
+	// across Crawl calls (repeated crawls return nothing), and lazy crawler
+	// creation from concurrent goroutines races.
+	triggerByTarget := make(map[string][]string, len(injections))
+	for _, inj := range injections {
+		if _, ok := triggerByTarget[inj.Target.URL]; ok {
+			continue
+		}
+		urls, err := s.discoverTriggerURLs(ctx, inj.Target.URL, inj.Target.Headers)
+		if err != nil {
+			s.logger.Warn("trigger URL discovery failed",
+				zap.String("url", inj.Target.URL), zap.Error(err))
 			return nil
 		}
+		// SSRF-validate every URL that will be fetched (configured AND
+		// auto-discovered); their status doesn't change across polls.
+		for _, u := range urls {
+			if err := ssrfguard.IsURLTargetAllowed(u); err != nil {
+				s.logger.Warn("trigger URL failed SSRF check", zap.String("url", u), zap.Error(err))
+				return nil
+			}
+		}
+		triggerByTarget[inj.Target.URL] = urls
 	}
 
 	concurrency := s.config.Concurrency
@@ -162,7 +184,7 @@ func (s *Scanner) Detect(ctx context.Context, injections []Injection) []model.Fi
 					return
 				default:
 				}
-				finding := s.detectSingle(ctx, inj)
+				finding := s.detectSingle(ctx, inj, triggerByTarget[inj.Target.URL])
 				if finding != nil {
 					resultCh <- finding
 				}
@@ -192,7 +214,7 @@ func (s *Scanner) Detect(ctx context.Context, injections []Injection) []model.Fi
 }
 
 // detectSingle performs stored XSS detection for a single injection point.
-func (s *Scanner) detectSingle(ctx context.Context, inj Injection) *model.Finding {
+func (s *Scanner) detectSingle(ctx context.Context, inj Injection, triggerURLs []string) *model.Finding {
 	injectTarget := cloneTargetForParam(inj.Target, inj.Parameter, inj.Marker)
 
 	if err := s.submitMarker(ctx, injectTarget); err != nil {
@@ -204,7 +226,7 @@ func (s *Scanner) detectSingle(ctx context.Context, inj Injection) *model.Findin
 		return nil
 	}
 
-	found, evidenceURL := s.pollTriggerURLs(ctx, inj.Target.Headers, inj)
+	found, evidenceURL := s.pollTriggerURLs(ctx, triggerURLs, inj)
 	if !found {
 		s.logger.Debug("marker not found on trigger URLs",
 			zap.String("param", inj.Parameter.Name),
@@ -315,9 +337,8 @@ func (s *Scanner) submitMarker(ctx context.Context, target model.Target) error {
 
 // pollTriggerURLs checks each trigger URL for the marker, polling up to MaxPolls times.
 // Within each poll round, trigger URLs are fetched concurrently.
-func (s *Scanner) pollTriggerURLs(ctx context.Context, headers map[string]string, inj Injection) (bool, string) {
-	triggerURLs := s.discoverTriggerURLs(ctx, inj.Target.URL, headers)
-
+// triggerURLs are resolved once in Detect — never re-discovered per poll.
+func (s *Scanner) pollTriggerURLs(ctx context.Context, triggerURLs []string, inj Injection) (bool, string) {
 	for poll := 0; poll < s.config.MaxPolls; poll++ {
 		if poll > 0 {
 			select {
@@ -327,7 +348,7 @@ func (s *Scanner) pollTriggerURLs(ctx context.Context, headers map[string]string
 			}
 		}
 
-		if found, url := s.checkTriggerURLsConcurrent(ctx, triggerURLs, inj.Marker, headers); found {
+		if found, url := s.checkTriggerURLsConcurrent(ctx, triggerURLs, inj.Marker, inj.Target.Headers); found {
 			return true, url
 		}
 	}

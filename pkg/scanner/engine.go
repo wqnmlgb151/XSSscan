@@ -382,22 +382,42 @@ func payloadFromTemplate(tmpl payload.PayloadTemplate, pt payload.PayloadType, s
 func (e *Engine) generatePayloads(injection model.InjectionPoint, frameworks []analyze.FrameworkInfo) []payload.Payload {
 	payloads := e.generator.Generate(injection)
 
+	// Framework/polyglot/WAF payloads claim specific contexts — only send
+	// them when the injection point's detected contexts match. A js_string
+	// polyglot sent against an html_body reflection is a guaranteed false
+	// positive (quotes are inert in body text). Framework payloads are
+	// gated the same way: Vue template escapes are inert in body text.
+	contextSet := make(map[ctx.ContextType]bool, len(injection.Contexts))
+	for _, c := range injection.Contexts {
+		contextSet[c.Type] = true
+	}
+	if len(contextSet) == 0 {
+		contextSet[ctx.ContextHTMLBody] = true // fallback mirrors Generator
+	}
+
 	for _, fw := range frameworks {
-		payloads = append(payloads, payloadsFromTemplates(
-			payload.FrameworkPayloads(strings.ToLower(fw.Name)),
-			payload.PayloadTypeReflected, 0.75)...)
+		for _, tmpl := range payload.FrameworkPayloads(strings.ToLower(fw.Name)) {
+			if contextSet[tmpl.Context] {
+				payloads = append(payloads, payloadFromTemplate(tmpl, payload.PayloadTypeReflected, 0.75))
+			}
+		}
 
 		// Version-aware payload sets: Vue 2 sandbox escapes are dead in Vue 3
-		// (sandbox removed); React SSR breakout applies to SSR-rendered apps.
+		// (sandbox removed); React SSR breakout applies to SSR-rendered apps
+		// (Next.js is React-based SSR and gets the same treatment).
 		if strings.HasPrefix(fw.Name, "Vue") && strings.HasPrefix(fw.Version, "2") {
-			payloads = append(payloads, payloadsFromTemplates(
-				payload.Vue2SandboxPayloads(),
-				payload.PayloadTypeReflected, 0.85)...)
+			for _, tmpl := range payload.Vue2SandboxPayloads() {
+				if contextSet[tmpl.Context] {
+					payloads = append(payloads, payloadFromTemplate(tmpl, payload.PayloadTypeReflected, 0.85))
+				}
+			}
 		}
-		if strings.HasPrefix(fw.Name, "React") {
-			payloads = append(payloads, payloadsFromTemplates(
-				payload.ReactSSRPayloads(),
-				payload.PayloadTypeReflected, 0.85)...)
+		if strings.HasPrefix(fw.Name, "React") || fw.Name == "Next.js" {
+			for _, tmpl := range payload.ReactSSRPayloads() {
+				if contextSet[tmpl.Context] {
+					payloads = append(payloads, payloadFromTemplate(tmpl, payload.PayloadTypeReflected, 0.85))
+				}
+			}
 		}
 
 		if hasRisk, sinks := fw.RiskInfo(); hasRisk {
@@ -414,18 +434,6 @@ func (e *Engine) generatePayloads(injection model.InjectionPoint, frameworks []a
 		}
 	}
 
-	// Polyglots and WAF bypass payloads claim specific contexts — only send
-	// them when the injection point's detected contexts match. A js_string
-	// polyglot sent against an html_body reflection is a guaranteed false
-	// positive (quotes are inert in body text).
-	contextSet := make(map[ctx.ContextType]bool, len(injection.Contexts))
-	for _, c := range injection.Contexts {
-		contextSet[c.Type] = true
-	}
-	if len(contextSet) == 0 {
-		contextSet[ctx.ContextHTMLBody] = true // fallback mirrors Generator
-	}
-
 	for _, tmpl := range payload.PolyglotPayloads() {
 		if contextSet[tmpl.Context] {
 			payloads = append(payloads, payloadFromTemplate(tmpl, payload.PayloadTypeReflected, 0.8))
@@ -440,7 +448,28 @@ func (e *Engine) generatePayloads(injection model.InjectionPoint, frameworks []a
 		}
 	}
 
-	return payloads
+	// Deduplicate by value: identical values produce identical requests. The
+	// verifier re-detects the actual context from the response, so the
+	// payload's claimed Context metadata adds nothing for dupes — and
+	// multi-context injections share several templates across context lists.
+	// On collision the higher-scored entry wins (better metadata), except
+	// DOM-typed entries which always win: they carry framework-sink
+	// descriptions that make findings more actionable on framework targets.
+	seen := make(map[string]int, len(payloads))
+	out := payloads[:0]
+	for _, p := range payloads {
+		if idx, ok := seen[p.Value]; ok {
+			if p.Type == payload.PayloadTypeDOM && out[idx].Type != payload.PayloadTypeDOM {
+				out[idx] = p
+			} else if p.Score > out[idx].Score {
+				out[idx] = p
+			}
+			continue
+		}
+		seen[p.Value] = len(out)
+		out = append(out, p)
+	}
+	return out
 }
 
 // buildAuthState extracts authentication state from a scan target for
@@ -834,7 +863,7 @@ func (e *Engine) sendWithRetry(ctx context.Context, injection model.InjectionPoi
 func (e *Engine) buildFindingFromResponse(resp *http.Response, body []byte, modifiedTarget model.Target, injection model.InjectionPoint, p payload.Payload, csp *analyze.CSPPolicy) (*model.Finding, verify.WAFResult) {
 	bodyStr := string(body)
 	bodyLower := strings.ToLower(bodyStr)
-	wafResult := verify.DetectWAFWithLower(resp, bodyLower, bodyStr)
+	wafResult := verify.DetectWAFWithLower(resp, bodyLower)
 	vResult := e.verifier.VerifyWithThreshold(bodyStr, bodyLower, p, injection, csp, wafResult, e.config.ConfidenceMin)
 	if !vResult.Vulnerable {
 		return nil, wafResult

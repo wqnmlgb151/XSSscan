@@ -135,9 +135,9 @@ func TestDetectWAF_RealServer(t *testing.T) {
 // TestWAFStrategiesSync verifies that verify.GetWAFStrategies delegates to
 // payload.GetWAFStrategies (the single source of truth) for every known WAF.
 func TestWAFStrategiesSync(t *testing.T) {
-	allWAFs := []string{
-		"Cloudflare", "AWS WAF", "Akamai", "ModSecurity",
-		"F5 BIG-IP", "Imperva", "Sucuri", "Wordfence",
+	allWAFs := make([]string, 0, len(wafSignatures))
+	for _, sig := range wafSignatures {
+		allWAFs = append(allWAFs, sig.Name)
 	}
 
 	for _, wafName := range allWAFs {
@@ -207,7 +207,10 @@ func TestWAFStrategies_AllEncodingMutationsCovered(t *testing.T) {
 		payload.MutationHexEntityMixed,
 		payload.MutationNullByteInjection,
 	}
-	wafNames := []string{"Cloudflare", "AWS WAF", "Akamai", "ModSecurity", "F5 BIG-IP", "Imperva", "Sucuri", "Wordfence"}
+	wafNames := make([]string, 0, len(wafSignatures))
+	for _, sig := range wafSignatures {
+		wafNames = append(wafNames, sig.Name)
+	}
 
 	covered := make(map[payload.MutationType]bool)
 	for _, waf := range wafNames {
@@ -223,7 +226,10 @@ func TestWAFStrategies_AllEncodingMutationsCovered(t *testing.T) {
 }
 
 func TestGetWAFStrategies_IncludesEncodingMutations(t *testing.T) {
-	wafNames := []string{"Cloudflare", "AWS WAF", "Akamai", "ModSecurity", "F5 BIG-IP", "Imperva", "Sucuri", "Wordfence"}
+	wafNames := make([]string, 0, len(wafSignatures))
+	for _, sig := range wafSignatures {
+		wafNames = append(wafNames, sig.Name)
+	}
 	encoding := map[payload.MutationType]bool{
 		payload.MutationDoubleURLEncode:  true,
 		payload.MutationUnicodeFullwidth: true,

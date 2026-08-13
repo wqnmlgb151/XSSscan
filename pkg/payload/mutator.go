@@ -295,14 +295,7 @@ func IsEncodingMutation(mt MutationType) bool {
 }
 
 // GetWAFStrategies maps a WAF name to its effective mutation types.
-//
-// NOTE: This mapping parallels BypassStrategies in pkg/verify/waf.go.
-// The two must be kept in sync — pkg/verify imports pkg/payload (for
-// payload.Payload type), so pkg/payload cannot import pkg/verify here.
-//
-// When updating WAF strategies, update both locations. The sync is enforced
-// by TestWAFStrategiesSync in pkg/verify/waf_test.go which compares this
-// function's output against verify.GetWAFStrategies() for every known WAF.
+// Single source of truth: verify.GetWAFStrategies delegates here.
 func GetWAFStrategies(wafName string) []MutationType {
 	switch wafName {
 	case "Cloudflare":
@@ -334,9 +327,9 @@ func GetWAFStrategies(wafName string) []MutationType {
 		// fullwidth folding are the known bypasses.
 		return []MutationType{MutationNewlineInjection, MutationTabInjection, MutationUnicodeFullwidth, MutationCommentInjection, MutationSpaceToSlash}
 	case "Safedog":
-		// Safedog keyword rules are case-sensitive in places — case mixing
-		// and entity encoding are the classic bypasses.
-		return []MutationType{MutationCaseMix, MutationEntityAngleBrackets, MutationEntityPlusCase, MutationAltFunction, MutationSpaceToSlash}
+		// Safedog keyword rules are case-sensitive in places — case mixing,
+		// entity encoding, and JS unicode escapes are the classic bypasses.
+		return []MutationType{MutationCaseMix, MutationEntityAngleBrackets, MutationEntityPlusCase, MutationAltFunction, MutationSpaceToSlash, MutationUnicodeEscapeJS}
 	case "BaoTa WAF":
 		// BaoTa intercepts keyword blocks — string concat and backtick calls
 		// slip its literal-match rules.

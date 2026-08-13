@@ -179,7 +179,7 @@ func (a *CSPAnalyzer) detectBypasses(policy *CSPPolicy) []CSPBypass {
 	// conversion in reports.
 	jsonpPatterns := []string{
 		"googleapis.com", "ajax.aspnetcdn.com", "cdnjs.cloudflare.com",
-		"ajax.googleapis.com", "cdn.jsdelivr.net", "unpkg.com",
+		"cdn.jsdelivr.net", "unpkg.com",
 		"code.jquery.com", "maxcdn.bootstrapcdn.com", "stackpath.bootstrapcdn.com",
 		"cdn.bootcss.com", "s0.wp.com", "secure.gravatar.com",
 		"apis.google.com", "www.google.com", "accounts.google.com",

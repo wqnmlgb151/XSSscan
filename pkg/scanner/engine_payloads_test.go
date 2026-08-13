@@ -83,16 +83,18 @@ func TestGeneratePayloads_BasicInjection(t *testing.T) {
 		t.Fatal("Expected at least one payload for HTML body context")
 	}
 
-	// Should include context-specific payloads + polyglots
+	// Should include the html_body polyglot — dedup by value must not drop it
+	// (the generator's core-template copy wins the collision, same value).
+	const polyglotValue = "javascript:/*--></title></textarea></style></script></xmp><svg/onload=alert(1)>"
 	hasPolyglot := false
 	for _, p := range payloads {
-		if p.Score == 0.8 {
+		if p.Value == polyglotValue {
 			hasPolyglot = true
 			break
 		}
 	}
 	if !hasPolyglot {
-		t.Error("Expected polyglot payloads (score 0.8) in output")
+		t.Error("Expected html_body polyglot value in output after dedup")
 	}
 }
 

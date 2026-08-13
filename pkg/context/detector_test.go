@@ -1,6 +1,7 @@
 package context
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -243,7 +244,7 @@ func TestOnloadAttributeInIMG(t *testing.T) {
 // of the 19 injection contexts gets ≥3 typical HTML/JS structures and the
 // classifier must identify it. Guards the "context-aware" core promise.
 func TestDetectContexts_All19Contexts(t *testing.T) {
-	const marker = "MARKER"
+	const marker = "xsscanabc123def456" // realistic lowercase marker (GenerateMarker format)
 	d := NewDetector()
 
 	// helper: assert the detected contexts contain the expected type
@@ -258,9 +259,9 @@ func TestDetectContexts_All19Contexts(t *testing.T) {
 	}
 
 	tests := []struct {
-		name     string
+		name       string
 		structures []string // 3+ typical reflection structures per context
-		want     ContextType
+		want       ContextType
 	}{
 		{
 			name: "html_body",
@@ -413,7 +414,11 @@ func TestDetectContexts_All19Contexts(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			for i, s := range tt.structures {
-				got, err := d.Detect(Reflection{Content: s, ParamValue: marker})
+				// Structures use the MARKER placeholder for readability; the
+				// real lowercase marker must be substituted to exercise the
+				// tokenizer's lowercasing of tag/attr names.
+				content := strings.ReplaceAll(s, "MARKER", marker)
+				got, err := d.Detect(Reflection{Content: content, ParamValue: marker})
 				if err != nil {
 					t.Fatalf("structure %d: Detect error: %v", i, err)
 				}

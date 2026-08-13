@@ -37,7 +37,7 @@
 
 - **上下文感知 Payload 生成** — 通过 HTML 词法分析器识别 19 种注入上下文，为每种上下文生成针对性的 payload
 - **反射型 XSS 检测** — 基于 marker 的反射检测，模糊匹配（URL 编码、HTML 实体、截断）覆盖各种变形
-- **存储型 XSS 检测** — 双阶段检测：注入唯一 marker + 轮询触发页面
+- **存储型 XSS 检测** — 双阶段检测：注入唯一 marker + 轮询触发页面；`--trigger-url` 可省略，自动同域爬虫发现触发 URL（每目标仅爬取一次）
 - **DOM XSS 检测** — 无头 Chrome 双层检测：CDP sink hook（innerHTML/eval/document.write 等 11 种 sink）+ 事后 DOM 扫描兜底。覆盖 11 种 source
 - **Blind XSS 检测** — 内置 HTTP 回调服务器，`sync.Cond` 零 CPU 等待
 
@@ -198,10 +198,15 @@ cat urls.txt | ./xsscan --silent
 ### 存储型 XSS
 
 ```bash
-# 需要指定触发页面（存储内容展示的位置）
+# 指定触发页面（存储内容展示的位置）
 ./xsscan --url "http://target.com/feedback" -X POST \
   -d "message=test" \
   --stored --trigger-url "http://target.com/view-feedback"
+
+# 不指定 --trigger-url 时自动发现：同域爬虫（BFS，深度 2，最多 20 页）
+# 发现的每个页面都会作为触发 URL 轮询，整个扫描只爬取一次
+./xsscan --url "http://target.com/comment" -X POST \
+  -d "body=test" --stored
 
 # 自定义轮询参数
 ./xsscan --url "http://target.com/comment" -X POST \
@@ -213,11 +218,24 @@ cat urls.txt | ./xsscan --silent
 ### Blind XSS（回调服务器）
 
 ```bash
-# 自动启动 HTTP 回调服务器，扫描后等待 30 秒
+# 第三方回调地址（Burp Collaborator、xss.ht 等）— payload 直接指向该地址
 ./xsscan --url "http://target.com/contact" -X POST \
   -d "message=test" \
   --callback "https://your-server.com/xss"
+
+# 本地回调 — loopback 地址自动启动内置 HTTP 监听器（省略端口默认 :80）
+./xsscan --url "http://target.com/contact" -X POST \
+  -d "message=test" \
+  --callback "localhost:8080"
+
+# DNS 外带模式 — 裸域名（无 scheme/端口）生成 <xsscan-随机>.<域名> 子域名
+# payload，目标只需发出 DNS 查询即证明执行（HTTP 出口被封时仍然有效）
+./xsscan --url "http://target.com/contact" -X POST \
+  -d "message=test" \
+  --callback "abc.dnslog.cn"
 ```
+
+扫描后等待 30 秒收集回调（`sync.Cond` 零 CPU 等待）。
 
 ---
 

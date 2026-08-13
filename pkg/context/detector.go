@@ -80,9 +80,10 @@ func (d *Detector) detectAll(ref Reflection) []Context {
 			tagName, hasAttr := tokenizer.TagName()
 			name := string(tagName)
 			// TAG NAME injection: <MARKER>content</MARKER> — marker reflected
-			// in the element name itself. The tokenizer lowercases tag names,
-			// so compare case-insensitively.
-			if strings.Contains(strings.ToLower(name), strings.ToLower(value)) {
+			// in the element name itself. The tokenizer lowercases tag names
+			// and markers are lowercase (GenerateMarker), so plain Contains
+			// suffices — no ToLower needed on the hot path.
+			if strings.Contains(name, value) {
 				contexts = append(contexts, Context{
 					Type:        ContextHTMLTag,
 					TagName:     name,
@@ -180,8 +181,9 @@ func (d *Detector) detectAttrContexts(tokenizer *html.Tokenizer, tagName, value 
 		attrVal := string(val)
 		// Attribute NAME injection: marker reflected in the attribute name
 		// itself (<div MARKER=...>) — exploitable via on* event injection.
-		// The tokenizer lowercases attribute names; compare case-insensitively.
-		if strings.Contains(strings.ToLower(attrName), strings.ToLower(value)) {
+		// The tokenizer lowercases attribute names and markers are lowercase
+		// (GenerateMarker), so plain Contains suffices.
+		if strings.Contains(attrName, value) {
 			*contexts = append(*contexts, Context{
 				Type:        ContextHTMLAttrName,
 				TagName:     tagName,

@@ -98,10 +98,12 @@ func NewFrameworkDetector() *FrameworkDetector {
 // Version info enables version-specific payloads (e.g., Vue 2 sandbox
 // escapes are dead in Vue 3 — sandbox removed).
 var versionPatterns = map[string]*regexp.Regexp{
-	"React":    regexp.MustCompile(`react(?:-dom)?(?:\.min)?\.js(?:\?|@)v?=?([0-9]+\.[0-9]+\.[0-9]+)`),
-	"Vue":      regexp.MustCompile(`vue(?:\.min)?\.js(?:\?|@)v?=?([0-9]+\.[0-9]+\.[0-9]+)`),
-	"Angular":  regexp.MustCompile(`angular(?:\.min)?\.js(?:\?|@)v?=?([0-9]+\.[0-9]+\.[0-9]+)`),
-	"jQuery":   regexp.MustCompile(`jquery(?:\.min)?\.js(?:\?|@)v?=?([0-9]+\.[0-9]+\.[0-9]+)`),
+	// Two URL families: query-string (?v=1.2.3 / @v=1.2.3) and npm-style
+	// path embedding (/react@18.2.0/umd/react.production.min.js).
+	"React":   regexp.MustCompile(`react(?:-dom)?(?:@([0-9]+\.[0-9]+\.[0-9]+)/|\.js(?:\?|@)v?=?([0-9]+\.[0-9]+\.[0-9]+))`),
+	"Vue":     regexp.MustCompile(`vue(?:@([0-9]+\.[0-9]+\.[0-9]+)/|\.js(?:\?|@)v?=?([0-9]+\.[0-9]+\.[0-9]+))`),
+	"Angular": regexp.MustCompile(`angular(?:@([0-9]+\.[0-9]+\.[0-9]+)/|\.js(?:\?|@)v?=?([0-9]+\.[0-9]+\.[0-9]+))`),
+	"jQuery":  regexp.MustCompile(`jquery(?:@([0-9]+\.[0-9]+\.[0-9]+)/|[-.]\d+\.\d+\.\d+(?:\.min)?\.js|(?:\?|@)v?=?([0-9]+\.[0-9]+\.[0-9]+))`),
 }
 
 // Detect scans the response for framework signatures
@@ -138,7 +140,11 @@ func (fd *FrameworkDetector) Detect(resp *http.Response, body string) []Framewor
 func extractVersion(name, body string) string {
 	if re, ok := versionPatterns[name]; ok {
 		if m := re.FindStringSubmatch(body); m != nil {
-			return m[1]
+			// Two capture groups (npm path vs query string); return the first match.
+			if m[1] != "" {
+				return m[1]
+			}
+			return m[2]
 		}
 	}
 	return ""

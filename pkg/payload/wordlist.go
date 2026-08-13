@@ -198,12 +198,16 @@ func init() {
 	// Pre-merge extended wordlist into the core map once at startup.
 	// A defensive copy avoids mutating the shared backing array if
 	// any composite-literal slice later gains spare capacity.
+	// Contexts present ONLY in the extended list must also land in the
+	// map (previously dropped — js_comment/svg/mathml had no templates).
 	for ctxType, ext := range extendedPayloads {
 		if core, ok := payloadTemplates[ctxType]; ok {
 			merged := make([]PayloadTemplate, 0, len(core)+len(ext))
 			merged = append(merged, core...)
 			merged = append(merged, ext...)
 			payloadTemplates[ctxType] = merged
+		} else {
+			payloadTemplates[ctxType] = ext
 		}
 	}
 }

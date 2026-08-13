@@ -465,10 +465,29 @@ func setupCallbackServer(callbackURL string, engine *scanner.Engine) *callback.S
 		return nil
 	}
 	parsedURL, err := url.Parse(callbackURL)
-	if err != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") {
+	if err != nil {
 		engine.SetCallbackURL(callbackURL)
 		return nil
 	}
+
+	// DNS exfil mode: bare hostname (no scheme, no colon) → dnslog-style
+	// subdomain payloads with a run-unique prefix.
+	if parsedURL.Scheme == "" && !strings.Contains(callbackURL, ":") {
+		unique := fmt.Sprintf("xsscan-%d.%s", time.Now().UnixNano()%1e9, callbackURL)
+		engine.SetGenerator(payload.NewGeneratorWithDNSCallback(unique))
+		color.Cyan("[*] DNS callback mode: payloads will query %s\n", unique)
+		return nil
+	}
+
+	// Third-party mode: remote host (Burp Collaborator, xss.ht, etc.) —
+	// use it directly as the payload target; no local listener.
+	if parsedURL.Host != "" && !isLoopbackHost(parsedURL.Hostname()) {
+		engine.SetCallbackURL(callbackURL)
+		color.Cyan("[*] Using external callback target: %s\n", callbackURL)
+		return nil
+	}
+
+	// Local mode: empty/loopback host → start the built-in listener.
 	callbackPort := parsedURL.Port()
 	if callbackPort == "" {
 		callbackPort = "80"
@@ -485,6 +504,15 @@ func setupCallbackServer(callbackURL string, engine *scanner.Engine) *callback.S
 	color.Cyan("[*] Callback server listening on %s\n", srv.BaseURL())
 	engine.SetCallbackURL(srv.BaseURL())
 	return srv
+}
+
+// isLoopbackHost reports whether host is localhost or an IP loopback.
+func isLoopbackHost(host string) bool {
+	host = strings.ToLower(host)
+	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+		return true
+	}
+	return false
 }
 
 func setupSignalHandler(cancel context.CancelFunc) {

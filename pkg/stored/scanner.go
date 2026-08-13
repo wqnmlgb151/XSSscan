@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/xsscan/xsscan/pkg/analyze"
+	"github.com/xsscan/xsscan/pkg/crawler"
 	"github.com/xsscan/xsscan/pkg/httpclient"
 	"github.com/xsscan/xsscan/pkg/internal/request"
 	"github.com/xsscan/xsscan/pkg/model"
@@ -54,9 +55,37 @@ type Config struct {
 
 // Scanner performs stored XSS detection.
 type Scanner struct {
-	client *http.Client
-	config Config
-	logger *zap.Logger
+	client   *http.Client
+	config   Config
+	logger   *zap.Logger
+	crawler  *crawler.Crawler
+}
+
+// discoverTriggerURLs returns the configured trigger URLs, or — when none are
+// given — auto-discovers same-host pages via the built-in crawler (BFS from
+// the injection target). Covers stored reflections into any publicly
+// reachable page (comments on listing pages, profiles, search results)
+// without requiring the user to know the display location in advance.
+func (s *Scanner) discoverTriggerURLs(ctx context.Context, seedURL string, headers map[string]string) []string {
+	if len(s.config.TriggerURLs) > 0 {
+		return s.config.TriggerURLs
+	}
+	if s.crawler == nil {
+		s.crawler = crawler.NewCrawlerWithConfig(s.client, crawler.CrawlerConfig{
+			MaxDepth:     2,
+			MaxPages:     20,
+			SameHostOnly: true,
+			ExtraHeaders: headers,
+		})
+	}
+	result, err := s.crawler.Crawl(ctx, seedURL)
+	if err != nil || len(result.URLs) == 0 {
+		return []string{seedURL}
+	}
+	s.logger.Info("auto-discovered trigger URLs via crawler",
+		zap.String("seed", seedURL),
+		zap.Int("count", len(result.URLs)))
+	return result.URLs
 }
 
 // Injection represents a single stored XSS test: inject a marker at the entry
@@ -287,10 +316,7 @@ func (s *Scanner) submitMarker(ctx context.Context, target model.Target) error {
 // pollTriggerURLs checks each trigger URL for the marker, polling up to MaxPolls times.
 // Within each poll round, trigger URLs are fetched concurrently.
 func (s *Scanner) pollTriggerURLs(ctx context.Context, headers map[string]string, inj Injection) (bool, string) {
-	triggerURLs := s.config.TriggerURLs
-	if len(triggerURLs) == 0 {
-		triggerURLs = []string{inj.Target.URL}
-	}
+	triggerURLs := s.discoverTriggerURLs(ctx, inj.Target.URL, headers)
 
 	for poll := 0; poll < s.config.MaxPolls; poll++ {
 		if poll > 0 {

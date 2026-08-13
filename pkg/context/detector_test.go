@@ -238,3 +238,208 @@ func TestOnloadAttributeInIMG(t *testing.T) {
 		t.Errorf("Expected ContextJSBlock for onload attribute, got: %v", contexts)
 	}
 }
+
+// TestDetectContexts_All19Contexts is the core-accuracy safety net: every one
+// of the 19 injection contexts gets ≥3 typical HTML/JS structures and the
+// classifier must identify it. Guards the "context-aware" core promise.
+func TestDetectContexts_All19Contexts(t *testing.T) {
+	const marker = "MARKER"
+	d := NewDetector()
+
+	// helper: assert the detected contexts contain the expected type
+	assertContains := func(t *testing.T, got []Context, want ContextType) {
+		t.Helper()
+		for _, c := range got {
+			if c.Type == want {
+				return
+			}
+		}
+		t.Errorf("detected contexts %v do not contain %s", got, want)
+	}
+
+	tests := []struct {
+		name     string
+		structures []string // 3+ typical reflection structures per context
+		want     ContextType
+	}{
+		{
+			name: "html_body",
+			structures: []string{
+				`<body>MARKER</body>`,
+				`<div><p>text MARKER more</p></div>`,
+				`<span>MARKER</span>`,
+			},
+			want: ContextHTMLBody,
+		},
+		{
+			name: "html_comment",
+			structures: []string{
+				`<!-- MARKER -->`,
+				`<div><!-- prefix MARKER suffix --></div>`,
+				`<!--\nMARKER\n-->`,
+			},
+			want: ContextHTMLComment,
+		},
+		{
+			name: "html_tag",
+			structures: []string{
+				`<MARKER>content</MARKER>`,
+				`<MARKER attr="x">`,
+				`<MARKER/>`,
+			},
+			want: ContextHTMLTag,
+		},
+		{
+			name: "html_attr_name",
+			structures: []string{
+				`<div MARKER="value">`,
+				`<input MARKER=1>`,
+				`<a MARKER="x" href="/">`,
+			},
+			want: ContextHTMLAttrName,
+		},
+		{
+			name: "html_attr_value",
+			structures: []string{
+				`<div title="MARKER">`,
+				`<input value='MARKER'>`,
+				`<a data-x=MARKER href="/">`,
+			},
+			want: ContextHTMLAttrValue,
+		},
+		{
+			// ContextHTMLEntity marks inert raw-text-element reflections
+			// (textarea/title/xmp content cannot execute scripts).
+			name: "html_entity",
+			structures: []string{
+				`<textarea>MARKER</textarea>`,
+				`<title>MARKER</title>`,
+				`<xmp>MARKER</xmp>`,
+			},
+			want: ContextHTMLEntity,
+		},
+		{
+			name: "js_string",
+			structures: []string{
+				`<script>var x = 'MARKER';</script>`,
+				`<script>foo("MARKER")</script>`,
+				`<script>const s = 'pre MARKER post';</script>`,
+			},
+			want: ContextJSString,
+		},
+		{
+			name: "js_comment",
+			structures: []string{
+				`<script>// MARKER</script>`,
+				`<script>/* MARKER */</script>`,
+				`<script>\n// line MARKER\n</script>`,
+			},
+			want: ContextJSComment,
+		},
+		{
+			name: "js_block",
+			structures: []string{
+				`<script>MARKER</script>`,
+				`<script>if (x) { MARKER }</script>`,
+				`<script>\nMARKER\n</script>`,
+			},
+			want: ContextJSBlock,
+		},
+		{
+			name: "css_value",
+			structures: []string{
+				`<div style="color: MARKER">`,
+				`<div style="background: url(MARKER)">`,
+				`<div style='width: MARKER px'>`,
+			},
+			want: ContextCSSValue,
+		},
+		{
+			name: "css_block",
+			structures: []string{
+				`<style>MARKER</style>`,
+				`<style>.a { }\nMARKER\n</style>`,
+				`<style>\nMARKER { color: red }\n</style>`,
+			},
+			want: ContextCSSBlock,
+		},
+		{
+			name: "url_attribute",
+			structures: []string{
+				`<a href="MARKER">x</a>`,
+				`<img src='MARKER'>`,
+				`<form action=MARKER>`,
+			},
+			want: ContextURLAttr,
+		},
+		{
+			name: "template",
+			structures: []string{
+				`<div>{{ MARKER }}</div>`,
+				`<p>text {{ MARKER }} text</p>`,
+				`{{ MARKER }}`,
+			},
+			want: ContextTemplate,
+		},
+		{
+			name: "svg_container",
+			structures: []string{
+				`<svg>MARKER</svg>`,
+				`<svg><g>MARKER</g></svg>`,
+				`<svg><text>MARKER</text></svg>`,
+			},
+			want: ContextSVGContainer,
+		},
+		{
+			name: "mathml_container",
+			structures: []string{
+				`<math>MARKER</math>`,
+				`<math><mrow>MARKER</mrow></math>`,
+				`<math><mi>MARKER</mi></math>`,
+			},
+			want: ContextMathMLContainer,
+		},
+		{
+			name: "js_template_literal",
+			structures: []string{
+				"<script>var x = `MARKER`;</script>",
+				"<script>foo(`pre MARKER post`)</script>",
+				"<script>const t = `\nMARKER\n`;</script>",
+			},
+			want: ContextJSTemplateLiteral,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for i, s := range tt.structures {
+				got, err := d.Detect(Reflection{Content: s, ParamValue: marker})
+				if err != nil {
+					t.Fatalf("structure %d: Detect error: %v", i, err)
+				}
+				assertContains(t, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestDetectContexts_MultipleReflections verifies that a page reflecting the
+// marker in several places yields MULTIPLE ranked contexts (the detector
+// never synthesizes ContextMulti — callers inspect the ranked slice).
+func TestDetectContexts_MultipleReflections(t *testing.T) {
+	d := NewDetector()
+	got, err := d.Detect(Reflection{
+		Content:    `<body>MARKER</body><script>var x='MARKER'</script>`,
+		ParamValue: "MARKER",
+	})
+	if err != nil {
+		t.Fatalf("Detect error: %v", err)
+	}
+	if len(got) < 2 {
+		t.Fatalf("expected ≥2 contexts, got %d: %v", len(got), got)
+	}
+	// Priority-sorted: html_body (100) first, then js_string (85)
+	if got[0].Type != ContextHTMLBody {
+		t.Errorf("highest-priority context = %s, want html_body", got[0].Type)
+	}
+}

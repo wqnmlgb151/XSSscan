@@ -101,6 +101,11 @@ func (e *Engine) SetCallbackURL(cbURL string) {
 	e.generator = payload.NewGeneratorWithCallback(cbURL)
 }
 
+// SetGenerator replaces the payload generator (DNS callback mode etc.).
+func (e *Engine) SetGenerator(g *payload.Generator) {
+	e.generator = g
+}
+
 func (e *Engine) SetPayloadPreset(preset payload.PayloadPreset) {
 	e.generator.SetPreset(preset)
 }

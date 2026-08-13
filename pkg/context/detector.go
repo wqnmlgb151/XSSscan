@@ -79,6 +79,18 @@ func (d *Detector) detectAll(ref Reflection) []Context {
 		case html.StartTagToken, html.SelfClosingTagToken:
 			tagName, hasAttr := tokenizer.TagName()
 			name := string(tagName)
+			// TAG NAME injection: <MARKER>content</MARKER> — marker reflected
+			// in the element name itself. The tokenizer lowercases tag names,
+			// so compare case-insensitively.
+			if strings.Contains(strings.ToLower(name), strings.ToLower(value)) {
+				contexts = append(contexts, Context{
+					Type:        ContextHTMLTag,
+					TagName:     name,
+					Raw:         text.Snippet(name, value, 50),
+					Enclosed:    true,
+					ParentStack: copyStack(parentStack),
+				})
+			}
 			switch name {
 			case "script":
 				inScript = true
@@ -166,6 +178,20 @@ func (d *Detector) detectAttrContexts(tokenizer *html.Tokenizer, tagName, value 
 		}
 		attrName := string(key)
 		attrVal := string(val)
+		// Attribute NAME injection: marker reflected in the attribute name
+		// itself (<div MARKER=...>) — exploitable via on* event injection.
+		// The tokenizer lowercases attribute names; compare case-insensitively.
+		if strings.Contains(strings.ToLower(attrName), strings.ToLower(value)) {
+			*contexts = append(*contexts, Context{
+				Type:        ContextHTMLAttrName,
+				TagName:     tagName,
+				AttrName:    attrName,
+				Raw:         text.Snippet(attrName, value, 50),
+				Enclosed:    true,
+				ParentStack: copyStack(parentStack),
+			})
+			continue
+		}
 		if strings.Contains(attrVal, value) {
 			ctxType := ContextHTMLAttrValue
 			switch {

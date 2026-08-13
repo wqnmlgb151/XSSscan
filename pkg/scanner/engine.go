@@ -579,7 +579,7 @@ func (e *Engine) scanPayload(ctx context.Context, injection model.InjectionPoint
 			}
 			e.trackWAF(mutWAF)
 			if mutFinding != nil {
-				e.wafTracker.Report(true, "", true)
+				e.wafTracker.Report(true, wafName, true)
 				mutFinding.Description = findingDescription(injection, mutatedPayload) + " [WAF bypass: " + string(mut.Type) + "]"
 				mutFinding.Payload = mut.Value
 				return mutFinding, nil

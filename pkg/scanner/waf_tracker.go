@@ -32,12 +32,15 @@ func (t *WAFTracker) Report(detected bool, name string, bypassed bool) {
 }
 
 // Result returns the accumulated WAF info, or nil if no WAF was detected.
+// The name may be empty when Report was called with an empty name
+// (e.g., bypass success before signature identification) — nil-safe.
 func (t *WAFTracker) Result() *model.WAFInfo {
 	if atomic.LoadInt64(&t.detected) == 0 {
 		return nil
 	}
+	name, _ := t.name.Load().(string)
 	return &model.WAFInfo{
-		Name:     t.name.Load().(string),
+		Name:     name,
 		Bypassed: atomic.LoadInt64(&t.bypassed) == 1,
 	}
 }

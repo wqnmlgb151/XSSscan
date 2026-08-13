@@ -46,8 +46,9 @@
 - **自动表单发现 + 链接参数挖掘** — 自动提取 `<form>` 字段生成扫描目标；从同域链接 `<a href="...?param=value">` 提取参数名自动扫描（dalfox Grep 特性）
 - **上下文探针** (`--probe`) — 扫描前发送安全探针验证上下文可利用性，多维探测（结构突围 + 引号突围），检测到框架时自动跳过（模板表达式无 HTML 结构字符）
 - **WAF 感知绕过** — 17 种变异策略（11 结构 + 6 编码），按 WAF 类型精准选择，首次检测到 WAF 自动启用
-- **置信度评分** — 0.0–1.0 评分体系，含交互效应（WAF×无净化、语法×上下文逃逸）
-- **语义去重** — 5 元组 key（URL+参数+上下文+向量+exploit 技术），URL 归一化，噪音 49→9
+- **置信度评分** — 0.0–1.0 评分体系，含交互效应（WAF×无净化、语法×上下文逃逸）；结构分析封顶 0.90，浏览器执行验证后才可达 100%
+- **语义去重 + 同参聚合** — 5 元组 key（URL+参数+上下文+向量+exploit 技术）去重后，同参数同上下文折叠为一条 finding，payload 变体作为子项展示
+- **引号类型门控** — 检测到 JS 字符串反射的引号类型后，只发送匹配该引号的逃逸 payload（`"-alert(1)-"` 不再发往单引号反射点）
 - **过滤发现** — XSStrike 风格 FilterProfile：探测服务器过滤行为，自动剪枝无效 payload 类
 - **JS 子上下文分析** — 事件属性内 JS 字符串/模板字面量细分（XSStrike 核心思想）
 
@@ -553,10 +554,11 @@ Target URL
 | ContextBreak | 0.25 | Payload 逃逸了注入上下文 |
 | SyntaxValid | 0.15 | Payload 保持有效语法 |
 | NoSanitization | 0.25 | 未检测到过滤/编码 |
-| CSPWeak | 0.15 | CSP 弱或可绕过 |
+| CSPWeak | 0.10 | CSP 弱或可绕过 |
 
-**惩罚项：** LengthLimited -0.10, WAFBlocked -0.10  
+**惩罚项：** LengthLimited ×0.9, WAFBlocked ×0.9（乘法，叠加生效）  
 **交互效应：** ContextBreak×SyntaxValid (×0.4), NoSanitization×WAF (×0.3)  
+**置信度封顶：** 结构分析最高 **0.90** —— 只有 `--verify-execution` 浏览器确认（+0.15，上限 1.0）才能达到 100%。反射不等于执行。  
 **阈值：** 0.60（可通过 `--confidence` 调整）
 
 ---
@@ -569,7 +571,7 @@ Target URL
 | 执行验证 | 4-worker Chrome 并发 |
 | 爬虫并发 | 10-worker BFS 深度并行 |
 | 上下文类型 | 19 种 |
-| WAF 签名 | 8 种 + 17 种绕过策略（11 结构 + 6 编码） |
+| WAF 签名 | 12 种（8 国际 + 阿里云/腾讯云/安全狗/宝塔）+ 17 种绕过策略（11 结构 + 6 编码） |
 | DOM XSS Source | 11 种 + CDP sink hook（11 种 sink） |
 | 框架 Payload | 7 种（React, Vue, Angular, Svelte, jQuery, HTMX, Jinja2） |
 | 零数据竞争 | `go test -race` 全通过 |

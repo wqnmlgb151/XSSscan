@@ -309,6 +309,10 @@ dispatch:
 		result.Findings = e.verifyFindingsWithAuth(ctx, result.Findings, authState)
 	}
 
+	// Aggregate same-param same-context findings into single entries with
+	// payload variant lists — 9 report lines for one parameter is noise.
+	result.Findings = AggregateFindings(result.Findings)
+
 	result.Stats = model.ScanStats{
 		StartTime:       startTime.UnixMilli(),
 		EndTime:         time.Now().UnixMilli(),
@@ -388,11 +392,21 @@ func (e *Engine) generatePayloads(injection model.InjectionPoint, frameworks []a
 	// positive (quotes are inert in body text). Framework payloads are
 	// gated the same way: Vue template escapes are inert in body text.
 	contextSet := make(map[ctx.ContextType]bool, len(injection.Contexts))
+	quoteChars := make(map[ctx.ContextType]string, len(injection.Contexts))
 	for _, c := range injection.Contexts {
 		contextSet[c.Type] = true
+		if c.QuoteChar != "" && quoteChars[c.Type] == "" {
+			quoteChars[c.Type] = c.QuoteChar
+		}
 	}
 	if len(contextSet) == 0 {
 		contextSet[ctx.ContextHTMLBody] = true // fallback mirrors Generator
+	}
+
+	// quoteOK gates quote-breakout payloads against the detected string
+	// quote type (same rule as payload.QuoteCompatible in the Generator).
+	quoteOK := func(tmpl payload.PayloadTemplate) bool {
+		return contextSet[tmpl.Context] && payload.QuoteCompatible(tmpl.Value, tmpl.Context, quoteChars[tmpl.Context])
 	}
 
 	for _, fw := range frameworks {
@@ -435,14 +449,14 @@ func (e *Engine) generatePayloads(injection model.InjectionPoint, frameworks []a
 	}
 
 	for _, tmpl := range payload.PolyglotPayloads() {
-		if contextSet[tmpl.Context] {
+		if quoteOK(tmpl) {
 			payloads = append(payloads, payloadFromTemplate(tmpl, payload.PayloadTypeReflected, 0.8))
 		}
 	}
 
 	if e.config.WAFBypass {
 		for _, tmpl := range payload.AllWAFBypassPayloads() {
-			if contextSet[tmpl.Context] {
+			if quoteOK(tmpl) {
 				payloads = append(payloads, payloadFromTemplate(tmpl, payload.PayloadTypeReflected, 0.7))
 			}
 		}

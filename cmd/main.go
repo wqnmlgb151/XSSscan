@@ -113,7 +113,7 @@ const (
 //	make build VERSION=1.0.0
 //
 // x.y.z: x = major (architectural redesign), y = feature, z = bug fix.
-var Version = "0.9.5"
+var Version = "0.9.6"
 
 var cfg ScanConfig
 
@@ -1064,7 +1064,11 @@ func printResults(result *model.ScanResult, duration time.Duration) {
 		fmt.Println()
 		fmt.Printf("      Param: %s | Confidence: %.0f%% | Context: %v\n",
 			f.Parameter, f.Confidence*100, f.Contexts)
-		fmt.Printf("      Payload: %s\n\n", f.Payload)
+		fmt.Printf("      Payload: %s\n", f.Payload)
+		if len(f.Payloads) > 1 {
+			fmt.Printf("      Variants (%d): %s\n", len(f.Payloads), truncateStr(strings.Join(f.Payloads, ", "), 120))
+		}
+		fmt.Println()
 	}
 }
 

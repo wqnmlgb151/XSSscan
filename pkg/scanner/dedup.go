@@ -48,7 +48,7 @@ var payloadPatterns = []struct {
 	{VectorJSBreakout, regexp.MustCompile(`^['";\s]['"]?[-;]`)}, // ';alert(1)// — JS context breakout
 	{VectorCommentBreakout, regexp.MustCompile(`-->|/\*`)},      // HTML/JS comment breakout
 	{VectorTagInjection, regexp.MustCompile(`(?i)^<\s*(script|img|svg|details|math|body|iframe|object|embed|video|audio|source|marquee|link|base|meta|style)`)},
-	{VectorEventHandler, xsspatterns.EventHandlerAssignRe},           // onerror=, onload=, etc.
+	{VectorEventHandler, xsspatterns.EventHandlerAssignRe},            // onerror=, onload=, etc.
 	{VectorTemplateInject, regexp.MustCompile(`\{\{.*\}\}|\$\{.*\}`)}, // {{ }}, ${ }
 	{VectorURIInjection, regexp.MustCompile(`(?i)^(javascript|data|vbscript|blob|filesystem):`)},
 	{VectorCSSInjection, regexp.MustCompile(`(?i)(expression\s*\(|url\s*\(\s*['"]?javascript)`)},
@@ -242,6 +242,77 @@ func SemanticDedup(findings []model.Finding) []model.Finding {
 	result := make([]model.Finding, 0, len(order))
 	for _, key := range order {
 		result = append(result, *seen[key])
+	}
+	return result
+}
+
+// AggregateFindings collapses findings that share the same URL, parameter,
+// context class, and vulnerability type into a single finding whose
+// Payloads field lists every payload variant. SemanticDedup keeps one
+// finding per exploit technique — a single parameter reflecting 9 payloads
+// still produces 9 near-identical report lines. This is the report-level
+// noise reduction: one line per vulnerable parameter+context, payload
+// variants attached.
+func AggregateFindings(findings []model.Finding) []model.Finding {
+	type aggKey struct {
+		baseURL      string
+		param        string
+		contextClass string
+		vulnType     string
+	}
+	type aggEntry struct {
+		primary  *model.Finding
+		payloads map[string]bool
+		order    []string
+		maxSev   model.Severity
+		verified bool
+	}
+
+	groups := make(map[aggKey]*aggEntry)
+	var keys []aggKey
+
+	for i := range findings {
+		f := &findings[i]
+		key := aggKey{
+			baseURL:      urlutil.NormalizeForDedup(f.URL),
+			param:        f.Parameter,
+			contextClass: string(primaryContextClass(parseContextTypes(f.Contexts))),
+			vulnType:     string(f.Type),
+		}
+		entry, ok := groups[key]
+		if !ok {
+			entry = &aggEntry{primary: f, payloads: map[string]bool{}}
+			groups[key] = entry
+			keys = append(keys, key)
+		}
+		if _, seen := entry.payloads[f.Payload]; !seen {
+			entry.payloads[f.Payload] = true
+			entry.order = append(entry.order, f.Payload)
+		}
+		// Keep the highest-confidence entry as the primary finding;
+		// execution-verified entries win ties.
+		if f.Confidence > entry.primary.Confidence ||
+			(f.Confidence == entry.primary.Confidence && f.ExecutionVerified && !entry.primary.ExecutionVerified) {
+			entry.primary = f
+		}
+		// Severity and verification promote: any variant proves the worst
+		// case of the group.
+		if f.Severity.Score() > entry.maxSev.Score() {
+			entry.maxSev = f.Severity
+		}
+		if f.ExecutionVerified {
+			entry.verified = true
+		}
+	}
+
+	result := make([]model.Finding, 0, len(keys))
+	for _, key := range keys {
+		entry := groups[key]
+		out := *entry.primary
+		out.Payloads = entry.order
+		out.Severity = entry.maxSev
+		out.ExecutionVerified = entry.verified
+		result = append(result, out)
 	}
 	return result
 }

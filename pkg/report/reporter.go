@@ -83,6 +83,12 @@ func (r *Reporter) generateMarkdown(data *ScanData) string {
 		fmt.Fprintf(&b, "- **URL:** %s\n", text.EscapeMarkdown(f.URL))
 		fmt.Fprintf(&b, "- **Parameter:** %s\n", text.EscapeMarkdown(f.Parameter))
 		fmt.Fprintf(&b, "- **Payload:** `%s`\n", text.EscapeMarkdown(f.Payload))
+		if len(f.Payloads) > 1 {
+			b.WriteString("- **Payload Variants:**\n")
+			for _, v := range f.Payloads {
+				fmt.Fprintf(&b, "  - `%s`\n", text.EscapeMarkdown(v))
+			}
+		}
 		if len(f.CSPBypasses) > 0 {
 			b.WriteString("- **CSP Bypasses:**\n")
 			for _, cb := range f.CSPBypasses {
@@ -207,6 +213,15 @@ details summary{cursor:pointer;color:#666;margin-top:8px}
 <div class="code">%s</div>
 `, safePayload)
 
+			// Aggregated variants (same param + context, multiple payloads)
+			if len(f.Payloads) > 1 {
+				b.WriteString(`<details><summary>Payload variants (` + fmt.Sprint(len(f.Payloads)) + `)</summary>` + "\n")
+				for _, v := range f.Payloads {
+					fmt.Fprintf(&b, `<div class="code" style="margin-top:4px">%s</div>`+"\n", html.EscapeString(v))
+				}
+				b.WriteString("</details>\n")
+			}
+
 			// CurlPOC section (pre-built curl command for query parameters)
 			if f.CurlPOC != "" {
 				safeCurlPOC := html.EscapeString(f.CurlPOC)
@@ -309,6 +324,7 @@ type FindingData struct {
 	Parameter           string
 	ParamType           model.ParamType
 	Payload             string
+	Payloads            []string // aggregated variants (same param + context)
 	Contexts            []string
 	Description         string
 	RawRequest          string
@@ -337,6 +353,7 @@ func FromScanResult(result *model.ScanResult, durationMs int64) *ScanData {
 			Parameter:           f.Parameter,
 			ParamType:           f.ParamType,
 			Payload:             f.Payload,
+			Payloads:            f.Payloads,
 			Contexts:            f.Contexts,
 			Description:         f.Description,
 			RawRequest:          f.RawRequest,

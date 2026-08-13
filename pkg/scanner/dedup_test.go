@@ -223,12 +223,12 @@ func TestSemanticDedup_PrefersVerified(t *testing.T) {
 			Confidence: 0.7,
 		},
 		{
-			URL:                "http://target.com/page?q=test",
-			Parameter:          "q",
-			Payload:            `<svg onload=alert(1)>`,
-			Contexts:           []string{"html_body"},
-			Confidence:         0.7,
-			ExecutionVerified:  true,
+			URL:                 "http://target.com/page?q=test",
+			Parameter:           "q",
+			Payload:             `<svg onload=alert(1)>`,
+			Contexts:            []string{"html_body"},
+			Confidence:          0.7,
+			ExecutionVerified:   true,
 			ExecutionConfidence: 0.95,
 		},
 	}
@@ -354,5 +354,68 @@ func TestSemanticDedup_DeterministicOrder(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// TestAggregateFindings_CollapsesSameParamContext verifies that findings
+// sharing URL+param+context class+type collapse into one entry with all
+// payload variants attached.
+func TestAggregateFindings_CollapsesSameParamContext(t *testing.T) {
+	findings := []model.Finding{
+		{URL: "http://a.com/p?q=1", Parameter: "q", Type: model.ReflectedXSS, Payload: `<script>alert(1)</script>`, Contexts: []string{"html_body"}, Confidence: 0.8, Severity: model.High},
+		{URL: "http://a.com/p?q=2", Parameter: "q", Type: model.ReflectedXSS, Payload: `<img src=x onerror=alert(1)>`, Contexts: []string{"html_body"}, Confidence: 0.85, Severity: model.High},
+		{URL: "http://a.com/p?q=3", Parameter: "q", Type: model.ReflectedXSS, Payload: `javascript:alert(1)`, Contexts: []string{"html_body"}, Confidence: 0.9, Severity: model.Critical},
+		{URL: "http://a.com/p?q=4", Parameter: "q", Type: model.ReflectedXSS, Payload: `';alert(1)//`, Contexts: []string{"js_string"}, Confidence: 0.7, Severity: model.High},
+		{URL: "http://a.com/p?s=1", Parameter: "s", Type: model.ReflectedXSS, Payload: `<svg onload=alert(1)>`, Contexts: []string{"html_body"}, Confidence: 0.6, Severity: model.Medium},
+		{URL: "http://a.com/p?q=5", Parameter: "q", Type: model.StoredXSS, Payload: `MARKER`, Contexts: []string{"stored"}, Confidence: 0.85, Severity: model.High},
+	}
+
+	result := AggregateFindings(findings)
+	// Groups: q/html_body/reflected (3), q/js_string (1), s/html_body (1), q/stored (1) = 4
+	if len(result) != 4 {
+		t.Fatalf("expected 4 aggregated findings, got %d", len(result))
+	}
+
+	for _, f := range result {
+		switch {
+		case f.Parameter == "q" && f.Type == model.ReflectedXSS && f.Contexts[0] == "html_body":
+			if len(f.Payloads) != 3 {
+				t.Errorf("expected 3 payload variants, got %d: %v", len(f.Payloads), f.Payloads)
+			}
+			// Primary = highest confidence; severity promotes to group max
+			if f.Confidence != 0.9 || f.Severity != model.Critical {
+				t.Errorf("expected primary confidence 0.9 + severity critical, got %f/%s", f.Confidence, f.Severity)
+			}
+		case f.Parameter == "q" && f.Contexts[0] == "js_string":
+			if len(f.Payloads) != 1 {
+				t.Errorf("js_string group should have 1 variant, got %v", f.Payloads)
+			}
+		case f.Parameter == "s":
+			if len(f.Payloads) != 1 {
+				t.Errorf("param s should have 1 variant, got %v", f.Payloads)
+			}
+		case f.Type == model.StoredXSS:
+			if len(f.Payloads) != 1 {
+				t.Errorf("stored finding should not be merged with reflected, got %v", f.Payloads)
+			}
+		default:
+			t.Errorf("unexpected aggregated finding: %+v", f)
+		}
+	}
+}
+
+// TestAggregateFindings_VerifiedPromotes verifies a verified variant in the
+// group marks the aggregated finding as execution-verified.
+func TestAggregateFindings_VerifiedPromotes(t *testing.T) {
+	findings := []model.Finding{
+		{URL: "http://a.com/p?q=1", Parameter: "q", Type: model.ReflectedXSS, Payload: `<script>alert(1)</script>`, Contexts: []string{"html_body"}, Confidence: 0.85, Severity: model.High, ExecutionVerified: true},
+		{URL: "http://a.com/p?q=2", Parameter: "q", Type: model.ReflectedXSS, Payload: `<img src=x onerror=alert(1)>`, Contexts: []string{"html_body"}, Confidence: 0.9, Severity: model.High},
+	}
+	result := AggregateFindings(findings)
+	if len(result) != 1 {
+		t.Fatalf("expected 1 aggregated finding, got %d", len(result))
+	}
+	if !result[0].ExecutionVerified {
+		t.Error("verified variant should promote the aggregated finding")
 	}
 }

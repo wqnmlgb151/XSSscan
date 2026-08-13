@@ -236,3 +236,39 @@ func TestPayloadContextCoverage(t *testing.T) {
 		}
 	}
 }
+
+// TestQuoteCompatible_GatesMismatchedBreakouts verifies quote-type gating:
+// a double-quote breakout must not be sent into a single-quoted reflection.
+func TestQuoteCompatible_GatesMismatchedBreakouts(t *testing.T) {
+	cases := []struct {
+		value     string
+		ctxType   context.ContextType
+		quoteChar string
+		want      bool
+	}{
+		{`"-alert(1)-"`, context.ContextJSString, "'", false},                      // double-quote breakout in single-quoted string
+		{`"-alert(1)-"`, context.ContextJSString, `"`, true},                       // matches
+		{`';alert(1)//`, context.ContextJSString, `"`, false},                      // single-quote breakout in double-quoted string
+		{`';alert(1)//`, context.ContextJSString, "'", true},                       // matches
+		{`</script><script>alert(1)</script>`, context.ContextJSString, "'", true}, // quote-agnostic
+		{`\';alert(1)//`, context.ContextJSString, `"`, true},                      // escaped-quote bypass works on both
+		{`"-alert(1)-"`, context.ContextJSString, "", true},                        // unknown quote → keep (conservative)
+		{`<script>alert(1)</script>`, context.ContextHTMLBody, "'", true},          // non-JS contexts unaffected
+	}
+	for _, tc := range cases {
+		if got := QuoteCompatible(tc.value, tc.ctxType, tc.quoteChar); got != tc.want {
+			t.Errorf("QuoteCompatible(%q, %s, %q) = %v, want %v", tc.value, tc.ctxType, tc.quoteChar, got, tc.want)
+		}
+	}
+}
+
+// TestJSStringTemplates_NoInertPayloads guards the false-positive fix: the
+// js_string template list must not contain payloads that are inert inside
+// quoted strings (template-literal interpolation, comment breakout).
+func TestJSStringTemplates_NoInertPayloads(t *testing.T) {
+	for _, tmpl := range GetTemplates(context.ContextJSString) {
+		if strings.Contains(tmpl.Value, "${") || strings.HasPrefix(tmpl.Value, "*/") {
+			t.Errorf("js_string template %q is inert in quoted strings (belongs in js_template_literal/js_comment)", tmpl.Value)
+		}
+	}
+}

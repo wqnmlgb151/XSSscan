@@ -27,25 +27,26 @@ type CSPBypass struct {
 }
 
 type Finding struct {
-	ID                  string                 `json:"id"`
-	Type                VulnerabilityType      `json:"type"`
-	Severity            Severity               `json:"severity"`
-	Confidence          float64                `json:"confidence"`
-	URL                 string                 `json:"url"`
-	Parameter           string                 `json:"parameter"`
-	ParamType           ParamType              `json:"param_type"`
-	Payload             string                 `json:"payload"`
-	Contexts            []string               `json:"contexts"`
-	Evidence            Evidence               `json:"evidence"`
-	Description         string                 `json:"description"`
-	Remediation         string                 `json:"remediation"`
-	CWE                 string                 `json:"cwe,omitempty"`
-	References          []string               `json:"references,omitempty"`
-	Timestamp           time.Time              `json:"timestamp"`
-	RawRequest          string                 `json:"raw_request,omitempty"`
-	RawResponse         string                 `json:"raw_response,omitempty"`
-	ExecutionVerified   bool                   `json:"execution_verified,omitempty"`
-	ExecutionConfidence float64                `json:"execution_confidence,omitempty"`
-	ScreenshotPath      string                 `json:"screenshot_path,omitempty"`
-	CSPBypasses         []CSPBypass            `json:"csp_bypasses,omitempty"`
+	ID                  string            `json:"id"`
+	Type                VulnerabilityType `json:"type"`
+	Severity            Severity          `json:"severity"`
+	Confidence          float64           `json:"confidence"`
+	URL                 string            `json:"url"`
+	Parameter           string            `json:"parameter"`
+	ParamType           ParamType         `json:"param_type"`
+	Payload             string            `json:"payload"`
+	Payloads            []string          `json:"payloads,omitempty"` // all payload variants after same-param aggregation
+	Contexts            []string          `json:"contexts"`
+	Evidence            Evidence          `json:"evidence"`
+	Description         string            `json:"description"`
+	Remediation         string            `json:"remediation"`
+	CWE                 string            `json:"cwe,omitempty"`
+	References          []string          `json:"references,omitempty"`
+	Timestamp           time.Time         `json:"timestamp"`
+	RawRequest          string            `json:"raw_request,omitempty"`
+	RawResponse         string            `json:"raw_response,omitempty"`
+	ExecutionVerified   bool              `json:"execution_verified,omitempty"`
+	ExecutionConfidence float64           `json:"execution_confidence,omitempty"`
+	ScreenshotPath      string            `json:"screenshot_path,omitempty"`
+	CSPBypasses         []CSPBypass       `json:"csp_bypasses,omitempty"`
 }

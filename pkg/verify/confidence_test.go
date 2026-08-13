@@ -16,9 +16,10 @@ func TestScoreAllPositiveFactors(t *testing.T) {
 	}
 	score := cs.Score(f)
 
-	// All positive factors should yield 1.0
-	if math.Abs(score-1.0) > 0.001 {
-		t.Errorf("Expected 1.0 with all positive factors, got %.2f", score)
+	// All positive factors cap at MaxUnverifiedConfidence (0.90) — 1.0 is
+	// reserved for browser-execution-verified findings.
+	if math.Abs(score-MaxUnverifiedConfidence) > 0.001 {
+		t.Errorf("Expected %.2f with all positive factors, got %.2f", MaxUnverifiedConfidence, score)
 	}
 }
 
@@ -297,11 +298,11 @@ func TestScoreOrderingInvariant(t *testing.T) {
 		NoSanitization: true, CSPWeak: true,
 	}) // 1.0
 
-	// Single length penalty (multiplicative 0.9)
+	// Single length penalty (multiplicative 0.9, applied after the 0.90 cap)
 	withLength := cs.Score(Factors{
 		Reflected: true, ContextBreak: true, SyntaxValid: true,
 		NoSanitization: true, CSPWeak: true, LengthLimited: true,
-	}) // 1.0 * 0.9 = 0.9
+	}) // 0.9 (capped) * 0.9 = 0.81
 
 	// WAF penalty + interaction (NoSanitization discounted to 0.075, then ×0.9)
 	withWAF := cs.Score(Factors{
@@ -341,8 +342,10 @@ func TestScoreNeverExceeds1(t *testing.T) {
 	if score > 1.0 {
 		t.Errorf("Score %.6f exceeds 1.0 — clamping invariant broken", score)
 	}
-	if math.Abs(score-1.0) > 0.001 {
-		t.Errorf("All-positive score should be exactly 1.0, got %.6f", score)
+	// Unverified findings cap at MaxUnverifiedConfidence; only execution
+	// verification (+0.15 in the engine) can reach 1.0.
+	if math.Abs(score-MaxUnverifiedConfidence) > 0.001 {
+		t.Errorf("All-positive score should be exactly %.2f, got %.6f", MaxUnverifiedConfidence, score)
 	}
 }
 
@@ -410,9 +413,9 @@ func TestScoreNearThreshold(t *testing.T) {
 	// No cliff-edge: verify that transitions near the threshold are smooth.
 	// The largest possible single-factor change is weightContextBreak (0.25),
 	// so no step across the threshold should exceed that.
-	below := cs.Score(Factors{Reflected: true, NoSanitization: true})                          // 0.50
-	at := cs.Score(Factors{Reflected: true, ContextBreak: true, NoSanitization: true})         // 0.60
-	above := cs.Score(Factors{Reflected: true, ContextBreak: true, SyntaxValid: true})         // 0.65
+	below := cs.Score(Factors{Reflected: true, NoSanitization: true})                  // 0.50
+	at := cs.Score(Factors{Reflected: true, ContextBreak: true, NoSanitization: true}) // 0.60
+	above := cs.Score(Factors{Reflected: true, ContextBreak: true, SyntaxValid: true}) // 0.65
 
 	maxSingleChange := weightContextBreak // 0.25 — the largest single weight
 
@@ -437,15 +440,15 @@ func TestScoreClampedToZeroOne(t *testing.T) {
 	cs := NewConfidenceScorer()
 
 	tests := []struct {
-		name   string
-		f      Factors
-		minOk  float64
-		maxOk  float64
+		name  string
+		f     Factors
+		minOk float64
+		maxOk float64
 	}{
-		{"all_true", Factors{true, true, true, true, false, true, false}, 0.0, 1.0},
+		{"all_true", Factors{true, true, true, true, false, true, false}, 0.0, MaxUnverifiedConfidence},
 		{"all_false", Factors{false, false, false, false, false, false, false}, 0.0, 0.0},
 		{"all_penalties", Factors{false, false, false, false, true, false, true}, 0.0, 0.0},
-		{"only_positive", Factors{true, true, true, true, false, true, false}, 1.0, 1.0},
+		{"only_positive", Factors{true, true, true, true, false, true, false}, MaxUnverifiedConfidence, MaxUnverifiedConfidence},
 	}
 
 	for _, tt := range tests {

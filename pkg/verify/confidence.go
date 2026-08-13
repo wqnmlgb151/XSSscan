@@ -28,6 +28,15 @@ const (
 
 	// DefaultConfidenceThreshold is the minimum confidence to report a finding.
 	DefaultConfidenceThreshold = 0.60
+
+	// MaxUnverifiedConfidence caps scores for findings that have NOT been
+	// confirmed by browser execution. Structural analysis (reflection +
+	// context + no sanitization) cannot honestly claim certainty: the payload
+	// may still be neutralized client-side (framework escaping, DOM
+	// sanitizers, browser XSS auditor). Only --verify-execution pushes a
+	// finding past this cap (engine adds +0.15 on verification, reaching
+	// 1.0 for confirmed payloads).
+	MaxUnverifiedConfidence = 0.90
 )
 
 // Factors are the individual signals that contribute to confidence
@@ -97,6 +106,14 @@ func (cs *ConfidenceScorer) Score(f Factors) float64 {
 		score += weightCSPWeak
 	}
 
+	// Cap the additive score BEFORE penalties: a structural-only finding can
+	// never honestly claim certainty (see MaxUnverifiedConfidence). Applying
+	// the cap first keeps penalties meaningful — a length-limited perfect
+	// reflection must still score below an unlimited one.
+	if score > MaxUnverifiedConfidence {
+		score = MaxUnverifiedConfidence
+	}
+
 	// Penalties as multiplicative factors — scale with the score rather
 	// than creating cliff-edge drops. Two penalties compound: 0.9 * 0.9 = 0.81.
 	penaltyFactor := 1.0
@@ -111,9 +128,6 @@ func (cs *ConfidenceScorer) Score(f Factors) float64 {
 
 	if score < 0 {
 		return 0
-	}
-	if score > 1 {
-		return 1
 	}
 	return score
 }

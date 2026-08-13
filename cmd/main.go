@@ -113,7 +113,7 @@ const (
 //	make build VERSION=1.0.0
 //
 // x.y.z: x = major (architectural redesign), y = feature, z = bug fix.
-var Version = "0.9.7"
+var Version = "0.9.8"
 
 var cfg ScanConfig
 
@@ -659,7 +659,11 @@ func scanAllTargets(ctx context.Context, engine *scanner.Engine, client *http.Cl
 		// Link parameter mining: pages whose only injectable surface appears
 		// in <a href="...?param=value"> links (no forms). Extracts param names
 		// from same-host links and scans those targets (dalfox Grep feature).
-		if cfg.Body == "" && pageInfo != nil {
+		// Gated behind --crawl: scanning OTHER pages' parameters means
+		// following links off the requested URL — surprising without an
+		// explicit crawl request (scanning level17.php must not silently
+		// scan level18.php).
+		if cfg.Crawl && cfg.Body == "" && pageInfo != nil {
 			for _, pt := range pageInfo.ParamTargets {
 				// Skip the seed URL itself
 				if normalizeForCompare(pt.URL) == normalizeForCompare(scanTarget.URL) {
@@ -1062,6 +1066,9 @@ func printResults(result *model.ScanResult, duration time.Duration) {
 		severityColor := getSeverityColor(f.Severity)
 		fmt.Println(severityColor(fmt.Sprintf("  [%d] [%s] %s", i+1, strings.ToUpper(string(f.Severity)), f.Description)))
 		fmt.Println()
+		// Finding URL: findings can come from crawled/form/param-mining
+		// targets beyond the seed URL — attribute them explicitly.
+		fmt.Printf("      URL: %s\n", f.URL)
 		fmt.Printf("      Param: %s | Confidence: %.0f%% | Context: %v\n",
 			f.Parameter, f.Confidence*100, f.Contexts)
 		fmt.Printf("      Payload: %s\n", f.Payload)

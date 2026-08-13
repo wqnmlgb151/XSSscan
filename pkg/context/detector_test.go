@@ -448,3 +448,45 @@ func TestDetectContexts_MultipleReflections(t *testing.T) {
 		t.Errorf("highest-priority context = %s, want html_body", got[0].Type)
 	}
 }
+
+// TestURLAttrSubContext_QueryPositionInert guards the level18-class false
+// positive: a reflection inside the query string of an existing URL
+// (embed src=xsf02.swf?arg=MARKER) cannot change the URL scheme — it must
+// be classified inert, not url_attribute.
+func TestURLAttrSubContext_QueryPositionInert(t *testing.T) {
+	d := NewDetector()
+	cases := []struct {
+		name      string
+		content   string
+		wantInert bool
+	}{
+		{"scheme_position_href", `<a href="MARKER">x</a>`, false},
+		{"scheme_position_src", `<img src='MARKER'>`, false},
+		{"emitted_js_scheme", `<a href="javascript:MARKER">x</a>`, false},
+		{"query_position_embed", `<embed src=xsf02.swf?arg01=MARKER width=100%>`, true},
+		{"query_position_href", `<a href="/search?q=MARKER">x</a>`, true},
+		{"path_position", `<a href="page/MARKER">x</a>`, true},
+		{"fragment_position", `<a href="/p#MARKER">x</a>`, true},
+		{"data_prefix_exempt", `<img src="data:image/svg+xml,MARKER">`, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := d.Detect(Reflection{Content: tc.content, ParamValue: "MARKER"})
+			if err != nil {
+				t.Fatalf("Detect error: %v", err)
+			}
+			hasURLAttr := false
+			for _, c := range got {
+				if c.Type == ContextURLAttr {
+					hasURLAttr = true
+				}
+			}
+			if tc.wantInert && hasURLAttr {
+				t.Errorf("reflection in query/path should NOT be url_attribute, got %v", got)
+			}
+			if !tc.wantInert && !hasURLAttr {
+				t.Errorf("scheme-position reflection should be url_attribute, got %v", got)
+			}
+		})
+	}
+}

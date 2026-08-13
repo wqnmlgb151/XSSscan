@@ -20,9 +20,9 @@ type Reflection struct {
 
 // Detector analyzes reflection points to determine injection context
 type Detector struct {
-	templateRe *regexp.Regexp
-	angularRe  *regexp.Regexp
-	scriptRe   *regexp.Regexp
+	templateRe  *regexp.Regexp
+	angularRe   *regexp.Regexp
+	scriptRe    *regexp.Regexp
 	eventAttrRe *regexp.Regexp
 }
 
@@ -209,18 +209,46 @@ func (d *Detector) detectAttrContexts(tokenizer *html.Tokenizer, tagName, value 
 				ctxType = ContextCSSValue
 			case attrName == "href" || attrName == "src" ||
 				attrName == "action" || attrName == "formaction":
-				ctxType = ContextURLAttr
+				// URL sub-context: scheme injection only works at the start
+				// of the attribute value (or after an app-emitted scheme).
+				ctxType = analyzeURLContext(attrVal, value)
 			}
-			*contexts = append(*contexts, Context{
+			ctx := Context{
 				Type:        ctxType,
 				TagName:     tagName,
 				AttrName:    attrName,
 				Raw:         text.Snippet(attrVal, value, 50),
 				Enclosed:    true,
 				ParentStack: copyStack(parentStack),
-			})
+			}
+			// The inert downgrade must carry Escaped so priority hits 0 and
+			// IsExploitable() reports false — otherwise the verifier would
+			// treat it as exploitable.
+			if ctxType == ContextHTMLEntity {
+				ctx.Escaped = true
+			}
+			*contexts = append(*contexts, ctx)
 		}
 	}
+}
+
+// analyzeURLContext classifies a reflection inside a URL attribute
+// (href/src/action). Scheme injection (javascript:/data:) only works when
+// the reflection lands at the very start of the attribute value or after a
+// scheme the app already emitted — a reflection inside the path/query/
+// fragment of an existing URL (e.g. xsf02.swf?arg=MARKER) cannot change the
+// scheme and is inert. Exception: a data: prefix already emitted by the app
+// still allows content injection (data:image/svg+xml,<svg onload=...>).
+func analyzeURLContext(attrVal, value string) ContextType {
+	idx := strings.Index(attrVal, value)
+	if idx < 0 {
+		return ContextURLAttr
+	}
+	prefix := attrVal[:idx]
+	if strings.ContainsAny(prefix, "/?#") && !strings.HasPrefix(prefix, "data:") {
+		return ContextHTMLEntity // inert: value sits in path/query/fragment
+	}
+	return ContextURLAttr // scheme position (start or after emitted scheme)
 }
 
 func (d *Detector) detectJSStringContext(content, value string, contexts *[]Context) {

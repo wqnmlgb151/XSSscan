@@ -150,10 +150,10 @@ var extendedPayloads = map[context.ContextType][]PayloadTemplate{
 		{Value: `javascript:void(document.body.innerHTML='<img src=x onerror=alert(1)>')`, Severity: model.High, Desc: "JS URI innerHTML injection"},
 		{Value: `javascript:eval(atob('YWxlcnQoMSk='))`, Severity: model.High, Desc: "JS URI eval base64"},
 
-		// Encoded javascript: variants
-		{Value: `java%0d%0ascript:alert(1)`, Severity: model.High, Desc: "CRLF-encoded javascript URI"},
-		{Value: `\x6A\x61\x76\x61\x73\x63\x72\x69\x70\x74:alert(1)`, Severity: model.High, Desc: "Hex-encoded javascript URI prefix"},
-		{Value: `blob:javascript:alert(1)`, Severity: model.Medium, Desc: "Blob javascript URI chain"},
+		// Encoded javascript: variants — NOTE: the %0d%0a / \x / blob
+		// "encoded scheme" forms are NOT decoded by browsers in HTML
+		// attribute position (removed as inert false positives; IE-era
+		// and JS-context-only vectors).
 	},
 
 	context.ContextJSBlock: {

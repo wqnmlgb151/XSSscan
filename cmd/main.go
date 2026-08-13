@@ -718,12 +718,15 @@ func appendQueryParams(rawURL string, inputs []string) string {
 	return parsed.String()
 }
 
+
 // normalizeForCompare strips query and fragment for URL identity checks.
+// Local copy of urlutil.NormalizeForDedup — cmd cannot import pkg/internal.
 func normalizeForCompare(rawURL string) string {
 	if u, err := url.Parse(rawURL); err == nil {
 		u.RawQuery = ""
 		u.Fragment = ""
 		u.ForceQuery = false
+		u.RawFragment = ""
 		return u.String()
 	}
 	return rawURL

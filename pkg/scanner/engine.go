@@ -13,11 +13,10 @@ import (
 	"sync/atomic"
 	"time"
 
-
 	"github.com/xsscan/xsscan/pkg/analyze"
+	ctx "github.com/xsscan/xsscan/pkg/context"
 	"github.com/xsscan/xsscan/pkg/csrf"
 	"github.com/xsscan/xsscan/pkg/execverify"
-	ctx "github.com/xsscan/xsscan/pkg/context"
 	"github.com/xsscan/xsscan/pkg/httpclient"
 	"github.com/xsscan/xsscan/pkg/internal/request"
 	"github.com/xsscan/xsscan/pkg/internal/text"
@@ -29,21 +28,21 @@ import (
 )
 
 type Config struct {
-	Concurrency      int
-	RateLimit        int
-	RateBurst        int
-	RequestTimeout   time.Duration
-	MaxPayloads      int
-	TestHPP          bool    // Enable HTTP Parameter Pollution testing
-	WAFBypass        bool    // Enable WAF bypass via payload mutation
-	ConfidenceMin    float64 // Minimum confidence threshold (default 0.60)
-	RandomUA         bool    // Randomize User-Agent per request
-	AdaptiveRate     bool    // Auto-adjust rate limit on 429 responses
-	EnableProbe      bool    // Run context probes before payload scanning
-	VerifyExecution  bool    // Browser-based execution verification
-	VerifyTimeout    time.Duration // Per-finding verification timeout
-	CSRFToken        string  // Manual CSRF token (overrides auto-detection)
-	CSRFFieldName    string  // CSRF token field name (auto-detected if empty)
+	Concurrency     int
+	RateLimit       int
+	RateBurst       int
+	RequestTimeout  time.Duration
+	MaxPayloads     int
+	TestHPP         bool          // Enable HTTP Parameter Pollution testing
+	WAFBypass       bool          // Enable WAF bypass via payload mutation
+	ConfidenceMin   float64       // Minimum confidence threshold (default 0.60)
+	RandomUA        bool          // Randomize User-Agent per request
+	AdaptiveRate    bool          // Auto-adjust rate limit on 429 responses
+	EnableProbe     bool          // Run context probes before payload scanning
+	VerifyExecution bool          // Browser-based execution verification
+	VerifyTimeout   time.Duration // Per-finding verification timeout
+	CSRFToken       string        // Manual CSRF token (overrides auto-detection)
+	CSRFFieldName   string        // CSRF token field name (auto-detected if empty)
 }
 
 type Engine struct {
@@ -65,7 +64,7 @@ type Engine struct {
 	// csrfToken/fieldName are accessed concurrently from worker goroutines.
 	// atomic.Value avoids data races on the 403-refresh path without
 	// adding mutex contention to the per-request hot path.
-	csrfToken   atomic.Value // stores string
+	csrfToken     atomic.Value // stores string
 	csrfFieldName atomic.Value // stores string
 }
 
@@ -334,13 +333,17 @@ func prunePayloads(payloads []payload.Payload, profile *analyze.FilterProfile) [
 	}
 	out := make([]payload.Payload, 0, len(payloads))
 	for _, p := range payloads {
-		hasAngle := strings.ContainsAny(p.Value, "<>")
-		hasQuote := strings.ContainsAny(p.Value, `"'`)
-		if hasAngle && !profile.AllowsAngleBrackets() {
+		trimmed := strings.TrimSpace(p.Value)
+		if strings.ContainsAny(p.Value, "<>") && !profile.AllowsAngleBrackets() {
 			continue // < > stripped or encoded → tag payloads are dead
 		}
-		if hasQuote && !profile.AllowsQuotes() && strings.HasPrefix(strings.TrimSpace(p.Value), `"`) {
-			continue // quote-breakout payloads dead when quotes are encoded
+		// Per-quote-type pruning: only drop breakouts using the specific
+		// quote character the server encodes.
+		if strings.HasPrefix(trimmed, `"`) && !profile.AllowsDoubleQuote() {
+			continue
+		}
+		if strings.HasPrefix(trimmed, `'`) && !profile.AllowsSingleQuote() {
+			continue
 		}
 		out = append(out, p)
 	}
@@ -878,6 +881,7 @@ func convertCSPBypasses(csp *analyze.CSPPolicy) []model.CSPBypass {
 	}
 	return result
 }
+
 var sensitiveHeaders = map[string]bool{
 	"authorization":       true,
 	"proxy-authorization": true,
@@ -1138,7 +1142,6 @@ func contextsToStrings(ctxs []ctx.Context) []string {
 }
 
 var idCounter int64
-
 
 func generateID() string {
 	count := atomic.AddInt64(&idCounter, 1)

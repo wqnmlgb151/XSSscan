@@ -98,8 +98,9 @@ func extractParamTargets(body, pageURL string) []ParamTarget {
 	return buildParamTargets(paramsByBase)
 }
 
-// jsURLPattern finds URL-like strings in JS with a query string.
-var jsURLPattern = regexp.MustCompile(`["']([^"']*\?[^"']*)["']`)
+// jsURLPattern finds URL-like strings in JS with a query string that has
+// at least one key=value pair (avoids matching prose like "why?what").
+var jsURLPattern = regexp.MustCompile(`["']([^"']*\?[^"']*=[^"']*)["']`)
 
 // collectParams extracts parameter names from a link's query string if the
 // link points at the same host (or is relative).
@@ -109,8 +110,8 @@ func collectParams(base *url.URL, rawURL string, paramsByBase map[string]map[str
 		return
 	}
 	resolved := base.ResolveReference(ref)
-	if resolved.Host != base.Host {
-		return // only same-host targets
+	if resolved.Hostname() != base.Hostname() {
+		return // only same-host targets (port-insensitive)
 	}
 	if resolved.RawQuery == "" {
 		return

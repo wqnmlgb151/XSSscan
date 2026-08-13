@@ -25,8 +25,8 @@ but real payloads contain < > " and other chars that may be escaped. */
 
 type ContextProbe struct {
 	ContextType ctx.ContextType
-	Probe      string
-	Validator  func(body string) bool
+	Probe       string
+	Validator   func(body string) bool
 }
 
 /* GetProbeForContext returns the FIRST probe for a given context type.
@@ -57,103 +57,103 @@ breakout mechanisms (e.g., quote breakout when angle brackets are stripped). */
 var probeLibrary = map[ctx.ContextType][]ContextProbe{
 	ctx.ContextHTMLBody: {{
 		ContextType: ctx.ContextHTMLBody,
-		Probe:      "<xsscan>",
-		Validator:  validateUnescapedProbe("<xsscan>"),
+		Probe:       "<xsscan>",
+		Validator:   validateUnescapedProbe("<xsscan>"),
 	}},
 	ctx.ContextHTMLComment: {{
 		ContextType: ctx.ContextHTMLComment,
-		Probe:      "--><xsscan><!--",
-		Validator:  validateCommentBreakout,
+		Probe:       "--><xsscan><!--",
+		Validator:   validateCommentBreakout,
 	}},
 	ctx.ContextHTMLTag: {{
 		ContextType: ctx.ContextHTMLTag,
-		Probe:      "xsscan",
-		Validator:  validateUnescapedProbe("xsscan"),
+		Probe:       "xsscan",
+		Validator:   validateUnescapedProbe("xsscan"),
 	}},
 	ctx.ContextHTMLAttrName: {{
 		ContextType: ctx.ContextHTMLAttrName,
-		Probe:      "xsscan",
-		Validator:  validateUnescapedProbe("xsscan"),
+		Probe:       "xsscan",
+		Validator:   validateUnescapedProbe("xsscan"),
 	}},
 	ctx.ContextHTMLAttrValue: {
 		{
 			ContextType: ctx.ContextHTMLAttrValue,
-			Probe:      " xsscan>",
-			Validator:  validateAttrBreakout,
+			Probe:       " xsscan>",
+			Validator:   validateAttrBreakout,
 		},
 		// Quote-only breakout: servers that strip < > but preserve quotes
 		// are still exploitable via event-handler attribute injection
 		// (" onmouseover=alert(1) x="). These probes validate that dimension.
 		{
 			ContextType: ctx.ContextHTMLAttrValue,
-			Probe:      `"xsscan"=`,
-			Validator:  validateDoubleQuoteBreakout,
+			Probe:       `"xsscan"=`,
+			Validator:   validateDoubleQuoteBreakout,
 		},
 		{
 			ContextType: ctx.ContextHTMLAttrValue,
-			Probe:      `'xsscan'=`,
-			Validator:  validateSingleQuoteBreakout,
+			Probe:       `'xsscan'=`,
+			Validator:   validateSingleQuoteBreakout,
 		},
 	},
 	ctx.ContextHTMLEntity: {{
 		ContextType: ctx.ContextHTMLEntity,
-		Probe:      "xsscan",
-		Validator:  validateUnescapedProbe("xsscan"),
+		Probe:       "xsscan",
+		Validator:   validateUnescapedProbe("xsscan"),
 	}},
 	ctx.ContextJSString: {{
 		ContextType: ctx.ContextJSString,
-		Probe:      jsStringProbeValue,
-		Validator:  validateUnescapedProbe(jsStringProbeValue),
+		Probe:       jsStringProbeValue,
+		Validator:   validateUnescapedProbe(jsStringProbeValue),
 	}},
 	ctx.ContextJSComment: {{
 		ContextType: ctx.ContextJSComment,
-		Probe:      "/*xsscan*/",
-		Validator:  validateUnescapedProbe("xsscan"),
+		Probe:       "/*xsscan*/",
+		Validator:   validateUnescapedProbe("xsscan"),
 	}},
 	ctx.ContextJSBlock: {{
 		ContextType: ctx.ContextJSBlock,
-		Probe:      "</script><xsscan>",
-		Validator:  validateUnescapedProbe("<xsscan>"),
+		Probe:       "</script><xsscan>",
+		Validator:   validateUnescapedProbe("<xsscan>"),
 	}},
 	ctx.ContextCSSValue: {{
 		ContextType: ctx.ContextCSSValue,
-		Probe:      "xsscan",
-		Validator:  validateUnescapedProbe("xsscan"),
+		Probe:       "xsscan",
+		Validator:   validateUnescapedProbe("xsscan"),
 	}},
 	ctx.ContextCSSBlock: {{
 		ContextType: ctx.ContextCSSBlock,
-		Probe:      "</style><xsscan><style>",
-		Validator:  validateUnescapedProbe("<xsscan>"),
+		Probe:       "</style><xsscan><style>",
+		Validator:   validateUnescapedProbe("<xsscan>"),
 	}},
 	ctx.ContextURLAttr: {{
 		ContextType: ctx.ContextURLAttr,
-		Probe:      "javascript:xsscan",
-		Validator:  validateURLBreakout,
+		Probe:       "javascript:xsscan",
+		Validator:   validateURLBreakout,
 	}},
 	ctx.ContextTemplate: {{
 		ContextType: ctx.ContextTemplate,
-		Probe:      "{{xsscan}}",
-		Validator:  validateUnescapedProbe("xsscan"),
+		Probe:       "{{xsscan}}",
+		Validator:   validateUnescapedProbe("xsscan"),
 	}},
 	ctx.ContextSVGContainer: {{
 		ContextType: ctx.ContextSVGContainer,
-		Probe:      "<xsscan>",
-		Validator:  validateUnescapedProbe("<xsscan>"),
+		Probe:       "<xsscan>",
+		Validator:   validateUnescapedProbe("<xsscan>"),
 	}},
 	ctx.ContextMathMLContainer: {{
 		ContextType: ctx.ContextMathMLContainer,
-		Probe:      "<xsscan>",
-		Validator:  validateUnescapedProbe("<xsscan>"),
+		Probe:       "<xsscan>",
+		Validator:   validateUnescapedProbe("<xsscan>"),
 	}},
 	ctx.ContextJSONValue: {{
 		ContextType: ctx.ContextJSONValue,
-		Probe:      jsonProbeValue,
-		Validator:  validateJSONBreakout,
+		Probe:       jsonProbeValue,
+		Validator:   validateJSONBreakout,
 	}},
 	ctx.ContextJSTemplateLiteral: {{
 		ContextType: ctx.ContextJSTemplateLiteral,
-		Probe:      templateLiteralProbeValue,
-		Validator:  validateUnescapedProbe(templateLiteralProbeValue),
+		Probe:       templateLiteralProbeValue,
+		Validator:   validateUnescapedProbe(templateLiteralProbeValue),
 	}},
 }
 

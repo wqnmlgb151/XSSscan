@@ -4,36 +4,46 @@ import "testing"
 
 func TestDetectFilterProfile(t *testing.T) {
 	tests := []struct {
-		name string
-		body string
+		name  string
+		body  string
 		check func(*FilterProfile) bool
 	}{
 		{
 			name: "strips angle brackets",
 			body: `value="xsscan'()=onerror=alert(javascript:"`,
 			check: func(p *FilterProfile) bool {
-				return p != nil && p.StripsAngleBrackets && p.AllowsQuotes()
+				return p != nil && p.StripsAngleBrackets && p.AllowsDoubleQuote() && p.AllowsSingleQuote()
 			},
 		},
 		{
 			name: "encodes angle brackets",
-			body: `value="xsscan&lt;&gt;&quot;'()=onerror=alert(javascript:"`,
+			body: `value="xsscan&lt;&gt;"'()=onerror=alert(javascript:"`,
 			check: func(p *FilterProfile) bool {
 				return p != nil && p.EncodesAngleBrackets
 			},
 		},
 		{
-			name: "encodes quotes",
+			name: "encodes double quotes only",
 			body: `value="xsscan<>"&quot;'()=onerror=alert(javascript:"`,
 			check: func(p *FilterProfile) bool {
-				return p != nil && p.EncodesQuotes
+				return p != nil && p.EncodesDoubleQuote && !p.EncodesSingleQuote &&
+					p.AllowsSingleQuote() && !p.AllowsDoubleQuote()
 			},
 		},
 		{
-			name: "filters event handlers",
-			body: `value="xsscan<>"'()=o_nerror=alert(javascript:"`,
+			name: "encodes single quotes only",
+			body: `value="xsscan<>"&#39;()=onerror=alert(javascript:"`,
 			check: func(p *FilterProfile) bool {
-				return p != nil && p.FiltersEventHandlers
+				return p != nil && !p.EncodesDoubleQuote && p.EncodesSingleQuote &&
+					p.AllowsDoubleQuote() && !p.AllowsSingleQuote()
+			},
+		},
+		{
+			name: "page markup does not skew angle detection",
+			body: `<html><body>xsscan<>"'()=onerror=alert(javascript:</body></html>`,
+			check: func(p *FilterProfile) bool {
+				return p != nil && !p.EncodesAngleBrackets && !p.StripsAngleBrackets &&
+					p.AllowsAngleBrackets() && p.AllowsDoubleQuote() && p.AllowsSingleQuote()
 			},
 		},
 		{
@@ -56,16 +66,19 @@ func TestDetectFilterProfile(t *testing.T) {
 }
 
 func TestFilterProfile_Allows(t *testing.T) {
-	p := &FilterProfile{FiltersKeywords: map[string]bool{}}
-	if !p.AllowsAngleBrackets() || !p.AllowsQuotes() {
-		t.Error("empty profile should allow both")
+	p := &FilterProfile{}
+	if !p.AllowsAngleBrackets() || !p.AllowsDoubleQuote() || !p.AllowsSingleQuote() {
+		t.Error("empty profile should allow all")
 	}
 	p.StripsAngleBrackets = true
 	if p.AllowsAngleBrackets() {
 		t.Error("stripped brackets should not allow angle brackets")
 	}
-	p.EncodesQuotes = true
-	if p.AllowsQuotes() {
-		t.Error("encoded quotes should not allow quotes")
+	p.EncodesDoubleQuote = true
+	if p.AllowsDoubleQuote() {
+		t.Error("encoded double quotes should not allow double-quote breakout")
+	}
+	if !p.AllowsSingleQuote() {
+		t.Error("double-quote encoding must not affect single-quote allowance")
 	}
 }

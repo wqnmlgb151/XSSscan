@@ -7,74 +7,77 @@ import (
 // FilterProfile describes how the server transforms injected special
 // characters — the XSStrike "filter discovery" idea. By sending one probe
 // containing all metacharacters and comparing the reflection, the scanner
-// knows which payload classes can survive and which bypass mutations to
-// prefer, instead of blindly sending everything.
+// knows which payload classes can survive, instead of blindly sending
+// everything.
 type FilterProfile struct {
-	StripsAngleBrackets  bool            // < > removed entirely
-	EncodesAngleBrackets bool            // < > → &lt; &gt;
-	EncodesQuotes        bool            // " → &quot; or ' → &#39;
-	FiltersEventHandlers bool            // on\w+= removed or mangled
-	FiltersKeywords      map[string]bool // alert(, javascript: etc. removed
-	LengthLimit          int             // 0 = no truncation observed
+	StripsAngleBrackets  bool // < > removed entirely
+	EncodesAngleBrackets bool // < > → &lt; &gt;
+	EncodesDoubleQuote   bool // " → &quot;
+	EncodesSingleQuote   bool // ' → &#39;
 }
 
 // FilterProbeValue contains one occurrence of every metacharacter whose
 // fate the profile needs to determine.
 const FilterProbeValue = "xsscan<>\"'()=onerror=alert(javascript:"
 
+// filterWindow is the body region around the probe reflection used for
+// detection. Scanning the full response (up to 10MB) is wasteful and
+// page markup elsewhere would false-positive entity checks.
+const filterWindow = 2048
+
 // DetectFilterProfile analyzes a response body containing the reflection of
-// filterProbeValue. Returns nil if the probe value cannot be located.
+// FilterProbeValue. Detection runs on a windowed slice around the reflection
+// so unrelated page markup cannot skew the result. Returns nil if the probe
+// value cannot be located.
 func DetectFilterProfile(body string) *FilterProfile {
-	if !strings.Contains(body, "xsscan") {
+	idx := strings.Index(body, "xsscan")
+	if idx < 0 {
 		return nil
 	}
+	start := idx - filterWindow
+	if start < 0 {
+		start = 0
+	}
+	end := idx + filterWindow
+	if end > len(body) {
+		end = len(body)
+	}
+	window := body[start:end]
 
-	p := &FilterProfile{FiltersKeywords: make(map[string]bool)}
+	p := &FilterProfile{}
 
-	// Angle brackets: stripped vs entity-encoded vs preserved.
+	// Angle brackets: encoded vs stripped (only detectable within the
+	// window — the raw body is full of page markup).
 	switch {
-	case strings.Contains(body, "&lt;") && strings.Contains(body, "&gt;") &&
-		!strings.Contains(body, "xsscan<"):
+	case strings.Contains(window, "&lt;") || strings.Contains(window, "&gt;"):
 		p.EncodesAngleBrackets = true
-	case !strings.Contains(body, "<") && !strings.Contains(body, ">"):
+	case !strings.Contains(window, "<") && !strings.Contains(window, ">"):
 		p.StripsAngleBrackets = true
 	}
 
-	// Quotes: encoded vs preserved.
-	if strings.Contains(body, "&quot;") || strings.Contains(body, "&#39;") {
-		p.EncodesQuotes = true
+	// Quotes: per-type encoding.
+	if strings.Contains(window, "&quot;") || strings.Contains(window, "&#34;") {
+		p.EncodesDoubleQuote = true
 	}
-
-	// Event handlers: onerror= mangled or missing while xsscan survives.
-	if !strings.Contains(body, "onerror") && !strings.Contains(body, "o_nerror") {
-		// Can't distinguish "filtered" from "truncated before onerror" without
-		// more context — treat missing as filtered only when the probe tail
-		// (alert() which comes AFTER onerror=) also survives.
-		if !strings.Contains(body, "alert(") {
-			p.FiltersEventHandlers = true
-		}
-	} else if strings.Contains(body, "o_nerror") || strings.Contains(body, "on_error") {
-		p.FiltersEventHandlers = true
-	}
-
-	// Keyword filters.
-	if !strings.Contains(body, "alert(") {
-		p.FiltersKeywords["alert("] = true
-	}
-	if !strings.Contains(strings.ToLower(body), "javascript:") {
-		p.FiltersKeywords["javascript:"] = true
+	if strings.Contains(window, "&#39;") || strings.Contains(window, "&#x27;") {
+		p.EncodesSingleQuote = true
 	}
 
 	return p
 }
 
-// EffectivePayloadClass reports whether payloads containing angle brackets
+// AllowsAngleBrackets reports whether payloads containing angle brackets
 // survive the server filter.
 func (p *FilterProfile) AllowsAngleBrackets() bool {
 	return !p.StripsAngleBrackets && !p.EncodesAngleBrackets
 }
 
-// EffectivePayloadClass reports whether quote-breakout payloads survive.
-func (p *FilterProfile) AllowsQuotes() bool {
-	return !p.EncodesQuotes
+// AllowsDoubleQuote reports whether double-quote breakout payloads survive.
+func (p *FilterProfile) AllowsDoubleQuote() bool {
+	return !p.EncodesDoubleQuote
+}
+
+// AllowsSingleQuote reports whether single-quote breakout payloads survive.
+func (p *FilterProfile) AllowsSingleQuote() bool {
+	return !p.EncodesSingleQuote
 }

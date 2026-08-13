@@ -618,6 +618,18 @@ func crawlAndScan(ctx context.Context, client *http.Client, engine *scanner.Engi
 		color.Yellow("[!] Crawl returned no results — target may require authentication or block crawling\n")
 	}
 
+	// --crawl --render-spa: when static crawling finds no forms, render the
+	// seed URL with headless Chrome and supplement discovered forms (SPA pages).
+	if cfg.RenderSPA && len(crawlResult.Forms) == 0 {
+		color.Cyan("[*] No forms from static crawl — attempting JS rendering...\n")
+		if rendered, err := crawler.RenderPage(ctx, scanURL, baseTarget.Headers, 0); err == nil && len(rendered.Forms) > 0 {
+			color.Green("[+] JS rendering discovered %d form(s)\n", len(rendered.Forms))
+			crawlResult.Forms = append(crawlResult.Forms, rendered.Forms...)
+		} else if err != nil {
+			color.Yellow("[!] JS rendering failed: %v\n", err)
+		}
+	}
+
 	for _, u := range crawlResult.URLs {
 		subTarget := deriveTarget(baseTarget, u)
 		if err := scanOneTarget(ctx, engine, subTarget, allFindings, totalStats); err != nil {

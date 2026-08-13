@@ -169,6 +169,25 @@
         };
     } catch(e) {}
 
+    // --- history.pushState / replaceState ---
+    // SPA routers navigate via the History API; location.href is
+    // LegacyUnforgeable in Chrome (no interceptable prototype accessor),
+    // so these two are the reliable SPA navigation sinks.
+    try {
+        var origPush = History.prototype.pushState;
+        History.prototype.pushState = function(state, title, url) {
+            if (url != null) { record('history.pushState', String(url)); }
+            return origPush.apply(this, arguments);
+        };
+    } catch(e) {}
+    try {
+        var origReplace = History.prototype.replaceState;
+        History.prototype.replaceState = function(state, title, url) {
+            if (url != null) { record('history.replaceState', String(url)); }
+            return origReplace.apply(this, arguments);
+        };
+    } catch(e) {}
+
     // Expose results
     window.__xsscan_hooks = sinks;
 })();

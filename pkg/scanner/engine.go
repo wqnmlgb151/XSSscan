@@ -196,6 +196,18 @@ func (e *Engine) Run(ctx context.Context, target model.Target) (*model.ScanResul
 			zap.Int("remaining", len(filtered)))
 	}
 
+	/* Filter discovery (XSStrike-style): send one probe containing all
+	special chars and detect how the server transforms them. The profile
+	drives payload pruning — e.g., when < > are stripped but quotes survive,
+	only quote-breakout payloads are worth sending. */
+	var filterProfile *analyze.FilterProfile
+	if len(analysisResult.InjectionPoints) > 0 {
+		fp := analysisResult.InjectionPoints[0]
+		if body, err := e.sendProbeRequest(ctx, fp, analyze.FilterProbeValue, host); err == nil {
+			filterProfile = analyze.DetectFilterProfile(body)
+		}
+	}
+
 	/* Build scan tasks */
 	type task struct {
 		injection model.InjectionPoint
@@ -205,6 +217,7 @@ func (e *Engine) Run(ctx context.Context, target model.Target) (*model.ScanResul
 	var tasks []task
 	for _, injection := range analysisResult.InjectionPoints {
 		payloads := e.generatePayloads(injection, analysisResult.Frameworks)
+		payloads = prunePayloads(payloads, filterProfile)
 		if e.config.MaxPayloads > 0 && len(payloads) > e.config.MaxPayloads {
 			payloads = payloads[:e.config.MaxPayloads]
 		}
@@ -312,6 +325,31 @@ dispatch:
 
 // payloadsFromTemplates converts templates to payload entries.
 // The type and score parameters override the template defaults.
+// prunePayloads removes payloads that cannot survive the server's filter
+// profile. Conservative: when no profile is available (nil), nothing is
+// pruned — better to send extra payloads than to miss a finding.
+func prunePayloads(payloads []payload.Payload, profile *analyze.FilterProfile) []payload.Payload {
+	if profile == nil {
+		return payloads
+	}
+	out := make([]payload.Payload, 0, len(payloads))
+	for _, p := range payloads {
+		hasAngle := strings.ContainsAny(p.Value, "<>")
+		hasQuote := strings.ContainsAny(p.Value, `"'`)
+		if hasAngle && !profile.AllowsAngleBrackets() {
+			continue // < > stripped or encoded → tag payloads are dead
+		}
+		if hasQuote && !profile.AllowsQuotes() && strings.HasPrefix(strings.TrimSpace(p.Value), `"`) {
+			continue // quote-breakout payloads dead when quotes are encoded
+		}
+		out = append(out, p)
+	}
+	if len(out) == 0 {
+		return payloads // never prune everything — fall back to full set
+	}
+	return out
+}
+
 func payloadsFromTemplates(tmpls []payload.PayloadTemplate, pt payload.PayloadType, score float64) []payload.Payload {
 	result := make([]payload.Payload, 0, len(tmpls))
 	for _, tmpl := range tmpls {
@@ -349,14 +387,34 @@ func (e *Engine) generatePayloads(injection model.InjectionPoint, frameworks []a
 		}
 	}
 
-	payloads = append(payloads, payloadsFromTemplates(
-		payload.PolyglotPayloads(),
-		payload.PayloadTypeReflected, 0.8)...)
+	// Polyglots and WAF bypass payloads claim specific contexts — only send
+	// them when the injection point's detected contexts match. A js_string
+	// polyglot sent against an html_body reflection is a guaranteed false
+	// positive (quotes are inert in body text).
+	contextSet := make(map[ctx.ContextType]bool, len(injection.Contexts))
+	for _, c := range injection.Contexts {
+		contextSet[c.Type] = true
+	}
+	if len(contextSet) == 0 {
+		contextSet[ctx.ContextHTMLBody] = true // fallback mirrors Generator
+	}
+
+	for _, tmpl := range payload.PolyglotPayloads() {
+		if contextSet[tmpl.Context] {
+			payloads = append(payloads, payloadsFromTemplates(
+				[]payload.PayloadTemplate{tmpl},
+				payload.PayloadTypeReflected, 0.8)...)
+		}
+	}
 
 	if e.config.WAFBypass {
-		payloads = append(payloads, payloadsFromTemplates(
-			payload.AllWAFBypassPayloads(),
-			payload.PayloadTypeReflected, 0.7)...)
+		for _, tmpl := range payload.AllWAFBypassPayloads() {
+			if contextSet[tmpl.Context] {
+				payloads = append(payloads, payloadsFromTemplates(
+					[]payload.PayloadTemplate{tmpl},
+					payload.PayloadTypeReflected, 0.7)...)
+			}
+		}
 	}
 
 	return payloads

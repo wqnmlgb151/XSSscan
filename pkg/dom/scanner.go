@@ -416,8 +416,15 @@ func (s *Scanner) runSingleDOMTest(ctx context.Context, target model.Target, tes
 	// Read CDP sink hooks first — these provide the highest-quality signal
 	// (marker actually passed through innerHTML/eval/document.write, not just
 	// sitting in the URL or cookie).
+	// Two separate evaluations: hooksInstalled distinguishes "hooks ran but
+	// zero hits" (true negative — do NOT fall back) from "hooks absent"
+	// (injection failed — fall back to post-hoc scan).
+	var hooksInstalled bool
 	var hookHits []sinkResult
-	if err := chromedp.Run(ctx, chromedp.Evaluate(`window.__xsscan_hooks || []`, &hookHits)); err == nil {
+	if err := chromedp.Run(ctx,
+		chromedp.Evaluate(`typeof window.__xsscan_hooks !== 'undefined'`, &hooksInstalled),
+		chromedp.Evaluate(`window.__xsscan_hooks || []`, &hookHits),
+	); err == nil {
 		for _, hit := range hookHits {
 			findings = append(findings, model.Finding{
 				Type:        model.DOMXSS,
@@ -440,10 +447,11 @@ func (s *Scanner) runSingleDOMTest(ctx context.Context, target model.Target, tes
 	}
 
 	// Fallback: sink detection via embedded JS (post-hoc DOM scan).
-	// Only used when hooks didn't catch anything (older browsers or
-	// hook interference). Reports markers that appear in dangerous
-	// DOM contexts, not just anywhere in the page.
-	if len(hookHits) == 0 {
+	// ONLY used when hooks failed to install (injection blocked, older
+	// browser). When hooks are installed and report zero hits, that is a
+	// true negative — the marker never reached a sink, so the fallback's
+	// "marker is in the URL" checks would only produce false positives.
+	if !hooksInstalled {
 		var sinkHit string
 		err = chromedp.Run(ctx,
 			chromedp.Evaluate(buildSinkScript(marker), &sinkHit),

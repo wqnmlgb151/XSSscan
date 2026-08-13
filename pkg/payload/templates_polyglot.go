@@ -86,33 +86,3 @@ func PolyglotPayloads() []PayloadTemplate {
 	return polyglotPayloads
 }
 
-// ContextAgnosticPayloads returns payloads that should be tested in ALL detected contexts.
-// These are the "universal" payloads — simple enough to potentially execute anywhere.
-func ContextAgnosticPayloads() []PayloadTemplate {
-	return []PayloadTemplate{
-		{
-			Value:    `<script>alert(1)</script>`,
-			Context:  context.ContextHTMLBody,
-			Severity: model.High,
-			Desc:     "Universal: basic script tag",
-		},
-		{
-			Value:    `<img src=x onerror=alert(1)>`,
-			Context:  context.ContextHTMLBody,
-			Severity: model.High,
-			Desc:     "Universal: img onerror",
-		},
-		{
-			Value:    `<svg onload=alert(1)>`,
-			Context:  context.ContextHTMLBody,
-			Severity: model.High,
-			Desc:     "Universal: svg onload",
-		},
-		{
-			Value:    `alert(1)`,
-			Context:  context.ContextJSBlock,
-			Severity: model.Medium,
-			Desc:     "Universal: bare alert call (JS block context)",
-		},
-	}
-}

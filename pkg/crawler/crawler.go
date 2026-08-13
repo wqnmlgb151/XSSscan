@@ -300,43 +300,10 @@ func (c *Crawler) discoverSeeds(ctx context.Context, startURL string) []string {
 
 // fetchAndExtract retrieves a page and extracts links and forms from it.
 func (c *Crawler) fetchAndExtract(ctx context.Context, pageURL, startHost string) ([]string, []FormInfo, error) {
-	// SSRF protection: validate URL before fetching. Without this,
-	// DNS rebinding could bypass the initial SSRF check on the
-	// startURL and make the crawler request internal addresses.
-	if err := ssrfguard.IsURLTargetAllowed(pageURL); err != nil {
-		return nil, nil, fmt.Errorf("ssrf blocked: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
+	bodyStr, err := fetchPage(ctx, c.client, pageURL, c.extraHeaders)
 	if err != nil {
 		return nil, nil, err
 	}
-	req.Header.Set("User-Agent", httpclient.DefaultUA)
-	for k, v := range c.extraHeaders {
-		req.Header.Set(k, v)
-	}
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return nil, nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, nil, fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
-
-	ct := resp.Header.Get("Content-Type")
-	if ct != "" && !strings.Contains(ct, "text/html") && !strings.Contains(ct, "application/xhtml") {
-		return nil, nil, fmt.Errorf("non-HTML content: %s", ct)
-	}
-
-	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, httpclient.MaxResponseSize))
-	if err != nil {
-		return nil, nil, err
-	}
-
-	bodyStr := string(bodyBytes)
 
 	links, err := extractLinks(bodyStr, pageURL, startHost, c.sameHostOnly)
 	if err != nil {

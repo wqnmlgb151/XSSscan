@@ -20,10 +20,6 @@ type FilterProfile struct {
 // fate the profile needs to determine.
 const FilterProbeValue = MarkerPrefix + `<>"'()=onerror=alert(javascript:`
 
-// filterWindow is the body region around each probe reflection used for
-// detection. Scanning the full response (up to 10MB) is wasteful and
-// page markup elsewhere would false-positive entity checks.
-const filterWindow = 2048
 
 // DetectFilterProfile analyzes a response body containing the reflection of
 // FilterProbeValue. A page can reflect the same input in MULTIPLE places
@@ -59,15 +55,15 @@ func DetectFilterProfile(body string) *FilterProfile {
 		}
 		fragment := body[idx+len(MarkerPrefix) : end]
 
-		if strings.Contains(fragment, "<") || strings.Contains(fragment, ">") {
+		fragRaw := strings.Contains(fragment, "<") || strings.Contains(fragment, ">")
+		fragEnc := strings.Contains(fragment, "&lt;") || strings.Contains(fragment, "&gt;")
+		if fragRaw {
 			angleRaw = true
 		}
-		if strings.Contains(fragment, "&lt;") || strings.Contains(fragment, "&gt;") {
+		if fragEnc {
 			angleEncoded = true
 		}
-		if !angleRaw && !angleEncoded {
-			angleStrippedAll = angleStrippedAll && true
-		} else {
+		if fragRaw || fragEnc {
 			angleStrippedAll = false
 		}
 		if strings.Contains(fragment, "\"") {

@@ -88,7 +88,7 @@ docker run --rm xsscan --url "http://target.com/page?q=test"
 
 ### 依赖
 
-- Go 1.26+
+- Go 1.25+（`go.mod` 声明 1.26；依赖 `golang.org/x/sys v0.47.0` 要求 ≥1.25）
 - Chrome/Chromium（可选，用于 `--headless`、`--verify-execution`）
 
 ---

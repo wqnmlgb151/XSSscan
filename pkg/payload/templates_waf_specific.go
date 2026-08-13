@@ -5,28 +5,6 @@ import (
 	"github.com/xsscan/xsscan/pkg/model"
 )
 
-// WAFTargetedPayloads returns payloads known to be effective against specific WAFs.
-// These use encoding tricks, non-standard syntax, and lesser-known HTML elements
-// that WAF rules may not cover.
-func WAFTargetedPayloads(wafName string) []PayloadTemplate {
-	switch wafName {
-	case "cloudflare":
-		return cloudflareBypass()
-	case "akamai":
-		return akamaiBypass()
-	case "modsecurity":
-		return modsecurityBypass()
-	case "imperva":
-		return impervaBypass()
-	case "aws":
-		return awsBypass()
-	case "f5":
-		return f5Bypass()
-	default:
-		return nil
-	}
-}
-
 // AllWAFBypassPayloads returns all WAF-bypass payloads regardless of WAF type.
 // Useful when the WAF type is unknown but WAF bypass is enabled.
 // Returns the cached list (read-only) built once at init.

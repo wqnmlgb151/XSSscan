@@ -165,13 +165,13 @@ from runes at package init so the probe table stays readable.
 */
 
 var (
-	/* jsStringProbeValue = ';xsscan// — breaks out of a single-quoted JS string. */
-	jsStringProbeValue = string(rune(0x27)) + ";" + analyze.MarkerPrefix + string([]byte{0x2F, 0x2F})
+	// jsStringProbeValue = ';xsscan// — breaks out of a single-quoted JS string.
+	jsStringProbeValue = "';" + analyze.MarkerPrefix + "//"
 
-	/* jsonProbeValue = "xsscan" — breaks out of a JSON string value. */
-	jsonProbeValue = string(rune(0x22)) + analyze.MarkerPrefix + string(rune(0x22))
+	// jsonProbeValue = "xsscan" — breaks out of a JSON string value.
+	jsonProbeValue = `"` + analyze.MarkerPrefix + `"`
 
-	/* templateLiteralProbeValue = ${xsscan} — tests expression breakout. */
+	// templateLiteralProbeValue = ${xsscan} — tests expression breakout.
 	templateLiteralProbeValue = "${" + analyze.MarkerPrefix + "}"
 )
 

@@ -1,8 +1,6 @@
 package crawler
 
 import (
-	"context"
-	"net/http"
 	"net/url"
 	"regexp"
 	"sort"
@@ -22,17 +20,6 @@ type ParamTarget struct {
 // maxParamTargets bounds the number of discovered targets to prevent
 // link-heavy pages from exploding the scan surface.
 const maxParamTargets = 20
-
-// ExtractParamTargetsFromPage fetches a page and extracts query parameter
-// names from same-host links. Parameters are deduplicated per base URL.
-// Prefer ExtractPageInfo when both forms and param targets are needed.
-func ExtractParamTargetsFromPage(ctx context.Context, client *http.Client, pageURL string, headers map[string]string) ([]ParamTarget, error) {
-	body, err := fetchPage(ctx, client, pageURL, headers)
-	if err != nil {
-		return nil, err
-	}
-	return extractParamTargets(body, pageURL), nil
-}
 
 // extractParamTargets parses HTML and finds same-host links whose query
 // strings contain parameter names.

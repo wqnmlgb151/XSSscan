@@ -162,6 +162,7 @@
     try {
         var origSetAttr = Element.prototype.setAttribute;
         Element.prototype.setAttribute = function(name, value) {
+            // Keep in sync with pkg/internal/xsspatterns.EventHandlerAttrRe ((?i)^on\w+$)
             if (typeof name === 'string' && /^on\w+$/i.test(name)) {
                 record('setAttribute(' + String(name).toLowerCase() + ')', String(value));
             }
@@ -179,12 +180,10 @@
             if (url != null) { record('history.pushState', String(url)); }
             return origPush.apply(this, arguments);
         };
-    } catch(e) {}
-    try {
-        var origReplace = History.prototype.replaceState;
+        var origHReplace = History.prototype.replaceState;
         History.prototype.replaceState = function(state, title, url) {
             if (url != null) { record('history.replaceState', String(url)); }
-            return origReplace.apply(this, arguments);
+            return origHReplace.apply(this, arguments);
         };
     } catch(e) {}
 

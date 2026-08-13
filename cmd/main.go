@@ -556,7 +556,11 @@ func scanAllTargets(ctx context.Context, engine *scanner.Engine, client *http.Cl
 		// and the param-mining block, both fed by the same response body.
 		var pageInfo *crawler.PageInfo
 		if cfg.Body == "" {
-			pageInfo, _ = crawler.ExtractPageInfo(ctx, client, scanTarget.URL, scanTarget.Headers)
+			info, err := crawler.ExtractPageInfo(ctx, client, scanTarget.URL, scanTarget.Headers)
+			if err != nil {
+				color.Yellow("[!] Page discovery failed for %s: %v\n", scanTarget.URL, err)
+			}
+			pageInfo = info
 		}
 
 		// Auto-discover forms when URL has no query params and no explicit --data.
@@ -569,8 +573,21 @@ func scanAllTargets(ctx context.Context, engine *scanner.Engine, client *http.Cl
 				}
 			}
 			// SPA fallback: static forms empty → render with headless Chrome.
+			// Render directly — re-fetching the static page is wasted since
+			// ExtractPageInfo already proved it has no forms.
 			if len(formTargets) == 0 && cfg.RenderSPA {
-				formTargets = discoverFormsFromPage(ctx, client, scanTarget, cfg.RenderSPA)
+				color.Cyan("[*] No static forms found — attempting JS rendering...\n")
+				rendered, err := crawler.RenderPage(ctx, scanTarget.URL, scanTarget.Headers, 0)
+				if err != nil {
+					color.Yellow("[!] JS rendering failed: %v\n", err)
+				} else {
+					if len(rendered.Forms) > 0 {
+						color.Green("[+] JS rendering discovered %d form(s)\n", len(rendered.Forms))
+					}
+					for _, form := range dedupForms(rendered.Forms) {
+						formTargets = append(formTargets, formToTarget(scanTarget, form))
+					}
+				}
 			}
 			for _, ft := range formTargets {
 				if err := scanOneTarget(ctx, engine, ft, allFindings, totalStats); err != nil {
@@ -682,36 +699,6 @@ func dedupForms(forms []crawler.FormInfo) []crawler.FormInfo {
 	return out
 }
 
-func discoverFormsFromPage(ctx context.Context, client *http.Client, tgt model.Target, renderSPA bool) []model.Target {
-	forms, err := crawler.ExtractFormsFromPage(ctx, client, tgt.URL, tgt.Headers)
-	if err != nil {
-		color.Yellow("[!] Form auto-discovery skipped: %v\n", err)
-		return nil
-	}
-	if len(forms) == 0 && renderSPA {
-		color.Cyan("[*] No static forms found — attempting JS rendering...\n")
-		rendered, err := crawler.RenderPage(ctx, tgt.URL, tgt.Headers, 0)
-		if err != nil {
-			color.Yellow("[!] JS rendering failed: %v\n", err)
-			return nil
-		}
-		forms = rendered.Forms
-		if len(forms) > 0 {
-			color.Green("[+] JS rendering discovered %d form(s)\n", len(forms))
-		}
-	}
-	if len(forms) == 0 {
-		color.Yellow("[!] No HTML forms found on target page\n")
-		return nil
-	}
-
-	color.Cyan("[*] Discovered %d form(s) on target page\n", len(forms))
-	var targets []model.Target
-	for _, form := range dedupForms(forms) {
-		targets = append(targets, formToTarget(tgt, form))
-	}
-	return targets
-}
 
 func buildFormBody(inputs []string) string {
 	vals := make(url.Values, len(inputs))

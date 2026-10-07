@@ -217,8 +217,12 @@ func extractPathParams(targetURL string) []model.Parameter {
 		return params
 	}
 
-	segments := strings.Split(u.Path, "/")
-	for i, seg := range segments {
+	segments := strings.Split(u.EscapedPath(), "/")
+	for i, rawSegment := range segments {
+		seg, err := url.PathUnescape(rawSegment)
+		if err != nil {
+			continue
+		}
 		if seg == "" {
 			continue
 		}
@@ -308,7 +312,7 @@ func isLikelyDynamicSegment(s string) bool {
 type xmlAttr struct {
 	XMLName xml.Name
 	Attr    []xml.Attr `xml:",any,attr"`
-	Content string      `xml:",chardata"`
+	Content string     `xml:",chardata"`
 }
 
 // extractXMLParams discovers injectable XML element text AND attribute values.

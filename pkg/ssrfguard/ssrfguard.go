@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/url"
 	"strings"
+
+	"golang.org/x/net/publicsuffix"
 )
 
 // AllowPrivate flag enables scanning of private/internal networks.
@@ -113,8 +115,15 @@ func HostsMatch(urlA, urlB string) bool {
 	if err != nil {
 		return false
 	}
-	hostA := strings.ToLower(a.Hostname())
-	hostB := strings.ToLower(b.Hostname())
+	hostA := strings.TrimSuffix(strings.ToLower(a.Hostname()), ".")
+	hostB := strings.TrimSuffix(strings.ToLower(b.Hostname()), ".")
+	if hostA == "" || hostB == "" {
+		return false
+	}
+	ipA, ipB := net.ParseIP(hostA), net.ParseIP(hostB)
+	if ipA != nil || ipB != nil {
+		return ipA != nil && ipB != nil && ipA.Equal(ipB)
+	}
 	if hostA == hostB {
 		return true
 	}
@@ -128,22 +137,12 @@ func HostsMatch(urlA, urlB string) bool {
 	return parentA == parentB
 }
 
-// parentDomain extracts the registrable domain (last two labels) from a host.
-// Returns empty string for hosts with fewer than 2 labels (e.g., "localhost").
+// parentDomain uses the public suffix list, including private hosting suffixes,
+// so independent co.uk or github.io tenants never share a trust boundary.
 func parentDomain(host string) string {
-	// Strip port if present
-	if idx := strings.LastIndex(host, ":"); idx >= 0 {
-		host = host[:idx]
-	}
-	// Strip trailing dot (FQDN form)
-	host = strings.TrimSuffix(host, ".")
-	labels := strings.Split(host, ".")
-	if len(labels) < 2 {
+	domain, err := publicsuffix.EffectiveTLDPlusOne(host)
+	if err != nil {
 		return ""
 	}
-	// For two-label hosts (e.g., example.com), return as-is.
-	// For three-label hosts (e.g., auth.example.com), return last two labels.
-	// For longer hosts, also return last two labels (handles co.uk-style TLDs
-	// imperfectly, but this is an SSRF guard not a cookie domain validator).
-	return labels[len(labels)-2] + "." + labels[len(labels)-1]
+	return domain
 }

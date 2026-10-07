@@ -274,7 +274,7 @@ func TestApplyVerificationResult_ConfidenceCapAt1(t *testing.T) {
 
 func TestVerifyFindings_EmptyFindings(t *testing.T) {
 	engine := makeTestEngine()
-	result := engine.verifyFindingsWithAuth(context.Background(), []model.Finding{}, nil)
+	result := engine.verifyFindingsWithAuth(context.Background(), []model.Finding{}, nil, model.Target{})
 	if len(result) != 0 {
 		t.Errorf("Expected 0 findings, got %d", len(result))
 	}

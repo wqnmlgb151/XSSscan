@@ -113,7 +113,7 @@ const (
 //	make build VERSION=1.0.0
 //
 // x.y.z: x = major (architectural redesign), y = feature, z = bug fix.
-var Version = "0.9.9"
+var Version = "0.9.10"
 
 var cfg ScanConfig
 

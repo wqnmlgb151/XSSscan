@@ -306,7 +306,7 @@ dispatch:
 		e.logger.Info("Starting execution verification",
 			zap.Int("findings", len(result.Findings)))
 		authState := buildAuthState(target)
-		result.Findings = e.verifyFindingsWithAuth(ctx, result.Findings, authState)
+		result.Findings = e.verifyFindingsWithAuth(ctx, result.Findings, authState, target)
 	}
 
 	// Aggregate same-param same-context findings into single entries with
@@ -514,7 +514,7 @@ func buildAuthState(target model.Target) *execverify.AuthState {
 //
 // The authState parameter carries cookies and auth headers from the original
 // scan target, allowing the browser verifier to test authenticated pages.
-func (e *Engine) verifyFindingsWithAuth(stdctx context.Context, findings []model.Finding, authState *execverify.AuthState) []model.Finding {
+func (e *Engine) verifyFindingsWithAuth(stdctx context.Context, findings []model.Finding, authState *execverify.AuthState, target model.Target) []model.Finding {
 	if len(findings) == 0 {
 		return findings
 	}
@@ -540,7 +540,7 @@ func (e *Engine) verifyFindingsWithAuth(stdctx context.Context, findings []model
 
 	// Single finding: skip worker pool overhead
 	if len(findings) == 1 {
-		return e.verifyOneFinding(verifier, stdctx, findings)
+		return e.verifyOneFinding(verifier, stdctx, findings, target)
 	}
 
 	// Worker pool: min(4, len(findings)) concurrent Chrome tabs
@@ -574,7 +574,7 @@ func (e *Engine) verifyFindingsWithAuth(stdctx context.Context, findings []model
 					zap.String("param", f.Parameter),
 					zap.String("payload", text.Truncate(f.Payload, 40)))
 
-				result, err := verifier.VerifyFinding(stdctx, f, model.Target{URL: f.URL})
+				result, err := verifier.VerifyFinding(stdctx, f, target)
 				if err != nil {
 					e.logger.Warn("Verification request failed (keeping finding)",
 						zap.Int("worker", workerID),
@@ -609,13 +609,13 @@ func (e *Engine) verifyFindingsWithAuth(stdctx context.Context, findings []model
 }
 
 // verifyOneFinding handles a single finding without worker pool overhead.
-func (e *Engine) verifyOneFinding(verifier *execverify.Verifier, stdctx context.Context, findings []model.Finding) []model.Finding {
+func (e *Engine) verifyOneFinding(verifier *execverify.Verifier, stdctx context.Context, findings []model.Finding, target model.Target) []model.Finding {
 	f := findings[0]
 	e.logger.Info("Verifying execution",
 		zap.String("param", f.Parameter),
 		zap.String("payload", text.Truncate(f.Payload, 40)))
 
-	result, err := verifier.VerifyFinding(stdctx, f, model.Target{URL: f.URL})
+	result, err := verifier.VerifyFinding(stdctx, f, target)
 	if err != nil {
 		e.logger.Warn("Verification request failed (keeping finding)",
 			zap.String("param", f.Parameter),
@@ -878,7 +878,7 @@ func (e *Engine) buildFindingFromResponse(resp *http.Response, body []byte, modi
 	bodyStr := string(body)
 	bodyLower := strings.ToLower(bodyStr)
 	wafResult := verify.DetectWAFWithLower(resp, bodyLower)
-	vResult := e.verifier.VerifyWithThreshold(bodyStr, bodyLower, p, injection, csp, wafResult, e.config.ConfidenceMin)
+	vResult := e.verifier.VerifyWithThreshold(bodyStr, bodyLower, p, injection, csp, wafResult, e.config.ConfidenceMin, resp.Header.Get(request.ContentTypeKey))
 	if !vResult.Vulnerable {
 		return nil, wafResult
 	}
@@ -1118,20 +1118,11 @@ func (e *Engine) injectPayload(target model.Target, param model.Parameter, paylo
 		}
 
 	case model.ParamPath:
-		// Replace the path segment that matches the original param value
-		u, err := url.Parse(target.URL)
+		injectedURL, err := request.InjectPathValue(target.URL, param.Name, param.Value, payloadVal)
 		if err != nil {
 			return target, err
 		}
-		segments := strings.Split(u.Path, "/")
-		for i, seg := range segments {
-			if seg == param.Value {
-				segments[i] = payloadVal
-				break
-			}
-		}
-		u.Path = strings.Join(segments, "/")
-		target.URL = u.String()
+		target.URL = injectedURL
 
 	default:
 		return target, fmt.Errorf("unsupported parameter type: %s", param.Type)

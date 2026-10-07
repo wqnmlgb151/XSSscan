@@ -1,6 +1,7 @@
 package verify
 
 import (
+	"mime"
 	"regexp"
 	"strings"
 
@@ -16,6 +17,7 @@ type Verifier struct {
 	scorer      *ConfidenceScorer
 	tagStripper *regexp.Regexp
 	eventFilter *regexp.Regexp
+	detector    *context.Detector
 }
 
 // Pre-compiled regexes and replacers for hot paths
@@ -49,6 +51,7 @@ func NewVerifier() *Verifier {
 		scorer:      NewConfidenceScorer(),
 		tagStripper: regexp.MustCompile(`<[^>]*>`),
 		eventFilter: xsspatterns.EventHandlerAssignRe,
+		detector:    context.NewDetector(),
 	}
 }
 
@@ -58,8 +61,19 @@ func (v *Verifier) Verify(respBody, bodyLower string, p payload.Payload, injecti
 
 // VerifyWithThreshold uses a configurable minimum confidence threshold.
 // bodyLower is the pre-computed lowercase response body (computed once by the caller).
-func (v *Verifier) VerifyWithThreshold(respBody, bodyLower string, p payload.Payload, injection model.InjectionPoint, csp *analyze.CSPPolicy, wafResult WAFResult, threshold float64) *VerificationResult {
+func (v *Verifier) VerifyWithThreshold(respBody, bodyLower string, p payload.Payload, injection model.InjectionPoint, csp *analyze.CSPPolicy, wafResult WAFResult, threshold float64, contentTypes ...string) *VerificationResult {
 	result := &VerificationResult{Vulnerable: false, Confidence: 0}
+	if len(contentTypes) > 0 && contentTypes[0] != "" {
+		mediaType, _, err := mime.ParseMediaType(contentTypes[0])
+		if err != nil || (mediaType != "text/html" && mediaType != "application/xhtml+xml" && mediaType != "image/svg+xml") {
+			result.Reason = "Response is not an executable markup document"
+			return result
+		}
+	}
+	if p.Value == "" {
+		result.Reason = "Empty payload"
+		return result
+	}
 
 	// verbatimFound is reused by detectSanitization to skip encoding checks
 	// when the payload is already present unmodified.
@@ -78,6 +92,11 @@ func (v *Verifier) VerifyWithThreshold(respBody, bodyLower string, p payload.Pay
 	// wastes hunter time with false positives.
 	if !checkContextBreak(p.Context, csp) {
 		result.Reason = "Reflection in non-exploitable context"
+		return result
+	}
+	actualContext, contextConfirmed := v.responseContext(respBody, p)
+	if !contextConfirmed {
+		result.Reason = "No exploitable reflection context in response"
 		return result
 	}
 
@@ -101,12 +120,12 @@ func (v *Verifier) VerifyWithThreshold(respBody, bodyLower string, p payload.Pay
 	result.Confidence = confidence
 	result.Evidence = model.Evidence{
 		Reflection: text.Snippet(respBody, p.Value, 80),
-		Context:    p.Context.String(),
+		Context:    actualContext.String(),
 	}
 
 	if confidence >= threshold {
 		result.Vulnerable = true
-		result.Reason = "Payload executed in exploitable context"
+		result.Reason = "Payload reflected in exploitable context"
 	} else {
 		result.Vulnerable = false
 		result.Reason = "Payload reflected but filtered or non-executable"
@@ -151,11 +170,11 @@ var numericEntityRe = regexp.MustCompile(`&#x?[0-9a-fA-F]+;`)
 // numericEntityMap maps special characters to their common numeric entity forms.
 // Used to detect if a payload was sanitized via numeric entity encoding.
 var numericEntityMap = map[rune][]string{
-	'<': {"&#60;", "&#x3C;", "&#x3c;", "&#060;"},
-	'>': {"&#62;", "&#x3E;", "&#x3e;", "&#062;"},
-	'"': {"&#34;", "&#x22;", "&#034;"},
+	'<':  {"&#60;", "&#x3C;", "&#x3c;", "&#060;"},
+	'>':  {"&#62;", "&#x3E;", "&#x3e;", "&#062;"},
+	'"':  {"&#34;", "&#x22;", "&#034;"},
 	'\'': {"&#39;", "&#x27;", "&#039;"},
-	'&': {"&#38;", "&#x26;", "&#038;"},
+	'&':  {"&#38;", "&#x26;", "&#038;"},
 }
 
 // numericEntityEncodesPayload checks if the nearby text contains numeric entities
@@ -340,4 +359,3 @@ func (v *Verifier) detectSanitization(bodyLower, body, p string, payloadFound bo
 
 	return false
 }
-

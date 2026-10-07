@@ -12,6 +12,7 @@ import (
 )
 
 func TestVerifyFinding_QueryParam_Alert(t *testing.T) {
+	allowLocalVerification(t)
 	// Create a test server that reflects the "q" parameter into an HTML body
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query().Get("q")
@@ -44,13 +45,12 @@ func TestVerifyFinding_QueryParam_Alert(t *testing.T) {
 	}
 
 	if !result.Executed {
-		t.Logf("Dialog not detected (may be expected in headless mode without JS execution): %+v", result)
-		// Note: simple reflection may not trigger execution in headless Chrome
-		// without the payload actually being rendered as HTML
+		t.Fatalf("Expected reflected event handler to execute: %+v", result)
 	}
 }
 
 func TestVerifyFinding_QueryParam_ScriptInjection(t *testing.T) {
+	allowLocalVerification(t)
 	// Create a test server that reflects into a script context
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query().Get("q")
@@ -81,7 +81,9 @@ func TestVerifyFinding_QueryParam_ScriptInjection(t *testing.T) {
 		t.Fatalf("VerifyFinding: %v", err)
 	}
 
-	t.Logf("Result: executed=%v type=%s confidence=%f", result.Executed, result.DialogType, result.Confidence)
+	if !result.Executed || result.DialogType != "alert" || result.DialogMessage != "1" {
+		t.Fatalf("Expected script breakout to alert(1): %+v", result)
+	}
 }
 
 func TestBuildNavigationURL_Query(t *testing.T) {
@@ -188,9 +190,9 @@ func TestJoinPath(t *testing.T) {
 
 func TestParseDialogJSON(t *testing.T) {
 	tests := []struct {
-		name   string
-		input  string
-		want   dialogInfo
+		name  string
+		input string
+		want  dialogInfo
 	}{
 		{
 			name:  "alert dialog",
@@ -237,7 +239,6 @@ func TestBuildHTMLPOC(t *testing.T) {
 		t.Error("expected POC title")
 	}
 }
-
 
 func TestNewVerifierDefaultTimeout(t *testing.T) {
 	v, err := NewVerifier(context.Background(), 0)

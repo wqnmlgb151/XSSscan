@@ -10,38 +10,41 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
+
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 
 	allocopts "github.com/xsscan/xsscan/pkg/internal/chromedp"
+	"github.com/xsscan/xsscan/pkg/internal/request"
 	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/xsscan/xsscan/pkg/ssrfguard"
 )
 
 // ExecutionResult holds the outcome of browser-based execution verification.
 type ExecutionResult struct {
-	Executed          bool     // true if alert/confirm/prompt was called
-	DialogType        string   // "alert" | "confirm" | "prompt"
-	DialogMessage     string   // the message passed to the dialog
-	ConsoleErrors     []string // JS console errors observed
-	DOMMutations      []string // observed DOM changes (tag names injected)
-	Confidence        float64  // 0.0-1.0 execution confidence
-	ScreenshotPath    string   // path to proof screenshot (empty if none)
-	LoadError         string   // page load error if any
+	Executed       bool     // true if alert/confirm/prompt was called
+	DialogType     string   // "alert" | "confirm" | "prompt"
+	DialogMessage  string   // the message passed to the dialog
+	ConsoleErrors  []string // JS console errors observed
+	DOMMutations   []string // observed DOM changes (tag names injected)
+	Confidence     float64  // 0.0-1.0 execution confidence
+	ScreenshotPath string   // path to proof screenshot (empty if none)
+	LoadError      string   // page load error if any
 }
 
 // Verifier manages a headless Chrome instance for XSS execution verification.
 type Verifier struct {
-	allocCtx    context.Context
-	allocCancel context.CancelFunc
-	timeout     time.Duration
-	auth        *AuthState
+	allocCtx      context.Context
+	allocCancel   context.CancelFunc
+	timeout       time.Duration
+	auth          *AuthState
 	screenshotDir string
-	consoleMu   sync.Mutex
+	consoleMu     sync.Mutex
 }
 
 // AuthState carries authentication context for verification.
@@ -93,17 +96,22 @@ func (v *Verifier) VerifyFinding(ctx context.Context, finding model.Finding, tar
 // VerifyPayload verifies a specific payload against a target parameter.
 func (v *Verifier) VerifyPayload(ctx context.Context, target model.Target, paramName string, paramType model.ParamType, payload string) (*ExecutionResult, error) {
 	result := &ExecutionResult{}
+	if err := ssrfguard.IsURLTargetAllowed(target.URL); err != nil {
+		return nil, err
+	}
+	if paramType == model.ParamBody || paramType == model.ParamHeader || paramType == model.ParamCookie {
+		return v.verifyRequest(ctx, target, paramName, paramType, payload)
+	}
 
 	// Build the target URL/navigation based on parameter type
 	navURL, err := v.buildNavigationURL(target, paramName, paramType, payload)
 	if err != nil {
-		// For body/header/cookie params, use proxy-based verification
-		if paramType == model.ParamBody || paramType == model.ParamHeader || paramType == model.ParamCookie {
-			return v.verifyViaProxy(ctx, target, paramName, paramType, payload)
-		}
 		return nil, fmt.Errorf("build navigation URL: %w", err)
 	}
-
+	if target.HTTPMethod() != http.MethodGet || target.Body != "" || len(target.Headers) > 0 || len(target.Cookies) > 0 {
+		target.URL = navURL
+		return v.verifyRequest(ctx, target, "", "", "")
+	}
 	return v.runBrowserCheck(ctx, navURL, result)
 }
 
@@ -122,16 +130,7 @@ func (v *Verifier) buildNavigationURL(target model.Target, paramName string, par
 		return u.String(), nil
 
 	case model.ParamPath:
-		// Replace path segment — find the segment that matches the original param value
-		segments := splitPath(u.Path)
-		for i, seg := range segments {
-			if seg == target.Headers["__xsscan_path_original__"] || seg == "" {
-				segments[i] = payload
-				break
-			}
-		}
-		u.Path = joinPath(segments)
-		return u.String(), nil
+		return request.InjectPathValue(target.URL, paramName, "", payload)
 
 	default:
 		return "", fmt.Errorf("parameter type %s requires proxy verification", paramType)
@@ -139,27 +138,30 @@ func (v *Verifier) buildNavigationURL(target model.Target, paramName string, par
 }
 
 // runBrowserCheck navigates to the URL and checks for dialog execution.
-func (v *Verifier) runBrowserCheck(ctx context.Context, navURL string, result *ExecutionResult) (*ExecutionResult, error) {
+func (v *Verifier) runBrowserCheck(ctx context.Context, navURL string, result *ExecutionResult, setup ...chromedp.Action) (*ExecutionResult, error) {
 	tabCtx, tabCancel := chromedp.NewContext(v.allocCtx)
 	defer tabCancel()
+	stopCancel := context.AfterFunc(ctx, tabCancel)
+	defer stopCancel()
 
 	tctx, cancel := context.WithTimeout(tabCtx, v.timeout)
 	defer cancel()
 
-	// Apply auth cookies if configured
-	if v.auth != nil && len(v.auth.Cookies) > 0 {
-		if err := v.applyCookies(tctx, navURL); err != nil {
-			result.LoadError = fmt.Sprintf("auth cookie error: %v", err)
-		}
+	// Listen before navigation, including authenticated navigation. CDP events
+	// survive document changes and detect synchronous as well as async dialogs.
+	dialogDetected := make(chan dialogInfo, 1)
+	var consoleErrors []string
+	v.installConsoleHandler(tctx, &consoleErrors, dialogDetected)
+	if err := chromedp.Run(tctx, setup...); err != nil {
+		return result, fmt.Errorf("browser setup: %w", err)
 	}
 
-	// Install dialog interception BEFORE navigation
-	dialogDetected := make(chan dialogInfo, 1)
-	v.installDialogHandlers(tctx, dialogDetected)
-
-	// Install console error collector
-	var consoleErrors []string
-	v.installConsoleHandler(tctx, &consoleErrors)
+	// Apply auth cookies without navigating to the payload URL first.
+	if v.auth != nil && len(v.auth.Cookies) > 0 {
+		if err := v.applyCookies(tctx, navURL); err != nil {
+			return result, fmt.Errorf("auth cookie error: %w", err)
+		}
+	}
 
 	// Navigate and wait for page load + async handlers
 	var loadErr error
@@ -184,15 +186,6 @@ func (v *Verifier) runBrowserCheck(ctx context.Context, navURL string, result *E
 		// No dialog detected
 	}
 
-	// Even if no dialog, check for DOM mutations (script-injected elements)
-	if !result.Executed {
-		mutations := v.checkDOMMutations(tctx)
-		result.DOMMutations = mutations
-		if len(mutations) > 0 {
-			result.Confidence = 0.70 // structural execution, not confirmed dialog
-		}
-	}
-
 	result.ConsoleErrors = v.consoleLoad(&consoleErrors)
 
 	// Capture screenshot if execution was detected
@@ -201,7 +194,7 @@ func (v *Verifier) runBrowserCheck(ctx context.Context, navURL string, result *E
 			fmt.Sprintf("xsscan-proof-%d.png", time.Now().UnixNano()))
 		var buf []byte
 		if err := chromedp.Run(tctx, chromedp.CaptureScreenshot(&buf)); err == nil {
-			if err := os.WriteFile(screenshotPath, buf, 0644); err == nil {
+			if err := os.WriteFile(screenshotPath, buf, 0600); err == nil {
 				result.ScreenshotPath = screenshotPath
 			}
 		}
@@ -220,40 +213,14 @@ type dialogInfo struct {
 	message    string
 }
 
-// installDialogHandlers overrides window.alert/confirm/prompt to detect execution.
-// All handlers are installed in a single CDP round-trip for efficiency.
-func (v *Verifier) installDialogHandlers(ctx context.Context, detected chan<- dialogInfo) {
-	// Install all three dialog overrides and read back any detection in one evaluation.
-	// This reduces 5 CDP round-trips to 1, saving ~50-100ms per verification.
-	var detectionResult *string
-	chromedp.Evaluate(`
-		(function() {
-			window.__xsscan_dialog = null;
-			window.alert = function(msg) { window.__xsscan_dialog = {type: 'alert', message: String(msg)}; };
-			window.confirm = function(msg) { window.__xsscan_dialog = {type: 'confirm', message: String(msg)}; };
-			window.prompt = function(msg) { window.__xsscan_dialog = {type: 'prompt', message: String(msg)}; };
-			if (window.__xsscan_dialog) {
-				return JSON.stringify(window.__xsscan_dialog);
-			}
-			return null;
-		})()
-	`, &detectionResult).Do(ctx)
-
-	if detectionResult != nil && *detectionResult != "null" {
-		info := parseDialogJSON(*detectionResult)
-		if info.dialogType != "" {
-			select {
-			case detected <- info:
-			default:
-			}
-		}
-	}
-}
-
 // installConsoleHandler captures JavaScript console errors.
-func (v *Verifier) installConsoleHandler(ctx context.Context, errors *[]string) {
+func (v *Verifier) installConsoleHandler(ctx context.Context, errors *[]string, detected chan<- dialogInfo) {
 	chromedp.ListenTarget(ctx, func(ev interface{}) {
 		if e, ok := ev.(*page.EventJavascriptDialogOpening); ok {
+			select {
+			case detected <- dialogInfo{dialogType: string(e.Type), message: e.Message}:
+			default:
+			}
 			// Auto-dismiss any real dialogs
 			go func() {
 				chromedp.Run(ctx, page.HandleJavaScriptDialog(true))
@@ -269,32 +236,7 @@ func (v *Verifier) installConsoleHandler(ctx context.Context, errors *[]string) 
 func (v *Verifier) consoleLoad(errors *[]string) []string {
 	v.consoleMu.Lock()
 	defer v.consoleMu.Unlock()
-	return *errors
-}
-
-// checkDOMMutations checks if script-injected elements appeared in the DOM.
-func (v *Verifier) checkDOMMutations(ctx context.Context) []string {
-	var mutations []string
-
-	// Check for newly injected script tags
-	chromedp.Evaluate(`
-		(function() {
-			var result = [];
-			var scripts = document.querySelectorAll('script');
-			for (var i = 0; i < scripts.length; i++) {
-				if (scripts[i].textContent && scripts[i].textContent.indexOf('alert') !== -1) {
-					result.push('script_with_alert');
-				}
-			}
-			var imgs = document.querySelectorAll('img[src="x"]');
-			if (imgs.length > 0) result.push('img_injection');
-			var svgs = document.querySelectorAll('svg');
-			if (svgs.length > 0) result.push('svg_injection');
-			return result.join(',');
-		})()
-	`, &mutations)
-
-	return mutations
+	return append([]string(nil), (*errors)...)
 }
 
 // applyCookies sets authentication cookies in the browser.
@@ -308,23 +250,20 @@ func (v *Verifier) applyCookies(ctx context.Context, targetURL string) error {
 		return nil
 	}
 
-	// Navigate to domain first so document.cookie works
-	if err := chromedp.Run(ctx, chromedp.Navigate(targetURL)); err != nil {
-		return fmt.Errorf("auth navigation: %w", err)
-	}
-
 	for _, cookie := range v.auth.Cookies {
-		domain := cookie.Domain
-		if domain == "" {
-			domain = "." + host
+		if cookie == nil {
+			continue
 		}
 		path := cookie.Path
 		if path == "" {
 			path = "/"
 		}
-		cookieStr := fmt.Sprintf("%s=%s; domain=%s; path=%s", cookie.Name, cookie.Value, domain, path)
-		js := "document.cookie = " + strconv.Quote(cookieStr) + ";"
-		if err := chromedp.Run(ctx, chromedp.Evaluate(js, nil)); err != nil {
+		set := network.SetCookie(cookie.Name, cookie.Value).WithURL(targetURL).
+			WithPath(path).WithHTTPOnly(cookie.HttpOnly).WithSecure(cookie.Secure)
+		if cookie.Domain != "" {
+			set = set.WithDomain(cookie.Domain)
+		}
+		if err := chromedp.Run(ctx, set); err != nil {
 			return fmt.Errorf("set cookie %s: %w", cookie.Name, err)
 		}
 	}

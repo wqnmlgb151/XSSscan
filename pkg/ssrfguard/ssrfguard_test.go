@@ -80,7 +80,7 @@ func TestHostsMatch_SameHost(t *testing.T) {
 		{"http://example.com/page", "http://example.com/login", true},
 		{"http://example.com:80/page", "http://example.com:443/login", true},
 		{"http://example.com/page", "http://other.com/page", false},
-		{"http://sub.example.com/", "http://example.com/", true},  // share parent domain example.com
+		{"http://sub.example.com/", "http://example.com/", true},    // share parent domain example.com
 		{"http://auth.target.com/", "http://app.target.com/", true}, // share parent domain target.com
 		{"http://evil.com/", "http://target.com/", false},           // different registrable domains
 		{"http://EXAMPLE.com/", "http://example.com/", true},
@@ -90,6 +90,28 @@ func TestHostsMatch_SameHost(t *testing.T) {
 		got := HostsMatch(p.a, p.b)
 		if got != p.want {
 			t.Errorf("HostsMatch(%q, %q) = %v, want %v", p.a, p.b, got, p.want)
+		}
+	}
+}
+
+func TestHostsMatch_RegistrableDomainsAndIPs(t *testing.T) {
+	for _, tc := range []struct {
+		a, b string
+		want bool
+	}{
+		{"https://victim.co.uk", "https://attacker.co.uk", false},
+		{"https://auth.victim.co.uk", "https://app.victim.co.uk", true},
+		{"https://alice.github.io", "https://bob.github.io", false},
+		{"http://192.168.1.1", "http://10.0.1.1", false},
+		{"http://192.168.1.1", "http://192.168.1.1:8080", true},
+		{"http://[::1]", "http://[::2]", false},
+		{"http://[::ffff:192.168.1.1]", "http://192.168.1.1", true},
+		{"https://EXAMPLE.COM.", "https://example.com", true},
+		{"", "", false},
+		{"https://co.uk", "https://victim.co.uk", false},
+	} {
+		if got := HostsMatch(tc.a, tc.b); got != tc.want {
+			t.Errorf("HostsMatch(%q, %q)=%v, want %v", tc.a, tc.b, got, tc.want)
 		}
 	}
 }

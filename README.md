@@ -9,7 +9,6 @@
 <img src="https://img.shields.io/badge/go-1.22+-00ADD8?logo=go" alt="Go">
 <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
 <img src="https://img.shields.io/badge/tests-19packages--race--passing-brightgreen" alt="Tests">
-<img src="https://img.shields.io/badge/coverage-9%2F19--≥80%25-blue" alt="Coverage">
 <img src="https://img.shields.io/badge/repo-github.com%2Fwqnmlgb151%2FXSSscan-lightgrey" alt="Repo">
 </p>
 
@@ -607,29 +606,6 @@ make deps
 # 清理
 make clean
 ```
-
-### 测试覆盖
-
-| 包 | 覆盖率 | 等级 |
-|----|--------|------|
-| `pkg/report` | 97.4% | ⭐ Excellent |
-| `pkg/callback` | 95.7% | ⭐ Excellent |
-| `pkg/internal/request` | 95.5% | ⭐ Excellent |
-| `pkg/httpclient` | 91.4% | ⭐ Excellent |
-| `pkg/verify` | 91.3% | ⭐ Excellent |
-| `pkg/csrf` | 89.1% | ⭐ Excellent |
-| `pkg/auth` | 88.2% | ⭐ Excellent |
-| `pkg/ssrfguard` | 85.5% | ⭐ Excellent |
-| `pkg/crawler` | 72.0% | ✅ Good |
-| `pkg/scanner` | 82.0% | ⭐ Excellent |
-| `pkg/stored` | 77.9% | ✅ Good |
-| `pkg/auth/oauth` | 66.2% | ✅ Good |
-| `pkg/analyze` | 64.9% | ✅ Good |
-| `pkg/context` | 58.7% | ⚠️ Fair |
-| `cmd/` | 51.0% | ⚠️ Fair |
-| `pkg/payload` | 46.8% | ⚠️ Fair |
-| `pkg/execverify` | 38.1% | 🔴 Low (browser-dependent) |
-| `pkg/dom` | 19.4% | 🔴 Low (CDP integration) |
 
 ---
 

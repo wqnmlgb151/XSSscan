@@ -3,6 +3,7 @@
 package ssrfguard
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/url"
@@ -19,11 +20,19 @@ var AllowPrivate = false
 // loopback, link-local, or other restricted IP ranges.
 // Returns nil if the URL is safe to request, or an error describing the block.
 func IsURLTargetAllowed(rawURL string) error {
+	return IsURLTargetAllowedContext(context.Background(), rawURL)
+}
+
+// IsURLTargetAllowedContext validates an HTTP destination with cancellable DNS.
+func IsURLTargetAllowedContext(ctx context.Context, rawURL string) error {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return fmt.Errorf("invalid URL: %w", err)
 	}
 
+	if u.Scheme != "http" && u.Scheme != "https" && u.Scheme != "socks5" {
+		return fmt.Errorf("unsupported URL scheme %q", u.Scheme)
+	}
 	host := u.Hostname()
 	if host == "" {
 		return fmt.Errorf("URL has no host")
@@ -35,14 +44,17 @@ func IsURLTargetAllowed(rawURL string) error {
 	}
 
 	// Resolve hostname and check all resolved IPs
-	ips, err := net.LookupIP(host)
+	ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
 	if err != nil {
 		// If resolution fails, block by default (fail closed)
 		return fmt.Errorf("cannot resolve host %q: %w", host, err)
 	}
 
+	if len(ips) == 0 {
+		return fmt.Errorf("no addresses for %q", host)
+	}
 	for _, ip := range ips {
-		if err := checkIP(ip); err != nil {
+		if err := checkIP(ip.IP); err != nil {
 			return err
 		}
 	}
@@ -51,6 +63,9 @@ func IsURLTargetAllowed(rawURL string) error {
 
 // checkIP validates a single IP against restricted ranges.
 func checkIP(ip net.IP) error {
+	if ip == nil {
+		return fmt.Errorf("invalid IP address")
+	}
 	if !AllowPrivate {
 		if ip.IsLoopback() {
 			return fmt.Errorf("blocked: loopback address %s", ip)
@@ -82,7 +97,7 @@ func isPrivateIP(ip net.IP) bool {
 		"0.0.0.0/8",      // current network
 		"169.254.0.0/16", // link-local (also caught by IsLinkLocalUnicast)
 		"100.64.0.0/10",  // CGNAT (RFC6598)
-		"fd00::/8",       // IPv6 unique local (RFC4193)
+		"fc00::/7",       // IPv6 unique local (RFC4193)
 		"fe80::/10",      // IPv6 link-local
 	}
 	for _, cidr := range privateRanges {

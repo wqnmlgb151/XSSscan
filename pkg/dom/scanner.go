@@ -6,33 +6,28 @@ package dom
 import (
 	"context"
 	_ "embed"
+	"encoding/base64"
+	"errors"
 	"fmt"
+	"github.com/chromedp/cdproto/fetch"
+	"github.com/chromedp/cdproto/network"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/chromedp/cdproto/page"
-	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 
 	"github.com/xsscan/xsscan/pkg/analyze"
 	allocopts "github.com/xsscan/xsscan/pkg/internal/chromedp"
-	"github.com/xsscan/xsscan/pkg/internal/text"
 	"github.com/xsscan/xsscan/pkg/model"
 )
 
-//go:embed sinks.js
-var sinkDetectionScript string
-
 //go:embed hooks.js
 var hookScript string
-
-// buildSinkScript injects the marker into the sink detection template.
-func buildSinkScript(marker string) string {
-	return strings.Replace(sinkDetectionScript, "{{MARKER}}", marker, 1)
-}
 
 // buildHookScript injects the marker into the CDP sink hook script.
 func buildHookScript(marker string) string {
@@ -96,7 +91,7 @@ func NewScannerWithAuth(ctx context.Context, timeout time.Duration, auth *AuthSt
 
 // ApplyAuthState navigates to the target domain and sets cookies via JavaScript evaluation.
 // This seeds the browser's cookie jar with session/auth cookies before DOM XSS testing.
-func (s *Scanner) ApplyAuthState(ctx context.Context, targetURL string) error {
+func (s *Scanner) ApplyAuthState(ctx context.Context, targetURL string) (resultErr error) {
 	if s.auth == nil || len(s.auth.Cookies) == 0 {
 		return nil
 	}
@@ -109,17 +104,25 @@ func (s *Scanner) ApplyAuthState(ctx context.Context, targetURL string) error {
 		return nil
 	}
 
-	tabCtx, tabCancel := chromedp.NewContext(s.allocCtx)
+	tabCtx, tabCancel, diagnostics := allocopts.NewTabContext(s.allocCtx)
 	defer tabCancel()
+	defer func() { resultErr = errors.Join(resultErr, diagnostics.Err()) }()
 	withTimeout, cancel := context.WithTimeout(tabCtx, s.timeout)
 	defer cancel()
 
-	// Navigate to the target domain first so document.cookie works
-	if err := chromedp.Run(withTimeout, chromedp.Navigate(targetURL)); err != nil {
+	// Apply the same request scope policy before authenticated navigation.
+	guard, policy := allocopts.GuardRequests(targetURL, cancel, nil)
+	if err := chromedp.Run(withTimeout, policy, chromedp.Navigate(targetURL)); err != nil {
+		if policyErr := guard.Err(); policyErr != nil {
+			return policyErr
+		}
 		return fmt.Errorf("auth state navigation failed: %w", err)
 	}
 
 	for _, cookie := range s.auth.Cookies {
+		if cookie == nil {
+			continue
+		}
 		domain := cookie.Domain
 		if domain == "" {
 			domain = "." + host
@@ -145,10 +148,10 @@ func (s *Scanner) Close() error {
 
 // domXSSTest represents a single DOM XSS source to test.
 type domXSSTest struct {
-	Name    string
-	Source  string // description of the source (fragment, search, etc.)
-	NavURL  string
-	Extra   string // optional JS to execute before navigation (window.name, etc.)
+	Name   string
+	Source string // description of the source (fragment, search, etc.)
+	NavURL string
+	Extra  string // optional JS to execute before navigation (window.name, etc.)
 }
 
 // DetectDOMXSS tests multiple DOM XSS sources with the given payload.
@@ -160,25 +163,30 @@ func (s *Scanner) DetectDOMXSS(ctx context.Context, target model.Target, payload
 	}
 
 	// Build test URLs for different DOM XSS sources
-	marker := analyze.MarkerPrefix
+	marker := analyze.GenerateMarker()
 	tests := buildDOMTests(u, payload, marker)
 
 	var allFindings []model.Finding
+	var problems []error
 
 	for _, test := range tests {
+		if ctx.Err() != nil {
+			return allFindings, errors.Join(append(problems, ctx.Err())...)
+		}
 		findings, err := s.runSingleDOMTest(ctx, target, test, marker, payload)
 		if err != nil {
-			continue // skip failed tests, don't fail the entire scan
+			problems = append(problems, fmt.Errorf("DOM source %s: %w", test.Name, err))
+			continue
 		}
 		allFindings = append(allFindings, findings...)
 	}
 
-	return allFindings, nil
+	return allFindings, errors.Join(problems...)
 }
 
 // buildDOMTests creates test configurations for various DOM XSS sources.
 // Covers the OWASP DOM XSS taxonomy: fragment, search, pathname, referrer, window.name,
-// javascript: protocol href, inline event handler injection, localStorage/sessionStorage,
+// javascript: protocol href, localStorage/sessionStorage,
 // document.cookie, and postMessage.
 func buildDOMTests(u *url.URL, payload string, marker string) []domXSSTest {
 	markerPayload := marker + "=" + payload
@@ -205,7 +213,7 @@ func buildDOMTests(u *url.URL, payload string, marker string) []domXSSTest {
 			NavURL: buildURLWithFragment(u, "window-name-test"),
 			// Use jsStringLiteral to safely embed payload in JS —
 			// prevents single-quote injection if payload contains special chars.
-			Extra:  fmt.Sprintf("window.name=%s;", jsStringLiteral(markerPayload)),
+			Extra: fmt.Sprintf("window.name=%s;", jsStringLiteral(markerPayload)),
 		},
 		{
 			Name:   "referrer",
@@ -219,29 +227,19 @@ func buildDOMTests(u *url.URL, payload string, marker string) []domXSSTest {
 			NavURL: buildURLWithJavascriptHref(u, marker, payload),
 		},
 		{
-			Name:   "inline-event",
-			Source: "inline event handler injection via DOM",
-			NavURL: buildURLWithFragment(u, "inline-event-test"),
-			// Inject an element with an inline event handler containing the marker.
-			// The onerror fires automatically (invalid image src), executing the handler.
-			// If the page processes dynamically-added elements (event delegation,
-			// jQuery .on(), etc.), this tests whether injected handlers execute.
-			Extra:  "inject-inline-" + marker,
-		},
-		{
 			Name:   "localStorage",
 			Source: "localStorage.getItem (SPA state persistence)",
 			NavURL: buildURLWithFragment(u, "localstorage-test"),
 			// Store marker+payload into localStorage before page load.
 			// SPA apps often read from localStorage and render with innerHTML/v-html.
-			Extra:  fmt.Sprintf("localStorage.setItem(%s,%s);", jsStringLiteral(marker), jsStringLiteral(payload)),
+			Extra: fmt.Sprintf("localStorage.setItem(%s,%s);", jsStringLiteral(marker), jsStringLiteral(markerPayload)),
 		},
 		{
 			Name:   "sessionStorage",
 			Source: "sessionStorage.getItem (tab-level state)",
 			NavURL: buildURLWithFragment(u, "sessionstorage-test"),
 			// Same as localStorage but scoped to a single tab/session.
-			Extra:  fmt.Sprintf("sessionStorage.setItem(%s,%s);", jsStringLiteral(marker), jsStringLiteral(payload)),
+			Extra: fmt.Sprintf("sessionStorage.setItem(%s,%s);", jsStringLiteral(marker), jsStringLiteral(markerPayload)),
 		},
 		{
 			Name:   "document-cookie",
@@ -250,7 +248,7 @@ func buildDOMTests(u *url.URL, payload string, marker string) []domXSSTest {
 			// Set a cookie containing the marker. If the page reads document.cookie
 			// and renders it unsanitized, this triggers DOM XSS.
 			// The cookie domain is set to the target host so it's readable by JS.
-			Extra:  fmt.Sprintf("document.cookie=%s; domain=%s", jsStringLiteral(markerPayload), u.Hostname()),
+			Extra: fmt.Sprintf("document.cookie=%s;", jsStringLiteral(markerPayload+"; path=/")),
 		},
 		{
 			Name:   "postMessage",
@@ -259,7 +257,7 @@ func buildDOMTests(u *url.URL, payload string, marker string) []domXSSTest {
 			// postMessage sends data to the page's message event listener.
 			// If the page does eval(message.data) or innerHTML = e.data, this triggers.
 			// We send after page load so the listener is registered.
-			Extra:  fmt.Sprintf("post-message-%s", marker),
+			Extra: fmt.Sprintf("post-message-%s", marker),
 		},
 	}
 
@@ -299,12 +297,82 @@ func buildURLWithJavascriptHref(u *url.URL, marker, payload string) string {
 }
 
 // runSingleDOMTest navigates to a URL and checks if the payload reaches a DOM sink.
-func (s *Scanner) runSingleDOMTest(ctx context.Context, target model.Target, test domXSSTest, marker, payload string) ([]model.Finding, error) {
-	tabCtx, tabCancel := chromedp.NewContext(s.allocCtx)
+func (s *Scanner) runSingleDOMTest(ctx context.Context, target model.Target, test domXSSTest, marker, payload string) (result []model.Finding, resultErr error) {
+	tabCtx, tabCancel, diagnostics := allocopts.NewTabContext(s.allocCtx)
 	defer tabCancel()
+	defer func() {
+		if err := diagnostics.Err(); err != nil {
+			result = nil
+			resultErr = errors.Join(resultErr, err)
+		}
+	}()
 
+	stopCancel := context.AfterFunc(ctx, tabCancel)
+	defer stopCancel()
 	ctx, cancel := context.WithTimeout(tabCtx, s.timeout)
 	defer cancel()
+
+	var replayed atomic.Bool
+	rewrite := func(e *fetch.EventRequestPaused) *fetch.ContinueRequestParams {
+		continuation := fetch.ContinueRequest(e.RequestID)
+		expected, _ := url.Parse(test.NavURL)
+		actual, _ := url.Parse(e.Request.URL)
+		if expected != nil && actual != nil {
+			expected.Fragment = ""
+			actual.Fragment = ""
+			if expected.Path == "" {
+				expected.Path = "/"
+			}
+			if actual.Path == "" {
+				actual.Path = "/"
+			}
+		}
+		if e.ResourceType == network.ResourceTypeDocument && expected != nil && actual != nil && expected.String() == actual.String() && replayed.CompareAndSwap(false, true) {
+			continuation = continuation.WithMethod(target.HTTPMethod())
+			if target.Body != "" {
+				continuation = continuation.WithPostData(base64.StdEncoding.EncodeToString([]byte(target.Body)))
+			}
+		}
+		return continuation
+	}
+	guard, policy := allocopts.GuardRequests(target.URL, cancel, rewrite)
+	if err := chromedp.Run(ctx, policy, network.Enable()); err != nil {
+		return nil, err
+	}
+	headers := network.Headers{}
+	for key, value := range target.Headers {
+		if !strings.EqualFold(key, "Proxy-Authorization") && !strings.EqualFold(key, "Content-Length") {
+			headers[key] = value
+		}
+	}
+	if err := chromedp.Run(ctx, network.SetExtraHTTPHeaders(headers)); err != nil {
+		return nil, err
+	}
+	cookies := append([]*http.Cookie(nil), target.Cookies...)
+	if s.auth != nil {
+		cookies = append(append([]*http.Cookie(nil), s.auth.Cookies...), cookies...)
+	}
+	for _, cookie := range cookies {
+		if cookie == nil {
+			continue
+		}
+		path := cookie.Path
+		if path == "" {
+			path = "/"
+		}
+		set := network.SetCookie(cookie.Name, cookie.Value).WithURL(target.URL).WithPath(path).WithHTTPOnly(cookie.HttpOnly).WithSecure(cookie.Secure)
+		if cookie.Domain != "" {
+			set = set.WithDomain(cookie.Domain)
+		}
+		if err := chromedp.Run(ctx, set); err != nil {
+			return nil, err
+		}
+	}
+	chromedp.ListenTarget(ctx, func(ev interface{}) {
+		if _, ok := ev.(*page.EventJavascriptDialogOpening); ok {
+			go func() { _ = chromedp.Run(ctx, page.HandleJavaScriptDialog(false)) }()
+		}
+	})
 
 	// Inject sink hooks via CDP before any navigation.
 	// These hooks intercept innerHTML, eval, document.write, etc. and record
@@ -316,172 +384,62 @@ func (s *Scanner) runSingleDOMTest(ctx context.Context, target model.Target, tes
 		return err
 	})
 
-	var consoleMsgs []string
-	var exceptions []string
+	// Initialize source state in the target origin before application scripts.
+	// about:blank storage is inaccessible and cannot seed target-origin storage.
+	setup := test.Extra
+	if test.Name == "referrer" {
+		setup = fmt.Sprintf("Object.defineProperty(document,'referrer',{get:()=>%s});", jsStringLiteral(target.URL+"#"+marker+"="+payload))
+	}
+	if strings.HasPrefix(setup, "post-message-") || strings.HasPrefix(setup, "inject-inline-") {
+		setup = ""
+	}
+	actions := []chromedp.Action{injectHook}
+	if setup != "" {
+		actions = append(actions, chromedp.ActionFunc(func(ctx context.Context) error {
+			_, err := page.AddScriptToEvaluateOnNewDocument(setup).Do(ctx)
+			return err
+		}))
+	}
+	actions = append(actions, chromedp.Navigate(test.NavURL), chromedp.Sleep(2*time.Second))
+	if test.Name == "postMessage" {
+		actions = append(actions, chromedp.Evaluate(fmt.Sprintf("window.postMessage(%s,'*');", jsStringLiteral(marker+"="+payload)), nil), chromedp.Sleep(time.Second))
+	}
+	err := chromedp.Run(ctx, actions...)
 
-	// Listen for console and exception events
-	chromedp.ListenTarget(ctx, func(ev interface{}) {
-		switch e := ev.(type) {
-		case *runtime.EventConsoleAPICalled:
-			for _, arg := range e.Args {
-				if arg.Value != nil {
-					consoleMsgs = append(consoleMsgs, string(arg.Value))
-				}
-			}
-		case *runtime.EventExceptionThrown:
-			if e.ExceptionDetails != nil && e.ExceptionDetails.Exception != nil {
-				exceptions = append(exceptions, e.ExceptionDetails.Exception.Description)
-			}
-		}
-	})
-
-	// For tests requiring pre-navigation setup (window.name, referrer),
-	// first load the page, inject state, then navigate to the target.
-	var err error
-	switch {
-	case test.Extra != "" && test.Name == "window.name":
-		// window.name persists across navigations — set it on about:blank first
-		err = chromedp.Run(ctx,
-			injectHook,
-			chromedp.Navigate("about:blank"),
-			chromedp.Evaluate(test.Extra, nil),
-			chromedp.Navigate(test.NavURL),
-			chromedp.Sleep(2*time.Second),
-		)
-	case test.Extra != "" && test.Name == "referrer":
-		// document.referrer test — load a spoofing page first.
-		// Use DOM APIs instead of document.write to prevent Self-XSS:
-		// user-controlled URL could contain single quotes that break
-		// out of a JS string literal and execute arbitrary code.
-		referrerJS := fmt.Sprintf(`(function(){var m=document.createElement('meta');m.name='referrer';m.content='unsafe-url';document.head.appendChild(m);var f=document.createElement('iframe');f.src=%s;document.body.appendChild(f);})();`, strconv.Quote(test.NavURL))
-		err = chromedp.Run(ctx,
-			injectHook,
-			chromedp.Navigate("about:blank"),
-			chromedp.Evaluate(referrerJS, nil),
-			chromedp.Sleep(2*time.Second),
-		)
-	case test.Extra != "" && test.Name == "inline-event":
-		// Inline event handler test — navigate to page, then inject an element
-		// with an inline event handler. The onerror fires automatically (invalid src),
-		// testing whether dynamically-injected inline handlers execute in this context.
-		err = chromedp.Run(ctx,
-			injectHook,
-			chromedp.Navigate(test.NavURL),
-			chromedp.Sleep(1*time.Second),
-			chromedp.Evaluate(fmt.Sprintf(`(function(){
-				var img = document.createElement('img');
-				img.src = 'x';
-				img.setAttribute('onerror', 'this.dataset.%s=1; document.body.setAttribute("data-%s-fired", "1");');
-				document.body.appendChild(img);
-			})();`, marker, marker), nil),
-			chromedp.Sleep(2*time.Second),
-		)
-	case strings.HasPrefix(test.Extra, "localStorage.setItem") ||
-		strings.HasPrefix(test.Extra, "sessionStorage.setItem") ||
-		strings.HasPrefix(test.Extra, "document.cookie"):
-		// Storage-based sources — set value on about:blank first (storage
-		// is origin-scoped), then navigate to target so the page reads it.
-		err = chromedp.Run(ctx,
-			injectHook,
-			chromedp.Navigate("about:blank"),
-			chromedp.Evaluate(test.Extra, nil),
-			chromedp.Navigate(test.NavURL),
-			chromedp.Sleep(2*time.Second),
-		)
-	case strings.HasPrefix(test.Extra, "post-message-"):
-		// postMessage source — navigate to target first so the message
-		// listener is registered, then post a message containing the marker.
-		postJS := fmt.Sprintf(`window.postMessage(%s, "*");`, jsStringLiteral(marker))
-		err = chromedp.Run(ctx,
-			injectHook,
-			chromedp.Navigate(test.NavURL),
-			chromedp.Sleep(1*time.Second),
-			chromedp.Evaluate(postJS, nil),
-			chromedp.Sleep(2*time.Second),
-		)
-	default:
-		// Standard navigation for fragment, search, pathname tests
-		err = chromedp.Run(ctx,
-			injectHook,
-			chromedp.Navigate(test.NavURL),
-			chromedp.Sleep(2*time.Second),
-		)
+	if policyErr := guard.Err(); policyErr != nil {
+		return nil, policyErr
 	}
 	if err != nil {
 		return nil, fmt.Errorf("navigation failed: %w", err)
 	}
 
-	var findings []model.Finding
-
-	// Read CDP sink hooks first — these provide the highest-quality signal
-	// (marker actually passed through innerHTML/eval/document.write, not just
-	// sitting in the URL or cookie).
-	// Two separate evaluations: hooksInstalled distinguishes "hooks ran but
-	// zero hits" (true negative — do NOT fall back) from "hooks absent"
-	// (injection failed — fall back to post-hoc scan).
 	var hooksInstalled bool
 	var hookHits []sinkResult
 	if err := chromedp.Run(ctx,
 		chromedp.Evaluate(`typeof window.__xsscan_hooks !== 'undefined'`, &hooksInstalled),
 		chromedp.Evaluate(`window.__xsscan_hooks || []`, &hookHits),
-	); err == nil {
-		for _, hit := range hookHits {
-			findings = append(findings, newDOMFinding(test, payload,
-				fmt.Sprintf("DOM (%s)", test.Name),
-				fmt.Sprintf("DOM XSS via %s: marker reached %s sink", test.Source, hit.Sink),
-				"Use safe DOM APIs (textContent instead of innerHTML). Implement Trusted Types.",
-				0.85,
-				[]string{"https://owasp.org/www-community/attacks/DOM_Based_Cross_Site_Scripting"},
-			))
-		}
+	); err != nil {
+		return nil, fmt.Errorf("read DOM sink evidence: %w", err)
 	}
-
-	// Fallback: sink detection via embedded JS (post-hoc DOM scan).
-	// ONLY used when hooks failed to install (injection blocked, older
-	// browser). When hooks are installed and report zero hits, that is a
-	// true negative — the marker never reached a sink, so the fallback's
-	// "marker is in the URL" checks would only produce false positives.
 	if !hooksInstalled {
-		var sinkHit string
-		err = chromedp.Run(ctx,
-			chromedp.Evaluate(buildSinkScript(marker), &sinkHit),
-		)
-		if err != nil {
-			return nil, fmt.Errorf("JS evaluation failed: %w", err)
-		}
-
-		if sinkHit != "" {
-			findings = append(findings, newDOMFinding(test, payload,
-				fmt.Sprintf("DOM (%s)", test.Name),
-				fmt.Sprintf("DOM XSS via %s: payload reached sink(s): %s", test.Source, sinkHit),
-				"Use safe DOM APIs (textContent instead of innerHTML). Sanitize all client-side input. Implement Trusted Types.",
-				0.75,
-				[]string{
-					"https://owasp.org/www-community/attacks/DOM_Based_Cross_Site_Scripting",
-					"https://portswigger.net/web-security/dom-based",
-				},
-			))
-		}
-	} // end if !hooksInstalled
-
-	// Check console for payload execution indicators
-	for _, msg := range consoleMsgs {
-		if strings.Contains(msg, marker) {
-			findings = append(findings, newDOMFinding(test, payload,
-				fmt.Sprintf("DOM (%s/console)", test.Name),
-				fmt.Sprintf("DOM XSS indicator via %s: payload in console: %s", test.Source, text.Truncate(msg, 100)),
-				"Review client-side JavaScript that processes URL input.",
-				0.60, nil))
-			break
-		}
+		return nil, fmt.Errorf("DOM sink instrumentation unavailable")
+	}
+	var findings []model.Finding
+	for _, hit := range hookHits {
+		// Hooks match the full value before truncating the captured snippet.
+		// Rechecking that snippet would lose markers outside the captured prefix.
+		findings = append(findings, newDOMFinding(test, payload,
+			fmt.Sprintf("DOM (%s)", test.Name),
+			fmt.Sprintf("DOM XSS candidate via %s: marker reached %s sink; execution not verified", test.Source, hit.Sink),
+			"Use safe DOM APIs (textContent instead of innerHTML). Implement Trusted Types.",
+			0.85, []string{"https://owasp.org/www-community/attacks/DOM_Based_Cross_Site_Scripting"}))
 	}
 
 	return findings, nil
 }
 
-// newDOMFinding builds the shared structure for DOM XSS findings. The three
-// detection layers (CDP hooks, post-hoc scan, console indicators) differ only
-// in confidence, parameter suffix, and description.
+// newDOMFinding builds DOM sink candidates with their source.
+// Sink flow alone does not verify execution.
 func newDOMFinding(test domXSSTest, payload, parameter, description, remediation string, confidence float64, references []string) model.Finding {
 	severity := model.High
 	if confidence < 0.70 {
@@ -503,4 +461,3 @@ func newDOMFinding(test domXSSTest, payload, parameter, description, remediation
 		Timestamp:   time.Now(),
 	}
 }
-

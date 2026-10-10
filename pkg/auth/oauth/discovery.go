@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/xsscan/xsscan/pkg/httpclient"
+	"github.com/xsscan/xsscan/pkg/ssrfguard"
 	"io"
 	"net/http"
 	"net/url"
@@ -22,9 +24,21 @@ type OIDCConfiguration struct {
 
 // DiscoverOIDC fetches the OpenID Connect discovery document from the well-known URL.
 func DiscoverOIDC(ctx context.Context, client *http.Client, issuer string) (*OIDCConfiguration, error) {
+	return DiscoverOIDCWithOrigins(ctx, client, issuer, nil)
+}
+
+func DiscoverOIDCWithOrigins(ctx context.Context, client *http.Client, issuer string, allowedOrigins []string) (*OIDCConfiguration, error) {
+	var err error
+	issuer, err = ExtractIssuer(issuer)
+	if err != nil {
+		return nil, err
+	}
+	if err := ssrfguard.IsURLTargetAllowedContext(ctx, issuer); err != nil {
+		return nil, err
+	}
+	client = httpclient.WithRedirectPolicy(httpclient.WithCapture(client))
 	// Ensure issuer doesn't have trailing slash
-	issuer = strings.TrimRight(issuer, "/")
-	wellKnownURL := issuer + "/.well-known/openid-configuration"
+	wellKnownURL := strings.TrimRight(issuer, "/") + "/.well-known/openid-configuration"
 
 	req, err := http.NewRequestWithContext(ctx, "GET", wellKnownURL, nil)
 	if err != nil {
@@ -41,16 +55,33 @@ func DiscoverOIDC(ctx context.Context, client *http.Client, issuer string) (*OID
 		return nil, fmt.Errorf("discovery failed (HTTP %d)", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024+1))
 	if err != nil {
 		return nil, fmt.Errorf("read discovery response: %w", err)
 	}
 
+	if len(body) > 64*1024 {
+		return nil, fmt.Errorf("OIDC document exceeds size limit")
+	}
 	var config OIDCConfiguration
 	if err := json.Unmarshal(body, &config); err != nil {
 		return nil, fmt.Errorf("parse discovery document: %w", err)
 	}
 
+	if config.Issuer != issuer {
+		return nil, fmt.Errorf("OIDC issuer mismatch: requested %q, received %q", issuer, config.Issuer)
+	}
+	if config.TokenEndpoint == "" {
+		return nil, fmt.Errorf("OIDC token_endpoint is missing")
+	}
+	for _, endpoint := range []string{config.TokenEndpoint, config.AuthorizationEndpoint, config.UserInfoEndpoint, config.RevocationEndpoint, config.EndSessionEndpoint} {
+		if endpoint == "" {
+			continue
+		}
+		if err := validateEndpoint(ctx, issuer, endpoint, allowedOrigins); err != nil {
+			return nil, err
+		}
+	}
 	return &config, nil
 }
 
@@ -106,14 +137,36 @@ func ParseOkta(domain string) *FlowConfig {
 func ExtractIssuer(input string) (string, error) {
 	u, err := url.Parse(input)
 	if err != nil {
-		return "", fmt.Errorf("parse URL: %w", err)
+		return "", fmt.Errorf("parse issuer: %w", err)
 	}
-
-	// If it's just a domain, return as-is
-	if u.Path == "" || u.Path == "/" {
-		return fmt.Sprintf("%s://%s", u.Scheme, u.Host), nil
+	if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return "", fmt.Errorf("issuer must be an absolute HTTP(S) URL without credentials, query or fragment")
 	}
-
-	// Try to extract the base issuer URL
-	return fmt.Sprintf("%s://%s", u.Scheme, u.Host), nil
+	// Preserve tenant/realm paths. Only strip the documented discovery suffix.
+	u.Path = strings.TrimSuffix(u.Path, "/.well-known/openid-configuration")
+	u.RawPath = strings.TrimSuffix(u.RawPath, "/.well-known/openid-configuration")
+	return u.String(), nil
+}
+func validateEndpoint(ctx context.Context, issuer, endpoint string, allowed []string) error {
+	u, err := url.Parse(endpoint)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || u.Fragment != "" {
+		return fmt.Errorf("invalid OIDC endpoint %q", endpoint)
+	}
+	allowedOrigin := ssrfguard.SameOrigin(issuer, endpoint)
+	for _, origin := range allowed {
+		v, e := url.Parse(origin)
+		if e != nil || v.Host == "" || v.User != nil || v.RawQuery != "" || v.Fragment != "" || (v.Path != "" && v.Path != "/") {
+			return fmt.Errorf("invalid allowed OAuth origin %q", origin)
+		}
+		if ssrfguard.SameOrigin(origin, endpoint) {
+			allowedOrigin = true
+		}
+	}
+	if !allowedOrigin {
+		return fmt.Errorf("OIDC endpoint outside approved origins: %s", endpoint)
+	}
+	if err := ssrfguard.IsURLTargetAllowedContext(ctx, endpoint); err != nil {
+		return fmt.Errorf("OIDC endpoint blocked: %w", err)
+	}
+	return nil
 }

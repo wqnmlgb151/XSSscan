@@ -28,15 +28,15 @@ import (
 
 // Callback represents a single HTTP request received from a blind XSS payload.
 type Callback struct {
-	Timestamp time.Time         `json:"timestamp"`
-	RemoteAddr string           `json:"remote_addr"`
-	Method    string            `json:"method"`
-	Path      string            `json:"path"`
-	Query     string            `json:"query"`
-	Headers   map[string]string `json:"headers"`
-	Body      string            `json:"body"`
-	UserAgent string            `json:"user_agent"`
-	Referer   string            `json:"referer"`
+	Timestamp  time.Time         `json:"timestamp"`
+	RemoteAddr string            `json:"remote_addr"`
+	Method     string            `json:"method"`
+	Path       string            `json:"path"`
+	Query      string            `json:"query"`
+	Headers    map[string]string `json:"headers"`
+	Body       string            `json:"body"`
+	UserAgent  string            `json:"user_agent"`
+	Referer    string            `json:"referer"`
 }
 
 // maxCallbacks limits the callback buffer to prevent memory exhaustion from floods.
@@ -50,6 +50,7 @@ type Server struct {
 	cond      *sync.Cond
 	callbacks []Callback
 	listener  net.Listener
+	stopped   bool
 }
 
 // NewServer creates a callback server on the given address.
@@ -103,6 +104,10 @@ func (s *Server) BaseURL() string {
 
 // Stop gracefully shuts down the server and wakes any WaitFor callers.
 func (s *Server) Stop() error {
+	s.mu.Lock()
+	s.stopped = true
+	s.cond.Broadcast()
+	s.mu.Unlock()
 	if s.server == nil {
 		return nil
 	}
@@ -136,19 +141,29 @@ func (s *Server) Count() int {
 // Uses sync.Cond for efficient notification instead of busy-polling.
 // Returns whatever callbacks were received by the timeout.
 func (s *Server) WaitFor(n int, timeout time.Duration) []Callback {
+	return s.WaitForContext(context.Background(), n, timeout)
+}
+
+// WaitForContext includes run cancellation without polling or lost wakeups.
+func (s *Server) WaitForContext(ctx context.Context, n int, timeout time.Duration) []Callback {
+	return s.wait(ctx, timeout, func() bool { return len(s.callbacks) >= n })
+}
+
+func (s *Server) wait(ctx context.Context, timeout time.Duration, ready func() bool) []Callback {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	wake := func() { s.mu.Lock(); s.cond.Broadcast(); s.mu.Unlock() }
+	stop := context.AfterFunc(ctx, wake)
+	defer stop()
 
 	deadline := time.Now().Add(timeout)
-	for len(s.callbacks) < n {
+	for !ready() && ctx.Err() == nil && !s.stopped {
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
 			break
 		}
 		// Use a timer channel + select so we don't need a goroutine per waiter
-		timer := time.AfterFunc(remaining, func() {
-			s.cond.Broadcast()
-		})
+		timer := time.AfterFunc(remaining, wake)
 		s.cond.Wait()
 		timer.Stop()
 	}
@@ -213,4 +228,10 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"status":    "ok",
 		"callbacks": s.Count(),
 	})
+}
+
+// ObserveWindow retains all callbacks arriving during the complete bounded window.
+// A first callback does not imply that other submitted candidates completed.
+func (s *Server) ObserveWindow(ctx context.Context, timeout time.Duration) []Callback {
+	return s.wait(ctx, timeout, func() bool { return false })
 }

@@ -1,10 +1,10 @@
 package analyze
 
 import (
+	stdctx "context"
 	"encoding/json"
 	"fmt"
 	"io"
-	stdctx "context"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -29,6 +29,7 @@ type Analyzer struct {
 }
 
 type AnalysisResult struct {
+	Errors          []error
 	Target          model.Target
 	InjectionPoints []model.InjectionPoint
 	Frameworks      []FrameworkInfo
@@ -37,20 +38,9 @@ type AnalysisResult struct {
 
 func NewAnalyzer(client *http.Client) *Analyzer {
 	if client == nil {
-		client = httpclient.NewClient(30 * time.Second, nil)
+		client = httpclient.NewClient(30*time.Second, nil)
 	}
-	// Set SSRF-aware redirect validation once at construction.
-	// Previously sendRequest shallow-copied the entire http.Client on every
-	// call just to override CheckRedirect — needlessly copying mutex state.
-	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-		if len(via) >= 10 {
-			return http.ErrUseLastResponse
-		}
-		if err := ssrfguard.IsURLTargetAllowed(req.URL.String()); err != nil {
-			return fmt.Errorf("redirect blocked: %w", err)
-		}
-		return nil
-	}
+	client = httpclient.WithRedirectPolicy(client)
 	return &Analyzer{
 		reflectionAnalyzer: NewReflectionAnalyzer(),
 		contextDetector:    ctx.NewDetector(),
@@ -65,7 +55,16 @@ func (a *Analyzer) Analyze(gtx stdctx.Context, target model.Target) (*AnalysisRe
 
 	params := ExtractParameters(target, a.discoverHeaders)
 	if len(params) == 0 {
-		return result, nil
+		resp, err := a.sendRequest(gtx, target)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode >= 400 {
+			return nil, fmt.Errorf("analysis HTTP %d", resp.StatusCode)
+		}
+		_, err = io.Copy(io.Discard, io.LimitReader(resp.Body, httpclient.MaxResponseSize))
+		return result, err
 	}
 
 	// Generate unique markers per parameter for correct reflection attribution.
@@ -99,6 +98,9 @@ func (a *Analyzer) Analyze(gtx stdctx.Context, target model.Target) (*AnalysisRe
 		return a.analyzePerParam(gtx, target, params, paramMarkers, preserveAuth)
 	}
 
+	if resp.StatusCode == 401 || resp.StatusCode == 429 || resp.StatusCode >= 500 {
+		return nil, fmt.Errorf("analysis HTTP %d", resp.StatusCode)
+	}
 	result.Frameworks = a.frameworkDetector.Detect(resp, bodyStr)
 	result.CSP = a.cspAnalyzer.Parse(request.HeaderMap(resp.Header))
 
@@ -133,7 +135,9 @@ func (a *Analyzer) Analyze(gtx stdctx.Context, target model.Target) (*AnalysisRe
 		if len(reflections) == 0 {
 			continue
 		}
-		for _, ref := range reflections {
+		// The detector classifies every occurrence in the whole response once.
+		// Repeating it duplicated injection points and quadratic parse/probe work.
+		for _, ref := range reflections[:1] {
 			var contexts []ctx.Context
 
 			if isJSON {
@@ -269,17 +273,20 @@ func (a *Analyzer) analyzePerParam(gtx stdctx.Context, target model.Target, para
 
 		resp, err := a.sendRequest(gtx, modifiedTarget)
 		if err != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("parameter %s: %w", param.Name, err))
 			continue
 		}
 		body, err := io.ReadAll(io.LimitReader(resp.Body, httpclient.MaxResponseSize))
 		resp.Body.Close()
 		if err != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("parameter %s: %w", param.Name, err))
 			continue
 		}
 		bodyStr := string(body)
 
 		// Skip if this parameter individually triggers WAF
-		if isWAFBlockResponse(resp, bodyStr) {
+		if isWAFBlockResponse(resp, bodyStr) || resp.StatusCode == 401 || resp.StatusCode == 429 || resp.StatusCode >= 500 {
+			result.Errors = append(result.Errors, fmt.Errorf("parameter %s blocked: HTTP %d", param.Name, resp.StatusCode))
 			continue
 		}
 
@@ -299,7 +306,7 @@ func (a *Analyzer) analyzePerParam(gtx stdctx.Context, target model.Target, para
 			continue
 		}
 
-		for _, ref := range reflections {
+		for _, ref := range reflections[:1] {
 			refl := ctx.Reflection{
 				Content:    bodyStr,
 				Offset:     ref.Offset,
@@ -364,15 +371,15 @@ var authSafeHeaders = map[string]bool{
 // authSafeCookies are session/auth cookie names preserved during analysis.
 // Only these cookie values are kept; other cookies still get the marker.
 var authSafeCookies = map[string]bool{
-	"session":     true,
-	"sid":         true,
-	"token":       true,
-	"jwt":         true,
-	"auth":        true,
-	"PHPSESSID":   true,
-	"JSESSIONID":  true,
+	"session":      true,
+	"sid":          true,
+	"token":        true,
+	"jwt":          true,
+	"auth":         true,
+	"PHPSESSID":    true,
+	"JSESSIONID":   true,
 	"ASPSESSIONID": true,
-	"connect.sid": true,
+	"connect.sid":  true,
 }
 
 // injectPerParamMarkers injects unique markers per parameter into the target.
@@ -381,6 +388,16 @@ var authSafeCookies = map[string]bool{
 // When preserveAuth is true, auth-critical headers and session cookies keep
 // their original values so authenticated scans actually reach protected endpoints.
 func injectPerParamMarkers(target model.Target, markers map[string]string, preserveAuth bool) model.Target {
+	// Resolve positions before mutation so repeated values and encoded slashes
+	// retain their original escaped segment indexes during WAF fallback too.
+	for _, param := range extractPathParams(target.URL) {
+		if marker, ok := markers[paramKey(param)]; ok {
+			if injected, err := request.InjectPathValue(target.URL, param.Name, param.Value, marker); err == nil {
+				target.URL = injected
+			}
+		}
+	}
+
 	u, err := url.Parse(target.URL)
 	if err != nil {
 		return target

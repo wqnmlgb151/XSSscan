@@ -182,6 +182,9 @@ func (g *Generator) Generate(injection model.InjectionPoint) []Payload {
 		for _, custom := range g.customPayloads {
 			matched := false
 			for _, ctx := range injection.Contexts {
+				if !ctx.IsExploitable() {
+					continue
+				}
 				// Skip JS-only contexts for HTML-tag payloads
 				if custom.isHTML && isJSOnlyContext(ctx.Type) {
 					continue
@@ -197,7 +200,7 @@ func (g *Generator) Generate(injection model.InjectionPoint) []Payload {
 				matched = true
 			}
 			// If no specific context matched, fall back to HTMLBody
-			if !matched || len(injection.Contexts) == 0 {
+			if !matched && len(injection.Contexts) == 0 {
 				payloads = append(payloads, custom)
 			}
 		}

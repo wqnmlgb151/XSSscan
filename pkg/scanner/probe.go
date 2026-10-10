@@ -87,12 +87,12 @@ var probeLibrary = map[ctx.ContextType][]ContextProbe{
 		// (" onmouseover=alert(1) x="). These probes validate that dimension.
 		{
 			ContextType: ctx.ContextHTMLAttrValue,
-			Probe:       `"` + analyze.MarkerPrefix + `"=`,
+			Probe:       `" ` + analyze.MarkerPrefix + `="`,
 			Validator:   validateDoubleQuoteBreakout,
 		},
 		{
 			ContextType: ctx.ContextHTMLAttrValue,
-			Probe:       `'` + analyze.MarkerPrefix + `'=`,
+			Probe:       `' ` + analyze.MarkerPrefix + `='`,
 			Validator:   validateSingleQuoteBreakout,
 		},
 	},
@@ -222,8 +222,7 @@ func validateQuoteBreakout(body string) bool {
 		case html.ErrorToken:
 			return false
 		case html.StartTagToken, html.SelfClosingTagToken:
-			// TagAttr must be consumed directly — z.Token() would advance
-			// the tokenizer past the tag and corrupt attribute reading.
+			// Read attributes from the current tag token.
 			for {
 				key, _, more := z.TagAttr()
 				// HTML5 parses the injected quote as part of the attribute
@@ -330,7 +329,12 @@ func (e *Engine) runContextProbe(stdctx context.Context, injection model.Injecti
 the response body. Reuses the same inject + throttle + client pipeline as
 doScanPayload but without retry/WAF logic — probes are one-shot. */
 
-func (e *Engine) sendProbeRequest(stdctx context.Context, injection model.InjectionPoint, probeValue, host string) (string, error) {
+func (e *Engine) sendProbeRequest(stdctx context.Context, injection model.InjectionPoint, probeValue, host string) (bodyText string, resultErr error) {
+	defer func() {
+		if resultErr != nil {
+			e.recordRunError("probe", resultErr)
+		}
+	}()
 	modifiedTarget, err := e.injectPayload(injection.Target, injection.Parameter, probeValue)
 	if err != nil {
 		return "", fmt.Errorf("probe inject: %w", err)
@@ -360,6 +364,9 @@ func (e *Engine) sendProbeRequest(stdctx context.Context, injection model.Inject
 		return "", err
 	}
 
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("probe HTTP %d", resp.StatusCode)
+	}
 	e.throttle.ReportSuccessHost(host)
 	return string(body), nil
 }

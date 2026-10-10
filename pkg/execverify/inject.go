@@ -12,15 +12,13 @@ import (
 	"sync/atomic"
 
 	"github.com/chromedp/cdproto/fetch"
-	"github.com/chromedp/cdproto/network"
-	"github.com/chromedp/chromedp"
 	"github.com/xsscan/xsscan/pkg/internal/request"
 	"github.com/xsscan/xsscan/pkg/model"
 )
 
 // verifyRequest overrides the initial document request in Chrome. Keeping the
 // target origin preserves relative scripts, cookies and browser CSP behavior.
-func (v *Verifier) verifyRequest(ctx context.Context, target model.Target, paramName string, paramType model.ParamType, payload string) (*ExecutionResult, error) {
+func (v *Verifier) verifyRequest(ctx context.Context, target model.Target, paramName string, paramType model.ParamType, payload string, expected ...string) (*ExecutionResult, error) {
 	req, err := buildVerificationRequest(ctx, target, paramName, paramType, payload)
 	if err != nil {
 		return nil, err
@@ -35,52 +33,35 @@ func (v *Verifier) verifyRequest(ctx context.Context, target model.Target, param
 	}
 	defer req.Body.Close()
 	var replayed atomic.Bool
-	replayErrors := make(chan error, 1)
-	setup := chromedp.ActionFunc(func(tabCtx context.Context) error {
-		chromedp.ListenTarget(tabCtx, func(ev interface{}) {
-			e, ok := ev.(*fetch.EventRequestPaused)
-			if !ok {
-				return
+	rewrite := func(e *fetch.EventRequestPaused) *fetch.ContinueRequestParams {
+		continuation := fetch.ContinueRequest(e.RequestID)
+		if sameNavigationURL(e.Request.URL, req.URL) && replayed.CompareAndSwap(false, true) {
+			headers := make(http.Header)
+			for k, value := range e.Request.Headers {
+				headers.Set(k, fmt.Sprint(value))
 			}
-			// Never block the CDP event dispatch goroutine waiting for CDP.
-			go func() {
-				continuation := fetch.ContinueRequest(e.RequestID)
-				if sameNavigationURL(e.Request.URL, req.URL) && replayed.CompareAndSwap(false, true) {
-					headers := make(http.Header)
-					for k, value := range e.Request.Headers {
-						headers.Set(k, fmt.Sprint(value))
-					}
-					for k, values := range req.Header {
-						headers[k] = values
-					}
-					headers.Del("Content-Length")
-					entries := make([]*fetch.HeaderEntry, 0, len(headers))
-					for k, values := range headers {
-						for _, value := range values {
-							entries = append(entries, &fetch.HeaderEntry{Name: k, Value: value})
-						}
-					}
-					continuation = continuation.WithMethod(req.Method).WithHeaders(entries)
-					if len(body) > 0 {
-						continuation = continuation.WithPostData(base64.StdEncoding.EncodeToString(body))
-					}
+			for k, values := range req.Header {
+				headers[k] = values
+			}
+			headers.Del("Content-Length")
+			entries := make([]*fetch.HeaderEntry, 0, len(headers))
+			for k, values := range headers {
+				for _, value := range values {
+					entries = append(entries, &fetch.HeaderEntry{Name: k, Value: value})
 				}
-				if err := continuation.Do(tabCtx); err != nil {
-					select {
-					case replayErrors <- err:
-					default:
-					}
-				}
-			}()
-		})
-		return fetch.Enable().WithPatterns([]*fetch.RequestPattern{{ResourceType: network.ResourceTypeDocument}}).Do(tabCtx)
-	})
-	result, err := v.runBrowserCheck(ctx, req.URL.String(), &ExecutionResult{}, setup)
-	select {
-	case replayErr := <-replayErrors:
-		return result, fmt.Errorf("replay request: %w", replayErr)
-	default:
+			}
+			continuation = continuation.WithMethod(req.Method).WithHeaders(entries)
+			if len(body) > 0 {
+				continuation = continuation.WithPostData(base64.StdEncoding.EncodeToString(body))
+			}
+		}
+		return continuation
 	}
+	message := ""
+	if len(expected) > 0 {
+		message = expected[0]
+	}
+	result, err := v.runBrowserCheckMatching(ctx, req.URL.String(), &ExecutionResult{}, message, rewrite)
 	if err == nil && !replayed.Load() {
 		return result, fmt.Errorf("verification request was not replayed")
 	}

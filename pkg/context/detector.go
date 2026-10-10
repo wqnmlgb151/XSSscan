@@ -22,7 +22,6 @@ type Reflection struct {
 type Detector struct {
 	templateRe  *regexp.Regexp
 	angularRe   *regexp.Regexp
-	scriptRe    *regexp.Regexp
 	eventAttrRe *regexp.Regexp
 }
 
@@ -31,7 +30,6 @@ func NewDetector() *Detector {
 	return &Detector{
 		templateRe:  regexp.MustCompile(`\{\{(.*?)\}\}`),
 		angularRe:   regexp.MustCompile(`\[([a-zA-Z-]+)\]\s*=\s*["']([^"']*)["']`),
-		scriptRe:    regexp.MustCompile(`(?s)<script[^>]*>(.*?)</script>`),
 		eventAttrRe: xsspatterns.EventHandlerAttrRe,
 	}
 }
@@ -66,6 +64,8 @@ func (d *Detector) detectAll(ref Reflection) []Context {
 
 	tokenizer := html.NewTokenizer(strings.NewReader(content))
 	var inScript, inStyle, inSVG, inMath bool
+	var scriptExecutable bool
+	position := 0
 	var inRawText bool
 	var parentStack []string
 
@@ -74,6 +74,8 @@ func (d *Detector) detectAll(ref Reflection) []Context {
 		if tt == html.ErrorToken {
 			break
 		}
+		start := position
+		position += len(tokenizer.Raw())
 
 		switch tt {
 		case html.StartTagToken, html.SelfClosingTagToken:
@@ -95,6 +97,7 @@ func (d *Detector) detectAll(ref Reflection) []Context {
 			switch name {
 			case "script":
 				inScript = true
+				scriptExecutable = executableScriptRaw(string(tokenizer.Raw()))
 			case "style":
 				inStyle = true
 			case "svg":
@@ -135,6 +138,13 @@ func (d *Detector) detectAll(ref Reflection) []Context {
 			}
 		case html.TextToken:
 			if txt := string(tokenizer.Text()); strings.Contains(txt, value) {
+				if inScript && scriptExecutable && !inRawText {
+					for _, c := range jsContexts(txt, value, false, start) {
+						c.ParentStack = copyStack(parentStack)
+						contexts = append(contexts, c)
+					}
+					continue
+				}
 				ctx := Context{Raw: text.Snippet(txt, value, 50), ParentStack: copyStack(parentStack)}
 				switch {
 				case inRawText:
@@ -142,7 +152,8 @@ func (d *Detector) detectAll(ref Reflection) []Context {
 					ctx.Type = ContextHTMLEntity
 					ctx.Escaped = true
 				case inScript:
-					ctx.Type = ContextJSBlock
+					ctx.Type = ContextHTMLEntity
+					ctx.Escaped = true
 				case inStyle:
 					ctx.Type = ContextCSSBlock
 				case inSVG:
@@ -165,7 +176,6 @@ func (d *Detector) detectAll(ref Reflection) []Context {
 		}
 	}
 
-	d.detectJSStringContext(content, value, &contexts)
 	d.detectTemplateContext(content, value, &contexts)
 	return rankContexts(contexts)
 }
@@ -203,8 +213,13 @@ func (d *Detector) detectAttrContexts(tokenizer *html.Tokenizer, tagName, value 
 				// is a JS STRING (quote breakout needed), while
 				// onclick="alert(PAYLOAD)" is a JS BLOCK (direct execution).
 				// XSStrike-style sub-context analysis.
-				sub := analyzeJSStringContext(attrVal, value)
-				ctxType = sub.Type
+				for _, sub := range jsContexts(attrVal, value, true, 0) {
+					sub.TagName = tagName
+					sub.AttrName = attrName
+					sub.ParentStack = copyStack(parentStack)
+					*contexts = append(*contexts, sub)
+				}
+				continue
 			case attrName == "style":
 				ctxType = ContextCSSValue
 			case attrName == "href" || attrName == "src" ||
@@ -258,18 +273,6 @@ func analyzeURLContext(attrVal, value string) ContextType {
 	return ContextHTMLEntity // inert: path/query/fragment/opaque scheme
 }
 
-func (d *Detector) detectJSStringContext(content, value string, contexts *[]Context) {
-	for _, s := range d.scriptRe.FindAllStringSubmatch(content, -1) {
-		scriptBody := s[1]
-		if !strings.Contains(scriptBody, value) {
-			continue
-		}
-		ctx := analyzeJSStringContext(scriptBody, value)
-		ctx.Raw = text.Snippet(scriptBody, value, 50)
-		*contexts = append(*contexts, ctx)
-	}
-}
-
 func (d *Detector) detectTemplateContext(content, value string, contexts *[]Context) {
 	for _, m := range d.templateRe.FindAllStringSubmatch(content, -1) {
 		if strings.Contains(m[1], value) {
@@ -288,92 +291,6 @@ func (d *Detector) detectTemplateContext(content, value string, contexts *[]Cont
 			})
 		}
 	}
-}
-
-func analyzeJSStringContext(script, value string) Context {
-	idx := strings.Index(script, value)
-	if idx < 0 {
-		return Context{Type: ContextJSBlock}
-	}
-	before := script[:idx]
-
-	// Use proper unescaped counting instead of naive strings.Count
-	sq := countUnescaped(before, '\'')
-	dq := countUnescaped(before, '"')
-	bt := countUnescapedBacktick(before)
-
-	switch {
-	case sq%2 == 1:
-		return Context{Type: ContextJSString, Enclosed: true, QuoteChar: "'"}
-	case dq%2 == 1:
-		return Context{Type: ContextJSString, Enclosed: true, QuoteChar: `"`}
-	case bt%2 == 1:
-		return Context{Type: ContextJSTemplateLiteral, Enclosed: true, QuoteChar: "`"}
-	}
-	lastNewline := strings.LastIndex(before, "\n")
-	if lastNewline < 0 {
-		lastNewline = 0
-	}
-	if strings.Contains(before[lastNewline:], "//") {
-		return Context{Type: ContextJSComment}
-	}
-	if strings.Count(before, "/*") > strings.Count(before, "*/") {
-		return Context{Type: ContextJSComment}
-	}
-	return Context{Type: ContextJSBlock}
-}
-
-// countUnescaped counts occurrences of target rune that are NOT preceded by a backslash.
-func countUnescaped(s string, target rune) int {
-	count := 0
-	escaped := false
-	for _, c := range s {
-		if escaped {
-			escaped = false
-			continue
-		}
-		if c == '\\' {
-			escaped = true
-			continue
-		}
-		if c == target {
-			count++
-		}
-	}
-	return count
-}
-
-// countUnescapedBacktick counts backticks not preceded by backslash, excluding
-// backticks inside ${...} template expressions (simplified: counts nesting depth).
-func countUnescapedBacktick(s string) int {
-	count := 0
-	escaped := false
-	depth := 0
-	for _, c := range s {
-		if escaped {
-			escaped = false
-			continue
-		}
-		if c == '\\' {
-			escaped = true
-			continue
-		}
-		if c == '$' && depth == 0 {
-			continue
-		}
-		if c == '{' && depth < 1 {
-			depth++
-			continue
-		}
-		if c == '}' && depth > 0 {
-			depth--
-			continue
-		}
-		if c == '`' && depth == 0 {
-			count++
-		}
-	}
-	return count
 }
 
 func rankContexts(ctxs []Context) []Context {

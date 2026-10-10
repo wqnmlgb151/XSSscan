@@ -4,11 +4,13 @@ package oauth
 
 import (
 	"context"
-	"crypto/sha256"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/xsscan/xsscan/pkg/httpclient"
+	"github.com/xsscan/xsscan/pkg/ssrfguard"
 	"io"
 	"net/http"
 	"net/url"
@@ -42,15 +44,15 @@ type TokenPair struct {
 
 // OAuthFlow handles OAuth 2.0 authentication flows.
 type OAuthFlow struct {
-	client        *http.Client
-	config        FlowConfig
-	pkceVerifier  string // stored PKCE verifier from BuildAuthorizationURL for ExchangeCode
+	client       *http.Client
+	config       FlowConfig
+	pkceVerifier string // stored PKCE verifier from BuildAuthorizationURL for ExchangeCode
 }
 
 // NewFlow creates a new OAuth flow handler.
 func NewFlow(client *http.Client, config FlowConfig) *OAuthFlow {
 	return &OAuthFlow{
-		client: client,
+		client: httpclient.WithRedirectPolicy(httpclient.WithCapture(client)),
 		config: config,
 	}
 }
@@ -85,7 +87,7 @@ func (f *OAuthFlow) ropcFlow(ctx context.Context) (*TokenPair, error) {
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := f.client.Do(req)
+	resp, err := f.do(req)
 	if err != nil {
 		return nil, fmt.Errorf("token request failed: %w", err)
 	}
@@ -120,7 +122,7 @@ func (f *OAuthFlow) Refresh(ctx context.Context, refreshToken string) (*TokenPai
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := f.client.Do(req)
+	resp, err := f.do(req)
 	if err != nil {
 		return nil, fmt.Errorf("refresh request failed: %w", err)
 	}
@@ -209,7 +211,7 @@ func (f *OAuthFlow) ExchangeCode(ctx context.Context, code, codeVerifier string)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := f.client.Do(req)
+	resp, err := f.do(req)
 	if err != nil {
 		return nil, fmt.Errorf("exchange request failed: %w", err)
 	}
@@ -275,4 +277,11 @@ func (t *TokenPair) IsExpired() bool {
 // AuthorizationHeader returns the value for the Authorization header.
 func (t *TokenPair) AuthorizationHeader() string {
 	return t.TokenType + " " + t.AccessToken
+}
+
+func (f *OAuthFlow) do(req *http.Request) (*http.Response, error) {
+	if err := ssrfguard.IsURLTargetAllowedContext(req.Context(), req.URL.String()); err != nil {
+		return nil, fmt.Errorf("OAuth endpoint blocked: %w", err)
+	}
+	return f.client.Do(req)
 }

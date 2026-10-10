@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/xsscan/xsscan/pkg/ssrfguard"
 	"golang.org/x/net/html"
 )
 
@@ -79,8 +80,8 @@ func collectParams(base *url.URL, rawURL string, paramsByBase map[string]map[str
 		return
 	}
 	resolved := base.ResolveReference(ref)
-	if resolved.Hostname() != base.Hostname() {
-		return // only same-host targets (port-insensitive)
+	if !ssrfguard.SameOrigin(base.String(), resolved.String()) {
+		return // automatic discovery stays within the page origin
 	}
 	if resolved.RawQuery == "" {
 		return

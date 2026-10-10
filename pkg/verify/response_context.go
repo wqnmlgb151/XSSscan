@@ -1,12 +1,14 @@
 package verify
 
 import (
+	"net/url"
 	"regexp"
 	"strings"
 
 	"github.com/xsscan/xsscan/pkg/analyze"
 	ctx "github.com/xsscan/xsscan/pkg/context"
 	"github.com/xsscan/xsscan/pkg/internal/xsspatterns"
+	"github.com/xsscan/xsscan/pkg/jsanalysis"
 	"github.com/xsscan/xsscan/pkg/payload"
 	"golang.org/x/net/html"
 )
@@ -38,6 +40,9 @@ func (v *Verifier) responseContextAtDepth(body string, p payload.Payload, depth 
 		}
 		start := offset + i
 		spans = append(spans, reflectionSpan{start, start + len(p.Value)})
+		if len(spans) > 8192 {
+			return ctx.ContextUnknown, false
+		}
 		offset = start + len(p.Value)
 	}
 	if len(spans) == 0 {
@@ -88,8 +93,8 @@ func (v *Verifier) responseContextAtDepth(body string, p payload.Payload, depth 
 				}
 			}
 			if templateDepth == 0 && (tt == html.StartTagToken || tt == html.SelfClosingTagToken) {
-				if token.Data == "script" && executableScript(token) && start >= span.start && start < span.end {
-					return ctx.ContextJSBlock, true
+				if token.Data == "script" && executableScript(token) && scriptHasSource(token) && start >= span.start && start < span.end {
+					return ctx.ContextHTMLBody, true // executable external-script markup; source not parsed here
 				}
 				seenAttrs := make(map[string]bool)
 				for _, attr := range token.Attr {
@@ -97,20 +102,29 @@ func (v *Verifier) responseContextAtDepth(body string, p payload.Payload, depth 
 						continue
 					}
 					seenAttrs[attr.Key] = true
-					srcdocExecutable := false
-					if token.Data == "iframe" && attr.Key == "srcdoc" && attr.Val != "" {
-						_, srcdocExecutable = v.responseContextAtDepth(attr.Val, payload.Payload{Value: attr.Val, Context: ctx.ContextHTMLBody}, depth+1)
-					}
-					if executableURLAttribute(attr) || srcdocExecutable {
+					srcdoc := token.Data == "iframe" && attr.Key == "srcdoc" && attr.Val != ""
+					if executableURLAttribute(attr) || srcdoc {
+						if strings.Contains(attr.Val, p.Value) {
+							if srcdoc {
+								if actual, ok := v.responseContextAtDepth(attr.Val, payload.Payload{Value: p.Value, Context: ctx.ContextHTMLBody}, depth+1); ok {
+									return actual, true
+								}
+							} else if v.executableURLValue(attr.Val, p.Value, depth) {
+								return ctx.ContextURLAttr, true
+							}
+						}
 						// Prove the attribute was created by this payload, rather
 						// than an unrelated executable URL elsewhere in the tag.
 						for _, match := range urlAttributeAssignRe.FindAllStringIndex(raw, -1) {
 							name := strings.ToLower(strings.TrimSpace(strings.TrimSuffix(raw[match[0]:match[1]], "=")))
 							if name == attr.Key && start+match[0] >= span.start && start+match[0] < span.end && attributeNameAt(raw, attr.Key, match[0], marker) {
-								if srcdocExecutable {
-									return ctx.ContextHTMLBody, true
+								if srcdoc {
+									if actual, ok := v.responseContextAtDepth(attr.Val, payload.Payload{Value: attr.Val, Context: ctx.ContextHTMLBody}, depth+1); ok {
+										return actual, true
+									}
+								} else if v.executableURLValue(attr.Val, attr.Val, depth) {
+									return ctx.ContextURLAttr, true
 								}
-								return ctx.ContextURLAttr, true
 							}
 						}
 					}
@@ -121,9 +135,21 @@ func (v *Verifier) responseContextAtDepth(body string, p payload.Payload, depth 
 						assignment := strings.ToLower(raw[match[0]:match[1]])
 						if strings.HasPrefix(assignment, attr.Key) && start+match[0] >= span.start && start+match[0] < span.end &&
 							attributeNameAt(raw, attr.Key, match[0], marker) {
-							return ctx.ContextJSBlock, true
+							a := jsanalysis.Parse(attr.Val, true)
+							if a.HasCallStartingIn(0, len(attr.Val)) {
+								return ctx.ContextJSBlock, true
+							}
 						}
 					}
+				}
+			}
+		}
+		if tt == html.TextToken && inScript && scriptExecutable && templateDepth == 0 && spanIndex < len(spans) && spans[spanIndex].start < end {
+			a := jsanalysis.Parse(raw, false)
+			for j := spanIndex; j < len(spans) && spans[j].start < end; j++ {
+				s := spans[j]
+				if a.HasCallStartingIn(max(0, s.start-start), min(len(raw), s.end-start)) {
+					return ctx.ContextJSBlock, true
 				}
 			}
 		}
@@ -186,6 +212,13 @@ func (v *Verifier) responseContextAtDepth(body string, p payload.Payload, depth 
 			if !c.IsExploitable() || !responseContextCompatible(p, c) {
 				continue
 			}
+			if c.AnalysisMethod == "goja-ast" {
+				// Replacing the payload recovers its original literal context,
+				// but only the unmodified response can prove a code breakout.
+				if confirmed, _ := responseJSCall(body, p.Value); !confirmed {
+					continue
+				}
+			}
 			return c.Type, true
 		}
 	}
@@ -231,17 +264,56 @@ func responseContextCompatible(p payload.Payload, actual ctx.Context) bool {
 	if actual.Type == ctx.ContextJSString {
 		return payload.QuoteCompatible(p.Value, actual.Type, actual.QuoteChar)
 	}
-	if actual.Type == ctx.ContextHTMLBody && strings.Contains(p.Value, "<") {
-		// Markup payloads require an actual parsed executable sink. Replacing
-		// a whole inert element with a marker would otherwise look like body text.
+	if actual.Type == ctx.ContextHTMLBody || actual.Type == ctx.ContextSVGContainer || actual.Type == ctx.ContextMathMLContainer {
+		// Body text cannot execute. Parsed executable markup/calls were handled
+		// above; a custom wordlist string is not a vulnerability by reflection.
 		return false
 	}
-	if actual.Type == ctx.ContextHTMLAttrName || actual.Type == ctx.ContextHTMLAttrValue {
+	if actual.Type == ctx.ContextHTMLAttrName || actual.Type == ctx.ContextHTMLAttrValue || actual.Type == ctx.ContextURLAttr {
 		// Attribute injection requires an effective executable attribute or
 		// markup breakout, checked by the structural pass above.
 		return false
 	}
 	return true
+}
+
+func (v *Verifier) executableURLValue(value, candidate string, depth int) bool {
+	value = strings.TrimSpace(value)
+	lower := strings.ToLower(value)
+	if strings.HasPrefix(lower, "javascript:") {
+		source := value[len("javascript:"):]
+		if decoded, err := url.PathUnescape(source); err == nil {
+			source = decoded
+		}
+		if strings.HasPrefix(strings.ToLower(candidate), "javascript:") {
+			candidate = candidate[len("javascript:"):]
+		}
+		if decoded, err := url.PathUnescape(candidate); err == nil {
+			candidate = decoded
+		}
+		ok, _ := candidateJSCall(source, candidate, false)
+		return ok
+	}
+	for _, prefix := range []string{"data:text/html,", "data:image/svg+xml,"} {
+		if strings.HasPrefix(lower, prefix) {
+			doc := value[len(prefix):]
+			if decoded, err := url.PathUnescape(doc); err == nil {
+				doc = decoded
+			}
+			if strings.HasPrefix(strings.ToLower(candidate), prefix) {
+				candidate = candidate[len(prefix):]
+			}
+			if decoded, err := url.PathUnescape(candidate); err == nil {
+				candidate = decoded
+			}
+			if candidate == "" {
+				return false
+			}
+			_, ok := v.responseContextAtDepth(doc, payload.Payload{Value: candidate, Context: ctx.ContextHTMLBody}, depth+1)
+			return ok
+		}
+	}
+	return false
 }
 
 func executableURLAttribute(attr html.Attribute) bool {

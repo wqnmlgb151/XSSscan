@@ -23,21 +23,24 @@ var StandardHeadlessOptions = []ext.ExecAllocatorOption{
 	ext.NoDefaultBrowserCheck,
 	ext.Headless,
 	ext.DisableGPU,
-	ext.NoSandbox,
-	ext.IgnoreCertErrors,
+	ext.Flag("no-sandbox", false),
+	ext.Flag("ignore-certificate-errors", false),
 	ext.WindowSize(1280, 800),
 }
 
 // AllocatorOptions returns the full option list with defaults FIRST and
 // custom options LAST, so custom options take effect (later wins).
 func AllocatorOptions(custom ...ext.ExecAllocatorOption) []ext.ExecAllocatorOption {
-	return append(ext.DefaultExecAllocatorOptions[:], custom...)
+	opts := append([]ext.ExecAllocatorOption(nil), ext.DefaultExecAllocatorOptions[:]...)
+	return append(opts, custom...)
 }
 
 // NewExecAllocator creates an allocator context with standard options plus
-// any custom overrides applied last. When browser.ChromePath is set, the
+// caller options, followed by the explicit browser compatibility settings.
+// The CLI settings take precedence over caller options. When ChromePath is set, the
 // binary location is pinned via ExecPath.
 func NewExecAllocator(ctx context.Context, custom ...ext.ExecAllocatorOption) (context.Context, context.CancelFunc) {
+	custom = append(custom, ext.Flag("no-sandbox", browser.NoSandbox), ext.Flag("ignore-certificate-errors", browser.IgnoreCertErrors))
 	if browser.ChromePath != "" {
 		custom = append(custom, ext.ExecPath(browser.ChromePath))
 	} else if found, err := browser.FindChrome(); err == nil {

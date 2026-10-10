@@ -5,25 +5,26 @@ import "strings"
 type ContextType int
 
 const (
-	ContextUnknown       ContextType = iota
-	ContextHTMLBody                  // <div>PAYLOAD</div>
-	ContextHTMLComment               // <!-- PAYLOAD -->
-	ContextHTMLTag                   // <PAYLOAD>
-	ContextHTMLAttrName              // <tag PAYLOAD="value">
-	ContextHTMLAttrValue             // <tag attr="PAYLOAD">
-	ContextHTMLEntity                // &PAYLOAD;
-	ContextJSString                  // var x = 'PAYLOAD'
-	ContextJSComment                 // // PAYLOAD
-	ContextJSBlock                   // <script>PAYLOAD</script>
-	ContextCSSValue                  // color: PAYLOAD
-	ContextCSSBlock                  // <style>PAYLOAD</style>
-	ContextURLAttr                   // <a href="PAYLOAD">
-	ContextTemplate                  // {{ PAYLOAD }}
-	ContextSVGContainer              // <svg>PAYLOAD</svg>
-	ContextMathMLContainer           // <math>PAYLOAD</math>
-	ContextJSONValue                 // {"key": "PAYLOAD"} — JSON string value
-	ContextJSTemplateLiteral         // var x = `PAYLOAD` — JS template literal (backtick)
-	ContextMulti                     // Multiple contexts
+	ContextUnknown           ContextType = iota
+	ContextHTMLBody                      // <div>PAYLOAD</div>
+	ContextHTMLComment                   // <!-- PAYLOAD -->
+	ContextHTMLTag                       // <PAYLOAD>
+	ContextHTMLAttrName                  // <tag PAYLOAD="value">
+	ContextHTMLAttrValue                 // <tag attr="PAYLOAD">
+	ContextHTMLEntity                    // &PAYLOAD;
+	ContextJSString                      // var x = 'PAYLOAD'
+	ContextJSComment                     // // PAYLOAD
+	ContextJSBlock                       // <script>PAYLOAD</script>
+	ContextCSSValue                      // color: PAYLOAD
+	ContextCSSBlock                      // <style>PAYLOAD</style>
+	ContextURLAttr                       // <a href="PAYLOAD">
+	ContextTemplate                      // {{ PAYLOAD }}
+	ContextSVGContainer                  // <svg>PAYLOAD</svg>
+	ContextMathMLContainer               // <math>PAYLOAD</math>
+	ContextJSONValue                     // {"key": "PAYLOAD"} — JSON string value
+	ContextJSTemplateLiteral             // var x = `PAYLOAD` — JS template literal (backtick)
+	ContextMulti                         // Multiple contexts
+	ContextJSRegexp                      // /PAYLOAD/ — regex literal, not division
 )
 
 func (c ContextType) String() string {
@@ -64,6 +65,8 @@ func (c ContextType) String() string {
 		return "js_template_literal"
 	case ContextMulti:
 		return "multi"
+	case ContextJSRegexp:
+		return "js_regexp"
 	default:
 		return "unknown"
 	}
@@ -107,22 +110,29 @@ func ParseContextType(s string) ContextType {
 		return ContextJSTemplateLiteral
 	case "multi":
 		return ContextMulti
+	case "js_regexp":
+		return ContextJSRegexp
 	default:
 		return ContextUnknown
 	}
 }
 
 type Context struct {
-	Type        ContextType `json:"type"`
-	TagName     string      `json:"tag_name,omitempty"`
-	AttrName    string      `json:"attr_name,omitempty"`
-	Enclosed    bool        `json:"enclosed"`
-	QuoteChar   string      `json:"quote_char"`
-	Escaped     bool        `json:"escaped"`
-	Encoded     []string    `json:"encoded"`
-	ParentStack []string    `json:"parent_stack"`
-	Raw         string      `json:"raw"`
-	Priority    int         `json:"priority"`
+	AnalysisMethod string      `json:"analysis_method,omitempty"`
+	ParseError     string      `json:"parse_error,omitempty"`
+	SourceStart    int         `json:"source_start,omitempty"`
+	SourceEnd      int         `json:"source_end,omitempty"`
+	SpanUnit       string      `json:"span_unit,omitempty"`
+	Type           ContextType `json:"type"`
+	TagName        string      `json:"tag_name,omitempty"`
+	AttrName       string      `json:"attr_name,omitempty"`
+	Enclosed       bool        `json:"enclosed"`
+	QuoteChar      string      `json:"quote_char"`
+	Escaped        bool        `json:"escaped"`
+	Encoded        []string    `json:"encoded"`
+	ParentStack    []string    `json:"parent_stack"`
+	Raw            string      `json:"raw"`
+	Priority       int         `json:"priority"`
 }
 
 // IsExploitableType reports whether a context type can potentially execute
@@ -132,7 +142,7 @@ func (c ContextType) IsExploitableType() bool {
 	switch c {
 	case ContextHTMLBody, ContextHTMLTag, ContextHTMLAttrName,
 		ContextHTMLAttrValue, ContextJSString, ContextJSTemplateLiteral,
-		ContextJSBlock, ContextURLAttr, ContextTemplate,
+		ContextJSBlock, ContextJSComment, ContextJSRegexp, ContextURLAttr, ContextTemplate,
 		ContextSVGContainer, ContextMathMLContainer,
 		ContextJSONValue:
 		return true

@@ -127,4 +127,3 @@ func (t *Throttle) CurrentLimit() rate.Limit {
 	defer t.mu.Unlock()
 	return t.limiter.Limit()
 }
-

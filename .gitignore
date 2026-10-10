@@ -30,3 +30,13 @@ CLAUDE.md
 bounty_*
 level*_report
 *.bak
+
+# Local tests and development records (not distributed)
+*_test.go
+/test/
+/AGENTS.md
+/ENGINEERING_PLAN.md
+/.agents/
+/.codex/
+/pkg/dom/sinks.js
+/.github/workflows/build.yml

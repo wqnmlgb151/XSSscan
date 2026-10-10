@@ -9,6 +9,7 @@ import (
 	"github.com/xsscan/xsscan/pkg/context"
 	"github.com/xsscan/xsscan/pkg/internal/text"
 	"github.com/xsscan/xsscan/pkg/internal/xsspatterns"
+	"github.com/xsscan/xsscan/pkg/jsanalysis"
 	"github.com/xsscan/xsscan/pkg/model"
 	"github.com/xsscan/xsscan/pkg/payload"
 )
@@ -96,12 +97,19 @@ func (v *Verifier) VerifyWithThreshold(respBody, bodyLower string, p payload.Pay
 	}
 	actualContext, contextConfirmed := v.responseContext(respBody, p)
 	if !contextConfirmed {
+		_, result.Evidence.ParseError = responseJSCall(respBody, p.Value)
+		if result.Evidence.ParseError != "" {
+			result.Evidence.AnalysisMethod = "goja-ast"
+		}
 		result.Reason = "No exploitable reflection context in response"
 		return result
 	}
 
 	sanitized := v.detectSanitization(bodyLower, respBody, p.Value, verbatimFound)
 	syntaxValid := v.checkSyntaxValidity(respBody, p.Value)
+	if actualContext == context.ContextJSBlock {
+		syntaxValid = true
+	} // the response gate proved a parsed candidate call
 	lengthLimited := v.checkLengthLimited(respBody, p.Value)
 
 	contextBreak := checkContextBreak(p.Context, csp) && !sanitized
@@ -121,6 +129,9 @@ func (v *Verifier) VerifyWithThreshold(respBody, bodyLower string, p payload.Pay
 	result.Evidence = model.Evidence{
 		Reflection: text.Snippet(respBody, p.Value, 80),
 		Context:    actualContext.String(),
+	}
+	if confirmed, _ := responseJSCall(respBody, p.Value); confirmed || actualContext == context.ContextJSBlock {
+		result.Evidence.AnalysisMethod = "goja-ast"
 	}
 
 	if confidence >= threshold {
@@ -208,7 +219,12 @@ func checkContextBreak(ctxType context.ContextType, csp *analyze.CSPPolicy) bool
 
 func (v *Verifier) checkSyntaxValidity(body, p string) bool {
 	if !strings.Contains(p, "<") || !strings.Contains(p, ">") {
-		return true // non-HTML payloads are always "syntactically valid"
+		if confirmed, _ := responseJSCall(body, p); confirmed {
+			return true
+		}
+		a := jsanalysis.Parse(body, false)
+		i := strings.Index(body, p)
+		return i >= 0 && a.HasCallStartingIn(i, i+len(p))
 	}
 
 	idx := strings.Index(body, p)

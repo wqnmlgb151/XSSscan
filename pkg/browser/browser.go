@@ -16,6 +16,10 @@ import (
 // Contract: assign before the first FindChrome call.
 var ChromePath string
 
+// NoSandbox and IgnoreCertErrors are opt-in compatibility settings.
+// Configure them before constructing any browser allocator.
+var NoSandbox, IgnoreCertErrors bool
+
 var chromeOnce sync.Once
 var chromeFound string
 var chromeFoundErr error

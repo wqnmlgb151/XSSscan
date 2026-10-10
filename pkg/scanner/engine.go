@@ -35,6 +35,7 @@ type Config struct {
 	MaxPayloads     int
 	TestHPP         bool          // Enable HTTP Parameter Pollution testing
 	WAFBypass       bool          // Enable WAF bypass via payload mutation
+	ConfidenceSet   bool          // Preserve an explicitly selected zero threshold
 	ConfidenceMin   float64       // Minimum confidence threshold (default 0.60)
 	RandomUA        bool          // Randomize User-Agent per request
 	AdaptiveRate    bool          // Auto-adjust rate limit on 429 responses
@@ -46,14 +47,22 @@ type Config struct {
 }
 
 type Engine struct {
-	config    Config
-	client    *http.Client
-	analyzer  *analyze.Analyzer
-	generator *payload.Generator
-	verifier  *verify.Verifier
-	throttle  *Throttle
-	mutator   atomic.Value // stores *payload.Mutator (nil if not initialized)
-	logger    *zap.Logger
+	wafLogged    int32
+	runGate      chan struct{}
+	issueMu      sync.Mutex
+	runIssues    []model.ScanIssue
+	firstError   error
+	runTarget    string
+	requestsSent int64
+	succeeded    int64
+	config       Config
+	client       *http.Client
+	analyzer     *analyze.Analyzer
+	generator    *payload.Generator
+	verifier     *verify.Verifier
+	throttle     *Throttle
+	mutator      atomic.Value // stores *payload.Mutator (nil if not initialized)
+	logger       *zap.Logger
 
 	payloadsSent  int64
 	errors        int64
@@ -77,20 +86,28 @@ func NewEngine(cfg Config, logger *zap.Logger, client *http.Client) *Engine {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	if cfg.ConfidenceMin <= 0 {
+	if !cfg.ConfidenceSet && cfg.ConfidenceMin <= 0 {
 		cfg.ConfidenceMin = verify.DefaultConfidenceThreshold
 	}
 	engine := &Engine{
-		config:        cfg,
-		client:        client,
-		analyzer:      analyze.NewAnalyzer(client),
-		generator:     payload.NewGenerator(),
-		verifier:      verify.NewVerifier(),
-		throttle:      NewThrottle(cfg.RateLimit, cfg.RateBurst, cfg.AdaptiveRate),
-		wafTracker:    &WAFTracker{},
-		logger:        logger,
-		csrfExtractor: csrf.NewExtractor(client),
+		runGate:    make(chan struct{}, 1),
+		config:     cfg,
+		client:     client,
+		generator:  payload.NewGenerator(),
+		verifier:   verify.NewVerifier(),
+		throttle:   NewThrottle(cfg.RateLimit, cfg.RateBurst, cfg.AdaptiveRate),
+		wafTracker: &WAFTracker{},
+		logger:     logger,
 	}
+	client = httpclient.WithCapture(client)
+	baseTransport := client.Transport
+	if baseTransport == nil {
+		baseTransport = http.DefaultTransport
+	}
+	engine.client = &http.Client{Transport: countedTransport{base: baseTransport, count: &engine.requestsSent}, Jar: client.Jar, Timeout: client.Timeout, CheckRedirect: client.CheckRedirect}
+	engine.client = httpclient.WithRedirectPolicy(engine.client)
+	engine.analyzer = analyze.NewAnalyzer(engine.client)
+	engine.csrfExtractor = csrf.NewExtractor(engine.client)
 	if cfg.WAFBypass {
 		engine.mutator.Store(payload.NewMutator())
 	}
@@ -115,7 +132,10 @@ func (e *Engine) SetWordlist(path string) error {
 	return e.generator.LoadWordlist(path)
 }
 
-func (e *Engine) Run(ctx context.Context, target model.Target) (*model.ScanResult, error) {
+func (e *Engine) run(ctx context.Context, target model.Target) (*model.ScanResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	startTime := time.Now()
 	result := &model.ScanResult{Target: target.URL}
 
@@ -126,6 +146,9 @@ func (e *Engine) Run(ctx context.Context, target model.Target) (*model.ScanResul
 		return nil, fmt.Errorf("analysis failed: %w", err)
 	}
 
+	for _, analysisErr := range analysisResult.Errors {
+		e.recordRunError("analysis", analysisErr)
+	}
 	for _, fw := range analysisResult.Frameworks {
 		e.logger.Info("Framework detected", zap.String("name", fw.Name), zap.Float64("confidence", fw.Confidence))
 	}
@@ -138,6 +161,13 @@ func (e *Engine) Run(ctx context.Context, target model.Target) (*model.ScanResul
 	}
 
 	e.logger.Info("Analysis complete", zap.Int("injection_points", len(analysisResult.InjectionPoints)))
+	for _, point := range analysisResult.InjectionPoints {
+		for _, c := range point.Contexts {
+			if c.ParseError != "" {
+				e.recordRunError("javascript-analysis", fmt.Errorf("parameter %s: %s", point.Parameter.Name, c.ParseError))
+			}
+		}
+	}
 
 	// Auto-detect CSRF token if not manually provided.
 	// The token is applied to all scan requests so that CSRF-protected
@@ -200,18 +230,6 @@ func (e *Engine) Run(ctx context.Context, target model.Target) (*model.ScanResul
 			zap.Int("remaining", len(filtered)))
 	}
 
-	/* Filter discovery (XSStrike-style): send one probe containing all
-	special chars and detect how the server transforms them. The profile
-	drives payload pruning — e.g., when < > are stripped but quotes survive,
-	only quote-breakout payloads are worth sending. */
-	var filterProfile *analyze.FilterProfile
-	if len(analysisResult.InjectionPoints) > 0 {
-		fp := analysisResult.InjectionPoints[0]
-		if body, err := e.sendProbeRequest(ctx, fp, analyze.FilterProbeValue, host); err == nil {
-			filterProfile = analyze.DetectFilterProfile(body)
-		}
-	}
-
 	/* Build scan tasks */
 	type task struct {
 		injection model.InjectionPoint
@@ -220,8 +238,15 @@ func (e *Engine) Run(ctx context.Context, target model.Target) (*model.ScanResul
 
 	var tasks []task
 	for _, injection := range analysisResult.InjectionPoints {
+		startMarker, endMarker := analyze.GenerateMarker(), analyze.GenerateMarker()
+		var profiles analyze.ContextFilters
+		if body, err := e.sendProbeRequest(ctx, injection, startMarker+`<>"'()=`+endMarker, host); err == nil {
+			profiles = analyze.DetectContextFilters(body, startMarker, endMarker)
+		} else {
+			e.recordRunError("filter-probe", err)
+		}
 		payloads := e.generatePayloads(injection, analysisResult.Frameworks)
-		payloads = prunePayloads(payloads, filterProfile)
+		payloads = pruneContextPayloads(payloads, profiles)
 		if e.config.MaxPayloads > 0 && len(payloads) > e.config.MaxPayloads {
 			payloads = payloads[:e.config.MaxPayloads]
 		}
@@ -244,27 +269,28 @@ func (e *Engine) Run(ctx context.Context, target model.Target) (*model.ScanResul
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			defer func() {
-				if r := recover(); r != nil {
-					e.logger.Error("worker panic recovered", zap.Any("recover", r))
-					atomic.AddInt64(&e.errors, 1)
-				}
-			}()
 			for t := range taskCh {
 				select {
 				case <-ctx.Done():
 					return
 				default:
 				}
-				finding, err := e.scanPayload(ctx, t.injection, t.payload, analysisResult.CSP, host)
+				finding, err := func() (finding *model.Finding, err error) {
+					defer func() {
+						if recovered := recover(); recovered != nil {
+							err = fmt.Errorf("payload worker panic: %v", recovered)
+						}
+					}()
+					return e.scanPayload(ctx, t.injection, t.payload, analysisResult.CSP, host)
+				}()
 				if err != nil {
-					atomic.AddInt64(&e.errors, 1)
+					e.recordRunError("payload", err)
 					continue
 				}
 				if finding != nil {
 					resultCh <- finding
 				}
-				atomic.AddInt64(&e.payloadsSent, 1)
+				atomic.AddInt64(&e.succeeded, 1)
 			}
 		}()
 	}
@@ -392,21 +418,31 @@ func (e *Engine) generatePayloads(injection model.InjectionPoint, frameworks []a
 	// positive (quotes are inert in body text). Framework payloads are
 	// gated the same way: Vue template escapes are inert in body text.
 	contextSet := make(map[ctx.ContextType]bool, len(injection.Contexts))
-	quoteChars := make(map[ctx.ContextType]string, len(injection.Contexts))
+	quoteChars := make(map[ctx.ContextType][]string, len(injection.Contexts))
 	for _, c := range injection.Contexts {
-		contextSet[c.Type] = true
-		if c.QuoteChar != "" && quoteChars[c.Type] == "" {
-			quoteChars[c.Type] = c.QuoteChar
+		if !c.IsExploitable() {
+			continue
 		}
+		contextSet[c.Type] = true
+		quoteChars[c.Type] = append(quoteChars[c.Type], c.QuoteChar)
 	}
-	if len(contextSet) == 0 {
+	if len(injection.Contexts) == 0 {
 		contextSet[ctx.ContextHTMLBody] = true // fallback mirrors Generator
+		quoteChars[ctx.ContextHTMLBody] = []string{""}
 	}
 
 	// quoteOK gates quote-breakout payloads against the detected string
 	// quote type (same rule as payload.QuoteCompatible in the Generator).
 	quoteOK := func(tmpl payload.PayloadTemplate) bool {
-		return contextSet[tmpl.Context] && payload.QuoteCompatible(tmpl.Value, tmpl.Context, quoteChars[tmpl.Context])
+		if !contextSet[tmpl.Context] {
+			return false
+		}
+		for _, quote := range quoteChars[tmpl.Context] {
+			if payload.QuoteCompatible(tmpl.Value, tmpl.Context, quote) {
+				return true
+			}
+		}
+		return false
 	}
 
 	for _, fw := range frameworks {
@@ -532,6 +568,7 @@ func (e *Engine) verifyFindingsWithAuth(stdctx context.Context, findings []model
 		verifier, err = execverify.NewVerifier(stdctx, verifyTimeout)
 	}
 	if err != nil {
+		e.recordRunError("execution", err)
 		e.logger.Warn("Failed to create execution verifier (skipping verification)",
 			zap.Error(err))
 		return findings
@@ -576,6 +613,11 @@ func (e *Engine) verifyFindingsWithAuth(stdctx context.Context, findings []model
 
 				result, err := verifier.VerifyFinding(stdctx, f, target)
 				if err != nil {
+					if result != nil {
+						f.Evidence.VerificationPayload = result.VerificationPayload
+						f.Evidence.Interaction = result.Interaction
+					}
+					e.recordRunError("execution", err)
 					e.logger.Warn("Verification request failed (keeping finding)",
 						zap.Int("worker", workerID),
 						zap.String("param", f.Parameter),
@@ -617,10 +659,15 @@ func (e *Engine) verifyOneFinding(verifier *execverify.Verifier, stdctx context.
 
 	result, err := verifier.VerifyFinding(stdctx, f, target)
 	if err != nil {
+		if result != nil {
+			f.Evidence.VerificationPayload = result.VerificationPayload
+			f.Evidence.Interaction = result.Interaction
+		}
+		e.recordRunError("execution", err)
 		e.logger.Warn("Verification request failed (keeping finding)",
 			zap.String("param", f.Parameter),
 			zap.Error(err))
-		return findings
+		return []model.Finding{f}
 	}
 
 	e.applyVerificationResult(&f, result)
@@ -630,7 +677,10 @@ func (e *Engine) verifyOneFinding(verifier *execverify.Verifier, stdctx context.
 // applyVerificationResult updates a finding based on browser verification result.
 // Extracted to shared helper used by both concurrent and single-finding paths.
 func (e *Engine) applyVerificationResult(f *model.Finding, result *execverify.ExecutionResult) {
+	f.Evidence.VerificationPayload = result.VerificationPayload
+	f.Evidence.Interaction = result.Interaction
 	if result.Executed {
+		f.Evidence.DialogMessage = result.DialogMessage
 		f.ExecutionVerified = true
 		f.ExecutionConfidence = result.Confidence
 		f.ScreenshotPath = result.ScreenshotPath
@@ -655,15 +705,13 @@ func (e *Engine) applyVerificationResult(f *model.Finding, result *execverify.Ex
 	}
 }
 
-var wafLogged int32
-
 func (e *Engine) trackWAF(wafResult verify.WAFResult) {
 	if !wafResult.Detected {
 		return
 	}
 	e.wafTracker.Report(true, wafResult.Name, false)
 	// Log first WAF detection regardless of bypass mode
-	if atomic.CompareAndSwapInt32(&wafLogged, 0, 1) {
+	if atomic.CompareAndSwapInt32(&e.wafLogged, 0, 1) {
 		e.logger.Warn("WAF detected — report will include WAF info",
 			zap.String("waf", wafResult.Name),
 			zap.String("evidence", wafResult.Evidence))
@@ -682,7 +730,8 @@ func (e *Engine) scanPayload(ctx context.Context, injection model.InjectionPoint
 	// that subsequent payloads attempt WAF bypass. This catches the
 	// common case where the user runs a scan, hits a WAF, and would
 	// otherwise need to re-run with --waf-bypass.
-	if wafResult.Detected && e.mutator.Load() == nil && !e.config.WAFBypass {
+	m, _ := e.mutator.Load().(*payload.Mutator)
+	if wafResult.Detected && m == nil && !e.config.WAFBypass {
 		e.mutator.Store(payload.NewMutator())
 		e.logger.Info("WAF detected — auto-enabling bypass mutations",
 			zap.String("waf", wafResult.Name))
@@ -692,12 +741,12 @@ func (e *Engine) scanPayload(ctx context.Context, injection model.InjectionPoint
 		return finding, nil
 	}
 
-	if mutator := e.mutator.Load(); mutator != nil {
+	if mutator, _ := e.mutator.Load().(*payload.Mutator); mutator != nil {
 		wafName := ""
 		if wafResult.Detected {
 			wafName = wafResult.Name
 		}
-		mutations := mutator.(*payload.Mutator).MutateTargeted(p.Value, p.Context, wafName, 5)
+		mutations := mutator.MutateTargeted(p.Value, p.Context, wafName, 5)
 		for _, mut := range mutations {
 			mutatedPayload := p
 			mutatedPayload.Value = mut.Value
@@ -705,7 +754,7 @@ func (e *Engine) scanPayload(ctx context.Context, injection model.InjectionPoint
 
 			mutFinding, mutWAF, mutErr := e.doScanPayload(ctx, injection, mutatedPayload, csp, host)
 			if mutErr != nil {
-				err = mutErr
+				e.recordRunError("mutation", mutErr)
 				continue
 			}
 			e.trackWAF(mutWAF)
@@ -762,7 +811,7 @@ func (e *Engine) buildRequest(ctx context.Context, target model.Target) (*http.R
 // This is the network layer — all retry, backoff, 429, 403-refresh, and 5xx
 // handling lives here so the caller can focus on result interpretation.
 func (e *Engine) sendWithRetry(ctx context.Context, injection model.InjectionPoint, modifiedTarget model.Target, p payload.Payload, host string) (*http.Response, []byte, verify.WAFResult, error) {
-	if err := ssrfguard.IsURLTargetAllowed(modifiedTarget.URL); err != nil {
+	if err := ssrfguard.IsURLTargetAllowedContext(ctx, modifiedTarget.URL); err != nil {
 		return nil, nil, verify.WAFResult{}, fmt.Errorf("ssrf blocked: %w", err)
 	}
 
@@ -795,6 +844,7 @@ func (e *Engine) sendWithRetry(ctx context.Context, injection model.InjectionPoi
 			return nil, nil, verify.WAFResult{}, err
 		}
 
+		atomic.AddInt64(&e.payloadsSent, 1)
 		resp, lastErr = e.client.Do(req)
 		if lastErr != nil {
 			e.logger.Debug("request failed", zap.Error(lastErr), zap.Int("attempt", attempt))
@@ -866,6 +916,12 @@ func (e *Engine) sendWithRetry(ctx context.Context, injection model.InjectionPoi
 		return nil, nil, verify.WAFResult{}, fmt.Errorf("request failed: no response after %d retries", maxRetries)
 	}
 
+	if resp.StatusCode == 401 || resp.StatusCode == 429 || resp.StatusCode >= 500 {
+		return resp, body, verify.WAFResult{}, fmt.Errorf("HTTP %d after retries", resp.StatusCode)
+	}
+	if resp.StatusCode == 403 {
+		e.recordRunError("request", fmt.Errorf("HTTP 403: request remained forbidden after CSRF refresh"))
+	}
 	e.throttle.ReportSuccessHost(host)
 	return resp, body, verify.WAFResult{}, nil
 }
@@ -879,12 +935,28 @@ func (e *Engine) buildFindingFromResponse(resp *http.Response, body []byte, modi
 	bodyLower := strings.ToLower(bodyStr)
 	wafResult := verify.DetectWAFWithLower(resp, bodyLower)
 	vResult := e.verifier.VerifyWithThreshold(bodyStr, bodyLower, p, injection, csp, wafResult, e.config.ConfidenceMin, resp.Header.Get(request.ContentTypeKey))
+	if vResult.Evidence.ParseError != "" {
+		e.logger.Debug("Candidate JavaScript parsing failed", zap.String("parameter", injection.Parameter.Name), zap.String("parse_error", vResult.Evidence.ParseError))
+		if strings.Contains(vResult.Evidence.ParseError, "analysis limit") {
+			e.recordRunError("javascript-analysis", fmt.Errorf("parameter %s: %s", injection.Parameter.Name, vResult.Evidence.ParseError))
+		}
+	}
 	if !vResult.Vulnerable {
 		return nil, wafResult
 	}
 
-	rawReq := buildRawRequest(modifiedTarget)
-	rawResp := captureRawResponse(resp, body)
+	exchange := httpclient.Captured(resp)
+	rawReq := exchange.Request
+	if exchange.InitialRequest != "" {
+		rawReq = exchange.InitialRequest
+	}
+	rawResp := exchange.Response
+	if rawReq == "" {
+		rawReq = buildRawRequest(modifiedTarget)
+		rawResp = captureRawResponse(resp, body)
+		exchange = model.HTTPExchange{URL: modifiedTarget.URL, Request: rawReq, Response: rawResp, ResponseTruncated: len(body) > rawResponseCap}
+	}
+	vResult.Evidence.HTTP = &exchange
 
 	return &model.Finding{
 		ID:          generateID(),
@@ -945,26 +1017,6 @@ func convertCSPBypasses(csp *analyze.CSPPolicy) []model.CSPBypass {
 	return result
 }
 
-var sensitiveHeaders = map[string]bool{
-	"authorization":       true,
-	"proxy-authorization": true,
-	"cookie":              true,
-	"set-cookie":          true,
-	"x-api-key":           true,
-	"api-key":             true,
-	"x-auth-token":        true,
-	"x-csrf-token":        true,
-	"x-xsrf-token":        true,
-	"www-authenticate":    true,
-}
-
-func redactHeaderValue(name, value string) string {
-	if sensitiveHeaders[strings.ToLower(name)] {
-		return "[REDACTED]"
-	}
-	return value
-}
-
 func buildRawRequest(target model.Target) string {
 	var b strings.Builder
 
@@ -972,7 +1024,7 @@ func buildRawRequest(target model.Target) string {
 	// HTTP/1.1 origin-form: request-target is path?query, Host header carries authority.
 	var reqPath, host string
 	if u, err := url.Parse(target.URL); err == nil {
-		reqPath = u.Path
+		reqPath = u.EscapedPath()
 		if reqPath == "" {
 			reqPath = "/"
 		}
@@ -991,15 +1043,14 @@ func buildRawRequest(target model.Target) string {
 
 	for k, v := range target.Headers {
 		// Sanitize header values to prevent CRLF injection in raw request output.
-		// Redact sensitive headers (Authorization, cookies) to prevent credential leaks
-		// when reports are shared.
-		fmt.Fprintf(&b, "%s: %s\r\n", stripCRLF(k), stripCRLF(redactHeaderValue(k, v)))
+		// Preserve credentials for exact report replay.
+		fmt.Fprintf(&b, "%s: %s\r\n", stripCRLF(k), stripCRLF(v))
 	}
 	if len(target.Cookies) > 0 {
 		cookieParts := make([]string, 0, len(target.Cookies))
 		for _, c := range target.Cookies {
 			if c != nil {
-				cookieParts = append(cookieParts, c.Name+"=[REDACTED]")
+				cookieParts = append(cookieParts, c.Name+"="+c.Value)
 			}
 		}
 		if len(cookieParts) > 0 {
@@ -1011,14 +1062,19 @@ func buildRawRequest(target model.Target) string {
 		b.WriteString("\r\n")
 		b.WriteString(target.Body)
 	}
+	if target.Body == "" {
+		b.WriteString("\r\n")
+	}
 	return b.String()
 }
 func captureRawResponse(resp *http.Response, body []byte) string {
 	var b strings.Builder
 	b.WriteString("HTTP/1.1 ")
-	b.WriteString(strconv.Itoa(resp.StatusCode))
-	b.WriteByte(' ')
-	b.WriteString(resp.Status)
+	if resp.Status != "" {
+		b.WriteString(resp.Status)
+	} else {
+		b.WriteString(strconv.Itoa(resp.StatusCode) + " " + http.StatusText(resp.StatusCode))
+	}
 	b.WriteString("\r\n")
 	for key, vals := range resp.Header {
 		for _, v := range vals {
@@ -1136,7 +1192,7 @@ func (e *Engine) injectPayload(target model.Target, param model.Parameter, paylo
 // value, or empty string if none found. The detected field name is stored in
 // e.csrfFieldName (atomic) for race-free access by worker goroutines.
 func (e *Engine) extractCSRFToken(ctx context.Context, target model.Target) string {
-	token, err := e.csrfExtractor.ExtractCSRF(target.URL)
+	token, err := e.csrfExtractor.ExtractCSRFContext(ctx, target.URL)
 	if err != nil || token == nil {
 		return ""
 	}

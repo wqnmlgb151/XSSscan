@@ -1,0 +1,15 @@
+.git
+.claude
+.codex
+.agents
+dist
+test
+**/*_test.go
+AGENTS.md
+CLAUDE.md
+ENGINEERING_PLAN.md
+pkg/dom/sinks.js
+*.exe
+*.out
+*.prof
+*.bak

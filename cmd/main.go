@@ -6,12 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -28,6 +30,7 @@ import (
 	"github.com/xsscan/xsscan/pkg/dom"
 	"github.com/xsscan/xsscan/pkg/httpclient"
 	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/xsscan/xsscan/pkg/orchestrator"
 	"github.com/xsscan/xsscan/pkg/payload"
 	"github.com/xsscan/xsscan/pkg/report"
 	"github.com/xsscan/xsscan/pkg/scanner"
@@ -43,54 +46,65 @@ const (
 
 // ScanConfig holds all CLI flags
 type ScanConfig struct {
-	URL                string
-	Method             string
-	Headers            []string
-	Body               string
-	Cookies            []string
-	Output             string
-	Format             string
-	Workers            int
-	RateLimit          int
-	Timeout            int
-	MaxPayload         int
-	Callback           string
-	Verbose            bool
-	LoginURL           string
-	Username           string
-	Password           string
-	TestHPP            bool
-	WAFBypass          bool
-	ConfidenceMin      float64
-	AllowPrivate       bool
-	Proxy              string
-	ProxyUsername      string
-	ProxyPassword      string
-	ProxyInsecure      bool
-	Crawl              bool
-	CrawlDepth         int
-	CrawlMaxPages      int
-	TargetsFile        string
-	RandomUA           bool
-	AdaptiveRate       bool
-	PayloadPreset      string
-	PayloadWordlist    string
-	Headless           bool
-	RenderSPA          bool
-	ChromePath         string
-	ConfigFile         string
-	JWT                string
-	Silent             bool
-	NoColor            bool
-	EnableProbe        bool
-	VerifyExecution    bool
-	VerifyTimeout      int
-	DiscoverHeaders    bool
-	EnableStored       bool
-	TriggerURLs        []string
-	StoredPollInterval int
-	StoredMaxPolls     int
-	CSRFToken          string
+	legacyTypeFlags        map[string]bool
+	typesExplicit          bool
+	OAuthAllowedOrigins    []string
+	LoginSuccessContains   string
+	LoginSuccessURL        string
+	Types                  string
+	ExcludeTypes           string
+	ModuleTimeout          int
+	RequestBudget          int
+	URL                    string
+	Method                 string
+	Headers                []string
+	Body                   string
+	Cookies                []string
+	Output                 string
+	Format                 string
+	Workers                int
+	RateLimit              int
+	Timeout                int
+	MaxPayload             int
+	Callback               string
+	Verbose                bool
+	LoginURL               string
+	Username               string
+	Password               string
+	TestHPP                bool
+	WAFBypass              bool
+	ConfidenceMin          float64
+	AllowPrivate           bool
+	Proxy                  string
+	ProxyUsername          string
+	ProxyPassword          string
+	ProxyInsecure          bool
+	Crawl                  bool
+	CrawlDepth             int
+	CrawlMaxPages          int
+	TargetsFile            string
+	RandomUA               bool
+	AdaptiveRate           bool
+	PayloadPreset          string
+	PayloadWordlist        string
+	Headless               bool
+	RenderSPA              bool
+	ChromeNoSandbox        bool
+	ChromeIgnoreCertErrors bool
+	ChromePath             string
+	ConfigFile             string
+	JWT                    string
+	Silent                 bool
+	NoColor                bool
+	EnableProbe            bool
+	VerifyExecution        bool
+	VerifyTimeout          int
+	DiscoverHeaders        bool
+	EnableStored           bool
+	TriggerURLs            []string
+	StoredPollInterval     int
+	StoredMaxPolls         int
+	CSRFToken              string
 
 	// OAuth 2.0
 	OAuthIssuer       string
@@ -113,7 +127,7 @@ const (
 //	make build VERSION=1.0.0
 //
 // x.y.z: x = major (architectural redesign), y = feature, z = bug fix.
-var Version = "0.9.10"
+var Version = "1.0.0-rc.1"
 
 var cfg ScanConfig
 
@@ -159,6 +173,14 @@ func main() {
 }
 
 func init() {
+	rootCmd.Flags().StringSliceVar(&cfg.OAuthAllowedOrigins, "oauth-allow-origin", nil, "Explicit additional OAuth endpoint origins")
+	rootCmd.Flags().StringVar(&cfg.LoginSuccessContains, "login-success-contains", "", "Required login response text")
+	rootCmd.Flags().StringVar(&cfg.LoginSuccessURL, "login-success-url", "", "Required final login URL")
+
+	rootCmd.Flags().StringVar(&cfg.Types, "types", "all", "Scan types: all or reflected,dom,stored,blind")
+	rootCmd.Flags().StringVar(&cfg.ExcludeTypes, "exclude-types", "", "Comma-separated scan types to exclude")
+	rootCmd.Flags().IntVar(&cfg.ModuleTimeout, "module-timeout", 300, "Per-target per-module time budget in seconds (0: unlimited)")
+	rootCmd.Flags().IntVar(&cfg.RequestBudget, "request-budget", 10000, "Batch Go HTTP request budget (0: unlimited; Chrome requests counted separately)")
 	rootCmd.Flags().StringVarP(&cfg.URL, "url", "u", "", "Target URL (required)")
 	rootCmd.Flags().StringVarP(&cfg.Method, "method", "X", "GET", "HTTP method")
 	rootCmd.Flags().StringArrayVarP(&cfg.Headers, "header", "H", nil, "Custom headers (Key:Value)")
@@ -192,6 +214,8 @@ func init() {
 	rootCmd.Flags().StringVar(&cfg.PayloadPreset, "payload-preset", "standard", "Payload preset: minimal, standard, full")
 	rootCmd.Flags().BoolVar(&cfg.Headless, "headless", false, "Enable headless browser for DOM XSS detection (requires Chrome)")
 	rootCmd.Flags().BoolVar(&cfg.RenderSPA, "render-spa", false, "Use headless Chrome to render SPA pages for form discovery (requires Chrome)")
+	rootCmd.Flags().BoolVar(&cfg.ChromeNoSandbox, "chrome-no-sandbox", false, "Disable Chrome sandbox explicitly")
+	rootCmd.Flags().BoolVar(&cfg.ChromeIgnoreCertErrors, "chrome-ignore-cert-errors", false, "Allow invalid TLS certificates in Chrome")
 	rootCmd.Flags().StringVar(&cfg.ChromePath, "chrome-path", "", "Path to Chrome/Chromium binary (auto-detected if empty)")
 	rootCmd.Flags().StringVar(&cfg.PayloadWordlist, "payload-wordlist", "", "Path to custom payload wordlist (one payload per line)")
 	rootCmd.Flags().StringVar(&cfg.ConfigFile, "config", "", "Path to YAML config file")
@@ -199,7 +223,7 @@ func init() {
 	rootCmd.Flags().BoolVar(&cfg.Silent, "silent", false, "Suppress banner and status output (for pipelines)")
 	rootCmd.Flags().BoolVar(&cfg.NoColor, "no-color", false, "Disable ANSI color output")
 	rootCmd.Flags().BoolVar(&cfg.EnableProbe, "probe", false, "Run context probes before payload scanning (reduces false positives)")
-	rootCmd.Flags().BoolVar(&cfg.VerifyExecution, "verify-execution", false, "Verify XSS execution in real browser (requires Chrome, increases accuracy)")
+	rootCmd.Flags().BoolVar(&cfg.VerifyExecution, "verify-execution", true, "Verify XSS candidates in browser when available; set false for structural-only results")
 	rootCmd.Flags().IntVar(&cfg.VerifyTimeout, "verify-timeout", 15, "Per-finding verification timeout in seconds (with --verify-execution)")
 	rootCmd.Flags().BoolVar(&cfg.DiscoverHeaders, "discover-headers", false, "Auto-discover dangerous headers as injection points (X-Forwarded-Host, Referer, etc.)")
 	rootCmd.Flags().BoolVar(&cfg.EnableStored, "stored", false, "Enable stored XSS detection (trigger URLs auto-discovered when --trigger-url is omitted)")
@@ -230,21 +254,40 @@ func runScan(cmd *cobra.Command, args []string) error {
 	if err := loadAndValidateConfig(cmd); err != nil {
 		return err
 	}
+	if err := configureTypes(cmd); err != nil {
+		return err
+	}
+	if err := validateConfig(&cfg); err != nil {
+		return err
+	}
 
 	// Pin the Chrome binary location when --chrome-path is given.
 	browser.ChromePath = cfg.ChromePath
+	browser.NoSandbox = cfg.ChromeNoSandbox
+	browser.IgnoreCertErrors = cfg.ChromeIgnoreCertErrors
 
 	// Pre-flight Chrome check for browser-dependent features: warn with
 	// installation guidance but degrade gracefully instead of failing.
-	if cfg.Headless || cfg.VerifyExecution {
+	var browserErr error
+	if cfg.Headless || cfg.VerifyExecution || cfg.RenderSPA {
 		if err := browser.EnsureChrome(); err != nil {
 			color.Yellow("[!] %v\n", err)
-			color.Yellow("[!] Browser-dependent features (--headless/--verify-execution/--render-spa) will be skipped\n")
+			color.Yellow("[!] Browser-dependent features skipped; scan will be marked incomplete\n")
+			browserErr = err
+			headless, verifyExecution, renderSPA := cfg.Headless, cfg.VerifyExecution, cfg.RenderSPA
+			defer func() { cfg.Headless = headless; cfg.VerifyExecution = verifyExecution; cfg.RenderSPA = renderSPA }()
+			cfg.Headless = false
+			cfg.VerifyExecution = false
+			cfg.RenderSPA = false
 		}
 	}
 	logger := setupLogger()
 	defer logger.Sync()
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stopSignals := setupSignalHandler(cancel)
+	defer stopSignals()
 	headers := parseHeaders(cfg.Headers)
 	if cfg.JWT != "" {
 		headers["Authorization"] = "Bearer " + cfg.JWT
@@ -264,14 +307,46 @@ func runScan(cmd *cobra.Command, args []string) error {
 	}
 	target = applyProxyAuth(target, proxyConfig)
 
-	if err := setupAuthentication(client, headers, target); err != nil {
-		return err
+	var requestCount atomic.Int64
+	baseTransport := client.Transport
+	if baseTransport == nil {
+		baseTransport = http.DefaultTransport
 	}
-
+	budget := &orchestrator.BudgetTransport{Base: batchTransport{base: baseTransport, count: &requestCount}, Max: int64(cfg.RequestBudget)}
+	client = &http.Client{Transport: budget, Jar: client.Jar, Timeout: client.Timeout, CheckRedirect: client.CheckRedirect}
+	authCtx, authCapture := httpclient.RecordContext(ctx)
+	if err := setupAuthenticationContext(authCtx, client, headers, target); err != nil {
+		exchange := authCapture.Snapshot()
+		var diagnostic *httpclient.ExchangeError
+		if errors.As(err, &diagnostic) {
+			exchange = diagnostic.HTTP
+		}
+		issue := model.ScanIssue{Target: target.URL, Stage: "authentication", Message: err.Error(), HTTP: &exchange}
+		status := model.ScanFailed
+		if ctx.Err() != nil {
+			status = model.ScanCanceled
+		}
+		stats := model.ScanStats{Status: status, Issues: []model.ScanIssue{issue}, Errors: 1, RequestsSent: int(requestCount.Load())}
+		kinds, _ := orchestrator.Select(cfg.Types, "")
+		for _, kind := range kinds {
+			stats.Modules = append(stats.Modules, model.ModuleResult{Type: string(kind), Target: target.URL, Status: model.ScanSkipped, Reason: "authentication did not complete"})
+		}
+		reportErr := reportScanResults(nil, stats, []string{target.URL}, time.Now())
+		return errors.Join(err, reportErr)
+	}
 	seedCookieJar(client, target)
 
 	engine := scanner.NewEngine(buildEngineConfig(), logger, client)
-	callbackSrv := setupCallbackServer(cfg.Callback, engine)
+	callbackURL := cfg.Callback
+	if !selectedType("blind") {
+		callbackURL = ""
+	}
+	callbackSrv := setupCallbackServer(callbackURL, engine)
+	// Callback injection belongs to the blind module, not reflected scanning.
+	engine.SetGenerator(payload.NewGenerator())
+	if callbackSrv != nil {
+		defer callbackSrv.Stop()
+	}
 	if cfg.PayloadPreset != "" {
 		engine.SetPayloadPreset(payload.PayloadPreset(cfg.PayloadPreset))
 	}
@@ -282,10 +357,6 @@ func runScan(cmd *cobra.Command, args []string) error {
 		color.Cyan("[*] Loaded custom payload wordlist: %s\n", cfg.PayloadWordlist)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	setupSignalHandler(cancel)
-
 	urls, err := resolveTargets(target.URL)
 	if err != nil {
 		return err
@@ -295,15 +366,19 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 	var allFindings []model.Finding
 	var totalStats model.ScanStats
-	if err := scanAllTargets(ctx, engine, client, urls, target, &allFindings, &totalStats); err != nil {
-		return err
+	if browserErr != nil {
+		totalStats.Status = model.ScanSkipped
+		totalStats.Issues = append(totalStats.Issues, model.ScanIssue{Target: target.URL, Stage: "browser", Message: browserErr.Error()})
 	}
-
-	if callbackSrv != nil {
-		collectBlindXSSCallbacks(callbackSrv, &allFindings, cfg.Callback, urls)
+	scanErr := runSelectedModules(ctx, engine, client, urls, target, callbackSrv, &allFindings, &totalStats)
+	if ctx.Err() != nil {
+		totalStats.Status = model.ScanCanceled
+		recordScanIssue(&totalStats, target.URL, "scan", ctx.Err())
+		scanErr = errors.Join(scanErr, ctx.Err())
 	}
+	totalStats.RequestsSent = int(requestCount.Load())
 
-	return reportScanResults(allFindings, totalStats, urls, startTime)
+	return errors.Join(browserErr, scanErr, reportScanResults(allFindings, totalStats, urls, startTime))
 }
 
 func loadAndValidateConfig(cmd *cobra.Command) error {
@@ -348,15 +423,6 @@ func setupHTTPClient(target model.Target) (*http.Client, *httpclient.ProxyConfig
 		color.Cyan("[*] Using proxy: %s\n", cfg.Proxy)
 	}
 	client := httpclient.NewClient(engineCfg.RequestTimeout, proxyConfig)
-	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-		if len(via) >= 10 {
-			return http.ErrUseLastResponse
-		}
-		if err := ssrfguard.IsURLTargetAllowed(req.URL.String()); err != nil {
-			return fmt.Errorf("redirect blocked: %w", err)
-		}
-		return nil
-	}
 	return client, proxyConfig, nil
 }
 
@@ -370,8 +436,12 @@ func applyProxyAuth(target model.Target, proxyConfig *httpclient.ProxyConfig) mo
 }
 
 func setupAuthentication(client *http.Client, headers map[string]string, target model.Target) error {
+	return setupAuthenticationContext(context.Background(), client, headers, target)
+}
+
+func setupAuthenticationContext(ctx context.Context, client *http.Client, headers map[string]string, target model.Target) error {
 	if cfg.OAuthIssuer != "" || cfg.OAuthClientID != "" {
-		if err := setupOAuth(client, headers); err != nil {
+		if err := setupOAuthContext(ctx, client, headers); err != nil {
 			return err
 		}
 	}
@@ -380,7 +450,8 @@ func setupAuthentication(client *http.Client, headers map[string]string, target 
 			return fmt.Errorf("--login-url requires both --username and --password")
 		}
 		color.Cyan("[*] Authenticating to %s...\n", cfg.LoginURL)
-		if err := auth.Authenticate(client, auth.LoginConfig{
+		if err := auth.AuthenticateContext(ctx, client, auth.LoginConfig{
+			Headers: headers, SuccessContains: cfg.LoginSuccessContains, SuccessURL: cfg.LoginSuccessURL,
 			LoginURL: cfg.LoginURL,
 			Username: cfg.Username,
 			Password: cfg.Password,
@@ -396,11 +467,15 @@ func setupAuthentication(client *http.Client, headers map[string]string, target 
 }
 
 func setupOAuth(client *http.Client, headers map[string]string) error {
+	return setupOAuthContext(context.Background(), client, headers)
+}
+
+func setupOAuthContext(ctx context.Context, client *http.Client, headers map[string]string) error {
 	if cfg.OAuthClientID == "" {
 		return fmt.Errorf("--oauth-issuer requires --oauth-client-id")
 	}
 	engineCfg := buildEngineConfig()
-	oauthCtx, oauthCancel := context.WithTimeout(context.Background(), engineCfg.RequestTimeout)
+	oauthCtx, oauthCancel := context.WithTimeout(ctx, engineCfg.RequestTimeout)
 	defer oauthCancel()
 
 	color.Cyan("[*] OAuth 2.0 authentication (client: %s)...\n", cfg.OAuthClientID)
@@ -416,9 +491,9 @@ func setupOAuth(client *http.Client, headers map[string]string) error {
 		if err != nil {
 			return fmt.Errorf("invalid oauth issuer: %w", err)
 		}
-		doc, err := oauth.DiscoverOIDC(oauthCtx, client, issuer)
+		doc, err := oauth.DiscoverOIDCWithOrigins(oauthCtx, client, issuer, cfg.OAuthAllowedOrigins)
 		if err != nil {
-			color.Yellow("[!] OIDC discovery failed: %v — using manual endpoints\n", err)
+			return fmt.Errorf("OIDC discovery failed: %w", err)
 		} else {
 			flowCfg.TokenURL = doc.TokenEndpoint
 			flowCfg.AuthURL = doc.AuthorizationEndpoint
@@ -529,14 +604,20 @@ func isLoopbackHost(host string) bool {
 	return false
 }
 
-func setupSignalHandler(cancel context.CancelFunc) {
+func setupSignalHandler(cancel context.CancelFunc) func() {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	done := make(chan struct{})
 	go func() {
-		<-sigCh
+		select {
+		case <-done:
+			return
+		case <-sigCh:
+		}
 		color.Yellow("\n[!] Interrupt received, stopping...")
 		cancel()
 	}()
+	return func() { signal.Stop(sigCh); close(done) }
 }
 
 func resolveTargets(primaryURL string) ([]string, error) {
@@ -574,7 +655,13 @@ func deriveTarget(base model.Target, urlStr string) model.Target {
 }
 
 func scanAllTargets(ctx context.Context, engine *scanner.Engine, client *http.Client, urls []string, baseTarget model.Target, allFindings *[]model.Finding, totalStats *model.ScanStats) error {
+	var problems []error
 	for i, scanURL := range urls {
+		if err := ctx.Err(); err != nil {
+			totalStats.Status = model.ScanCanceled
+			recordScanIssue(totalStats, scanURL, "scan", err)
+			return errors.Join(append(problems, err)...)
+		}
 		if len(urls) > 1 {
 			color.Cyan("\n[*] [%d/%d] %s\n", i+1, len(urls), scanURL)
 		}
@@ -583,27 +670,20 @@ func scanAllTargets(ctx context.Context, engine *scanner.Engine, client *http.Cl
 
 		if cfg.Crawl {
 			if err := crawlAndScan(ctx, client, engine, scanURL, baseTarget, allFindings, totalStats); err != nil {
+				problems = append(problems, err)
 				if errors.Is(err, context.Canceled) {
 					color.Yellow("\n[!] Crawl cancelled")
-					return nil
-				}
-			}
-			// Headless/stored scans still run for the seed target in crawl mode
-			if err := runHeadlessScan(ctx, client, scanTarget, allFindings); err != nil {
-				color.Yellow("[!] Headless scan error: %v\n", err)
-			}
-			if cfg.EnableStored {
-				if err := runStoredXSSScan(ctx, client, scanTarget, allFindings); err != nil {
-					color.Yellow("[!] Stored XSS scan error: %v\n", err)
+					return errors.Join(problems...)
 				}
 			}
 			continue
 		}
 
 		if err := scanOneTarget(ctx, engine, scanTarget, allFindings, totalStats); err != nil {
+			problems = append(problems, err)
 			if errors.Is(err, context.Canceled) {
 				color.Yellow("\n[!] Scan cancelled")
-				return nil
+				return errors.Join(problems...)
 			}
 			color.Yellow("[!] Scan failed for %s: %v — continuing\n", scanURL, err)
 		}
@@ -612,10 +692,12 @@ func scanAllTargets(ctx context.Context, engine *scanner.Engine, client *http.Cl
 		// Split into the form block (query-less URLs only, render-spa fallback)
 		// and the param-mining block, both fed by the same response body.
 		var pageInfo *crawler.PageInfo
-		if cfg.Body == "" {
+		if cfg.Body == "" && !hasQueryParams(scanTarget.URL) {
 			info, err := crawler.ExtractPageInfo(ctx, client, scanTarget.URL, scanTarget.Headers)
 			if err != nil {
 				color.Yellow("[!] Page discovery failed for %s: %v\n", scanTarget.URL, err)
+				problems = append(problems, err)
+				recordScanIssue(totalStats, scanTarget.URL, "discovery", err)
 			}
 			pageInfo = info
 		}
@@ -637,6 +719,8 @@ func scanAllTargets(ctx context.Context, engine *scanner.Engine, client *http.Cl
 				rendered, err := crawler.RenderPage(ctx, scanTarget.URL, scanTarget.Headers, 0)
 				if err != nil {
 					color.Yellow("[!] JS rendering failed: %v\n", err)
+					problems = append(problems, err)
+					recordScanIssue(totalStats, scanURL, "render", err)
 				} else {
 					if len(rendered.Forms) > 0 {
 						color.Green("[+] JS rendering discovered %d form(s)\n", len(rendered.Forms))
@@ -648,6 +732,7 @@ func scanAllTargets(ctx context.Context, engine *scanner.Engine, client *http.Cl
 			}
 			for _, ft := range formTargets {
 				if err := scanOneTarget(ctx, engine, ft, allFindings, totalStats); err != nil {
+					problems = append(problems, err)
 					color.Yellow("[!] Form scan failed for %s: %v\n", ft.URL, err)
 				}
 			}
@@ -656,20 +741,17 @@ func scanAllTargets(ctx context.Context, engine *scanner.Engine, client *http.Cl
 			}
 		}
 
-		if err := runHeadlessScan(ctx, client, scanTarget, allFindings); err != nil {
-			color.Yellow("[!] Headless scan error: %v\n", err)
-		}
-
-		if cfg.EnableStored {
-			if err := runStoredXSSScan(ctx, client, scanTarget, allFindings); err != nil {
-				color.Yellow("[!] Stored XSS scan error: %v\n", err)
-			}
-		}
 	}
-	return nil
+	if ctx.Err() != nil {
+		totalStats.Status = model.ScanCanceled
+		recordScanIssue(totalStats, scanURLForIssue(urls), "scan", ctx.Err())
+		problems = append(problems, ctx.Err())
+	}
+	return errors.Join(problems...)
 }
 
 func crawlAndScan(ctx context.Context, client *http.Client, engine *scanner.Engine, scanURL string, baseTarget model.Target, allFindings *[]model.Finding, totalStats *model.ScanStats) error {
+	var problems []error
 	color.Cyan("[*] Crawling %s (depth=%d, maxPages=%d)...\n", scanURL, cfg.CrawlDepth, cfg.CrawlMaxPages)
 	crawlCfg := crawler.CrawlerConfig{
 		MaxDepth:     cfg.CrawlDepth,
@@ -680,11 +762,14 @@ func crawlAndScan(ctx context.Context, client *http.Client, engine *scanner.Engi
 	c := crawler.NewCrawlerWithConfig(client, crawlCfg)
 	crawlResult, err := c.Crawl(ctx, scanURL)
 	if err != nil {
-		if errors.Is(err, context.Canceled) {
+		problems = append(problems, err)
+		recordScanIssue(totalStats, scanURL, "crawl", err)
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return err
 		}
-		color.Yellow("[!] Crawl failed for %s: %v — skipping\n", scanURL, err)
-		return nil
+		if crawlResult == nil {
+			return err
+		}
 	}
 	color.Green("[+] Crawl discovered %d URLs, %d forms\n", len(crawlResult.URLs), len(crawlResult.Forms))
 
@@ -701,12 +786,15 @@ func crawlAndScan(ctx context.Context, client *http.Client, engine *scanner.Engi
 			crawlResult.Forms = append(crawlResult.Forms, rendered.Forms...)
 		} else if err != nil {
 			color.Yellow("[!] JS rendering failed: %v\n", err)
+			problems = append(problems, err)
+			recordScanIssue(totalStats, scanURL, "render", err)
 		}
 	}
 
 	for _, u := range crawlResult.URLs {
 		subTarget := deriveTarget(baseTarget, u)
 		if err := scanOneTarget(ctx, engine, subTarget, allFindings, totalStats); err != nil {
+			problems = append(problems, err)
 			if errors.Is(err, context.Canceled) {
 				return err
 			}
@@ -717,6 +805,7 @@ func crawlAndScan(ctx context.Context, client *http.Client, engine *scanner.Engi
 	for _, form := range dedupForms(crawlResult.Forms) {
 		ft := formToTarget(baseTarget, form)
 		if err := scanOneTarget(ctx, engine, ft, allFindings, totalStats); err != nil {
+			problems = append(problems, err)
 			color.Yellow("[!] Form scan failed for %s: %v\n", form.Action, err)
 		}
 	}
@@ -731,6 +820,8 @@ func crawlAndScan(ctx context.Context, client *http.Client, engine *scanner.Engi
 	if cfg.Body == "" {
 		if pageInfo, err := crawler.ExtractPageInfo(ctx, client, scanURL, baseTarget.Headers); err != nil {
 			color.Yellow("[!] Page discovery failed for %s: %v\n", scanURL, err)
+			problems = append(problems, err)
+			recordScanIssue(totalStats, scanURL, "discovery", err)
 		} else {
 			seedTarget := deriveTarget(baseTarget, scanURL)
 			for _, pt := range pageInfo.ParamTargets {
@@ -741,6 +832,7 @@ func crawlAndScan(ctx context.Context, client *http.Client, engine *scanner.Engi
 				ptTarget.URL = pt.URL
 				ptTarget.URL = appendQueryParams(ptTarget.URL, pt.Params)
 				if err := scanOneTarget(ctx, engine, ptTarget, allFindings, totalStats); err != nil {
+					problems = append(problems, err)
 					if errors.Is(err, context.Canceled) {
 						return err
 					}
@@ -749,7 +841,12 @@ func crawlAndScan(ctx context.Context, client *http.Client, engine *scanner.Engi
 			}
 		}
 	}
-	return nil
+	if ctx.Err() != nil {
+		totalStats.Status = model.ScanCanceled
+		recordScanIssue(totalStats, scanURL, "crawl", ctx.Err())
+		problems = append(problems, ctx.Err())
+	}
+	return errors.Join(problems...)
 }
 
 // dedupForms removes forms with the same action+method, keeping first occurrence.
@@ -936,6 +1033,7 @@ func buildEngineConfig() scanner.Config {
 		TestHPP:         cfg.TestHPP,
 		WAFBypass:       cfg.WAFBypass,
 		ConfidenceMin:   cfg.ConfidenceMin,
+		ConfidenceSet:   true,
 		RandomUA:        cfg.RandomUA,
 		AdaptiveRate:    cfg.AdaptiveRate,
 		EnableProbe:     cfg.EnableProbe,
@@ -947,6 +1045,9 @@ func buildEngineConfig() scanner.Config {
 
 func collectChangedFlags(cmd *cobra.Command) map[string]bool {
 	changed := make(map[string]bool)
+	if cmd == nil {
+		return changed
+	}
 	cmd.Flags().Visit(func(f *pflag.Flag) {
 		changed[f.Name] = true
 	})
@@ -961,6 +1062,35 @@ func validateConfig(cfg *ScanConfig) error {
 		} else {
 			return fmt.Errorf("no target URL provided (use --url, --targets-file, or pipe URLs via stdin)")
 		}
+	}
+	if cfg.Format == "" {
+		cfg.Format = "json"
+	}
+	switch report.OutputFormat(cfg.Format) {
+	case report.FormatJSON, report.FormatHTML, report.FormatMarkdown, report.FormatSARIF, report.FormatJUnit:
+	default:
+		return fmt.Errorf("unsupported --format %q", cfg.Format)
+	}
+	if math.IsNaN(cfg.ConfidenceMin) || math.IsInf(cfg.ConfidenceMin, 0) || cfg.ConfidenceMin < 0 || cfg.ConfidenceMin > 1 {
+		return fmt.Errorf("--confidence must be between 0 and 1")
+	}
+	if cfg.Workers < 0 {
+		return fmt.Errorf("--workers must be positive")
+	}
+	if cfg.Workers == 0 {
+		cfg.Workers = 1
+	}
+	if cfg.PayloadPreset != "" && cfg.PayloadPreset != "minimal" && cfg.PayloadPreset != "standard" && cfg.PayloadPreset != "full" {
+		return fmt.Errorf("unknown payload preset %q", cfg.PayloadPreset)
+	}
+	if cfg.Crawl && (cfg.CrawlDepth < 0 || cfg.CrawlMaxPages <= 0) {
+		return fmt.Errorf("invalid crawl limits")
+	}
+	if cfg.EnableStored && (cfg.StoredMaxPolls <= 0 || cfg.StoredPollInterval <= 0) {
+		return fmt.Errorf("stored poll limits must be positive")
+	}
+	if cfg.VerifyExecution && cfg.VerifyTimeout <= 0 {
+		return fmt.Errorf("--verify-timeout must be positive")
 	}
 	if cfg.Workers > maxWorkers {
 		return fmt.Errorf("--workers exceeds maximum allowed (%d)", maxWorkers)
@@ -1039,6 +1169,12 @@ func printBanner() {
 }
 
 func printResults(result *model.ScanResult, duration time.Duration) {
+	for _, module := range result.Stats.Modules {
+		color.Cyan("  Module: %s / %s / %s", module.Type, module.Target, module.Status)
+		if module.Reason != "" {
+			color.Yellow("    %s", stripANSI(module.Reason))
+		}
+	}
 	fmt.Println()
 	color.Cyan("═══ Scan Results ═══")
 	fmt.Printf("  Target:    %s\n", result.Target)
@@ -1046,6 +1182,11 @@ func printResults(result *model.ScanResult, duration time.Duration) {
 	fmt.Printf("  Params:    %d\n", result.Stats.ParametersFound)
 	fmt.Printf("  Payloads:  %d\n", result.Stats.PayloadsSent)
 	fmt.Printf("  Findings:  %d\n", len(result.Findings))
+	fmt.Printf("  Status:    %s\n", result.Stats.Status)
+	fmt.Printf("  Requests:  %d\n", result.Stats.RequestsSent)
+	for _, issue := range result.Stats.Issues {
+		fmt.Printf("  Issue:     %s / %s: %s\n", issue.Target, issue.Stage, issue.Message)
+	}
 	fmt.Println()
 
 	if result.Stats.WAF != nil {
@@ -1065,7 +1206,11 @@ func printResults(result *model.ScanResult, duration time.Duration) {
 	}
 
 	if len(result.Findings) == 0 {
-		color.Green("  ✅ No XSS vulnerabilities found\n")
+		if result.Stats.Status == "" || result.Stats.Status == model.ScanCompleted {
+			color.Green("  ✅ No XSS vulnerabilities found\n")
+		} else {
+			color.Yellow("  [!] Scan incomplete (%s); no findings recorded\n", result.Stats.Status)
+		}
 		return
 	}
 
@@ -1175,10 +1320,15 @@ func loadTargets(source string) ([]string, error) {
 
 func scanOneTarget(ctx context.Context, engine *scanner.Engine, tgt model.Target, allFindings *[]model.Finding, totalStats *model.ScanStats) error {
 	result, err := engine.Run(ctx, tgt)
-	if err != nil {
+	if result == nil {
+		recordScanIssue(totalStats, tgt.URL, "scan", err)
 		return err
 	}
 	*allFindings = append(*allFindings, result.Findings...)
+	totalStats.Status = model.MergeStatus(totalStats.Status, result.Stats.Status)
+	totalStats.Issues = append(totalStats.Issues, result.Stats.Issues...)
+	totalStats.Errors += result.Stats.Errors
+	totalStats.RequestsSent += result.Stats.RequestsSent
 	totalStats.PayloadsSent += result.Stats.PayloadsSent
 	totalStats.ParametersFound += result.Stats.ParametersFound
 	totalStats.ProbeFiltered += result.Stats.ProbeFiltered
@@ -1189,7 +1339,7 @@ func scanOneTarget(ctx context.Context, engine *scanner.Engine, tgt model.Target
 			totalStats.WAF.Bypassed = true
 		}
 	}
-	return nil
+	return err
 }
 
 func createDOMScanner(ctx context.Context, authState *dom.AuthState, tgt model.Target) (*dom.Scanner, error) {
@@ -1199,6 +1349,7 @@ func createDOMScanner(ctx context.Context, authState *dom.AuthState, tgt model.T
 			return nil, err
 		}
 		if err := scanner.ApplyAuthState(ctx, tgt.URL); err != nil {
+			scanner.Close()
 			return nil, fmt.Errorf("apply auth state: %w", err)
 		}
 		return scanner, nil
@@ -1228,7 +1379,7 @@ func runHeadlessScan(ctx context.Context, client *http.Client, tgt model.Target,
 	domScanner, err := createDOMScanner(ctx, authState, tgt)
 	if err != nil {
 		color.Yellow("[!] Failed to initialize headless browser: %v — skipping DOM scan\n", err)
-		return nil
+		return err
 	}
 	defer domScanner.Close()
 
@@ -1240,22 +1391,24 @@ func runHeadlessScan(ctx context.Context, client *http.Client, tgt model.Target,
 		`"><svg onload=alert(1)>`,
 	}
 
+	var problems []error
 	for _, payload := range payloads {
 		select {
 		case <-ctx.Done():
-			return nil
+			return errors.Join(append(problems, ctx.Err())...)
 		default:
 		}
 
 		findings, err := domScanner.DetectDOMXSS(ctx, tgt, payload)
+		*allFindings = append(*allFindings, findings...)
 		if err != nil {
+			problems = append(problems, err)
 			color.Yellow("[!] DOM scan error for payload %s: %v\n", truncateStr(payload, 30), err)
 			continue
 		}
-		*allFindings = append(*allFindings, findings...)
 	}
 
-	return nil
+	return errors.Join(problems...)
 }
 
 func runStoredXSSScan(ctx context.Context, client *http.Client, tgt model.Target, allFindings *[]model.Finding) error {
@@ -1289,15 +1442,17 @@ func runStoredXSSScan(ctx context.Context, client *http.Client, tgt model.Target
 		MaxPolls:        cfg.StoredMaxPolls,
 		RequestTimeout:  time.Duration(cfg.Timeout) * time.Second,
 		Concurrency:     cfg.Workers,
+		VerifyExecution: cfg.VerifyExecution,
+		VerifyTimeout:   time.Duration(cfg.VerifyTimeout) * time.Second,
 	}, nil)
 
-	findings := storedScanner.Detect(ctx, injections)
+	findings, scanErr := storedScanner.DetectWithError(ctx, injections)
 	if len(findings) > 0 {
 		*allFindings = append(*allFindings, findings...)
 		color.Green("[+] Stored XSS: found %d vulnerability(ies)\n", len(findings))
-	} else {
+	} else if scanErr == nil {
 		color.Cyan("[*] Stored XSS: no vulnerabilities detected\n")
 	}
 
-	return nil
+	return scanErr
 }

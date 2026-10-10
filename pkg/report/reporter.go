@@ -42,7 +42,7 @@ func (r *Reporter) Generate(data *ScanData, format OutputFormat) ([]byte, error)
 	case FormatJUnit:
 		return []byte(r.generateJUnit(data)), nil
 	default:
-		return json.MarshalIndent(data, "", "  ")
+		return nil, fmt.Errorf("unsupported report format %q", format)
 	}
 }
 
@@ -51,7 +51,28 @@ func (r *Reporter) Write(data []byte, path string) error {
 	if err != nil {
 		return fmt.Errorf("invalid output path: %w", err)
 	}
-	return os.WriteFile(abs, data, 0600)
+	file, err := os.CreateTemp(filepath.Dir(abs), ".xsscan-report-*")
+	if err != nil {
+		return err
+	}
+	name := file.Name()
+	defer os.Remove(name)
+	if err := file.Chmod(0600); err != nil {
+		file.Close()
+		return err
+	}
+	if _, err := file.Write(data); err != nil {
+		file.Close()
+		return err
+	}
+	if err := file.Sync(); err != nil {
+		file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	return os.Rename(name, abs)
 }
 
 func (r *Reporter) generateMarkdown(data *ScanData) string {
@@ -61,6 +82,20 @@ func (r *Reporter) generateMarkdown(data *ScanData) string {
 	fmt.Fprintf(&b, "**Scan Duration:** %dms\n\n", data.Duration)
 	fmt.Fprintf(&b, "**Findings:** %d\n\n", len(data.Findings))
 
+	fmt.Fprintf(&b, "**Status:** %s\n\n", reportStatus(data))
+	if len(data.Modules) > 0 {
+		b.WriteString("| Type | Target | Status | Reason |\n| --- | --- | --- | --- |\n")
+		for _, module := range data.Modules {
+			fmt.Fprintf(&b, "| %s | %s | %s | %s |\n", text.EscapeMarkdown(module.Type), text.EscapeMarkdown(module.Target), module.Status, text.EscapeMarkdown(module.Reason))
+		}
+		b.WriteString("\n")
+	}
+	for _, issue := range data.Issues {
+		fmt.Fprintf(&b, "- %s / %s: %s\n", text.EscapeMarkdown(issue.Target), text.EscapeMarkdown(issue.Stage), text.EscapeMarkdown(issue.Message))
+		if issue.HTTP != nil {
+			fmt.Fprintf(&b, "\n%s\n", httpFence(issue.HTTP.Request+"\n"+issue.HTTP.Response))
+		}
+	}
 	if data.WAF != nil {
 		b.WriteString("## WAF Detection\n\n")
 		fmt.Fprintf(&b, "- **WAF:** %s\n", text.EscapeMarkdown(data.WAF.Name))
@@ -72,7 +107,11 @@ func (r *Reporter) generateMarkdown(data *ScanData) string {
 	}
 
 	if len(data.Findings) == 0 {
-		b.WriteString("✅ No vulnerabilities found.\n")
+		if reportStatus(data) == model.ScanCompleted {
+			b.WriteString("✅ No vulnerabilities found.\n")
+		} else {
+			b.WriteString("Scan incomplete; no findings recorded.\n")
+		}
 		return b.String()
 	}
 
@@ -83,6 +122,13 @@ func (r *Reporter) generateMarkdown(data *ScanData) string {
 		fmt.Fprintf(&b, "- **URL:** %s\n", text.EscapeMarkdown(f.URL))
 		fmt.Fprintf(&b, "- **Parameter:** %s\n", text.EscapeMarkdown(f.Parameter))
 		fmt.Fprintf(&b, "- **Payload:** `%s`\n", text.EscapeMarkdown(f.Payload))
+		for _, field := range evidenceFields(f.Evidence) {
+			if field[0] == "Trigger Request" || field[0] == "Submission Response" || field[0] == "Initial Request" {
+				fmt.Fprintf(&b, "\n**%s:**\n\n%s\n", field[0], httpFence(field[1]))
+			} else {
+				fmt.Fprintf(&b, "- **%s:** `%s`\n", field[0], text.EscapeMarkdown(field[1]))
+			}
+		}
 		// Variants exclude the primary payload — it is printed above.
 		hasVariants := false
 		for _, v := range f.Payloads {
@@ -112,14 +158,14 @@ func (r *Reporter) generateMarkdown(data *ScanData) string {
 		}
 		fmt.Fprintf(&b, "- **Confidence:** %.0f%%\n", f.Confidence*100)
 		fmt.Fprintf(&b, "- **Context:** %s\n\n", text.EscapeMarkdown(strings.Join(f.Contexts, ", ")))
-		if curlCmd := buildCurlCommand(f.RawRequest, f.Scheme); curlCmd != "" {
+		if curlCmd := findingCurl(f); curlCmd != "" {
 			fmt.Fprintf(&b, "**Reproduce with curl:**\n\n```bash\n%s\n```\n\n", curlCmd)
 		}
 		if f.RawRequest != "" {
-			fmt.Fprintf(&b, "<details><summary>Raw Request</summary>\n\n```http\n%s\n```\n\n</details>\n", text.EscapeMarkdown(f.RawRequest))
+			fmt.Fprintf(&b, "<details><summary>Raw Request</summary>\n\n%s\n</details>\n", httpFence(f.RawRequest))
 		}
 		if f.RawResponse != "" {
-			fmt.Fprintf(&b, "<details><summary>Raw Response</summary>\n\n```http\n%s\n```\n\n</details>\n", text.EscapeMarkdown(f.RawResponse))
+			fmt.Fprintf(&b, "<details><summary>Raw Response</summary>\n\n%s\n</details>\n", httpFence(f.RawResponse))
 		}
 	}
 	return b.String()
@@ -160,6 +206,16 @@ details summary{cursor:pointer;color:#666;margin-top:8px}
 	fmt.Fprintf(&b, "<strong>Duration:</strong> %dms<br>\n", data.Duration)
 	fmt.Fprintf(&b, "<strong>Findings:</strong> %d</p>\n", len(data.Findings))
 
+	fmt.Fprintf(&b, "<p><strong>Status:</strong> %s</p>\n", html.EscapeString(string(reportStatus(data))))
+	for _, module := range data.Modules {
+		fmt.Fprintf(&b, "<p>Module: %s / %s / %s — %s</p>\n", html.EscapeString(module.Type), html.EscapeString(module.Target), html.EscapeString(string(module.Status)), html.EscapeString(module.Reason))
+	}
+	for _, issue := range data.Issues {
+		fmt.Fprintf(&b, "<p>%s / %s: %s</p>\n", html.EscapeString(issue.Target), html.EscapeString(issue.Stage), html.EscapeString(issue.Message))
+		if issue.HTTP != nil {
+			fmt.Fprintf(&b, "<pre>%s\n%s</pre>", html.EscapeString(issue.HTTP.Request), html.EscapeString(issue.HTTP.Response))
+		}
+	}
 	if data.WAF != nil {
 		b.WriteString("<div class=\"meta\" style=\"background:#fff3cd;padding:10px;border-radius:4px;margin:10px 0\">")
 		b.WriteString(fmt.Sprintf("🛡️ WAF Detected: <strong>%s</strong>", html.EscapeString(data.WAF.Name)))
@@ -170,7 +226,11 @@ details summary{cursor:pointer;color:#666;margin-top:8px}
 	}
 
 	if len(data.Findings) == 0 {
-		b.WriteString("<p>✅ No vulnerabilities found.</p>\n")
+		if reportStatus(data) == model.ScanCompleted {
+			b.WriteString("<p>✅ No vulnerabilities found.</p>\n")
+		} else {
+			b.WriteString("<p>Scan incomplete; no findings recorded.</p>\n")
+		}
 	} else {
 		for i, f := range data.Findings {
 			// Escape all fields to prevent self-XSS in reports
@@ -199,6 +259,9 @@ details summary{cursor:pointer;color:#666;margin-top:8px}
 <strong>Parameter:</strong> %s<br>
 <strong>Context:</strong> %s</p>
 `, i+1, safeDesc, safeType, safeSev, safeSev, f.Confidence*100, execBadge, safeURL, safeParam, safeContexts)
+			for _, field := range evidenceFields(f.Evidence) {
+				fmt.Fprintf(&b, "<p><strong>%s:</strong></p><div class=\"code\">%s</div>\n", html.EscapeString(field[0]), html.EscapeString(field[1]))
+			}
 
 			// CSP bypass badges + executable exploit payloads
 			if len(f.CSPBypasses) > 0 {
@@ -250,7 +313,7 @@ details summary{cursor:pointer;color:#666;margin-top:8px}
 
 			// Fallback: show raw-request-derived curl command if no CurlPOC
 			if f.CurlPOC == "" {
-				if curlCmd := buildCurlCommand(f.RawRequest, f.Scheme); curlCmd != "" {
+				if curlCmd := findingCurl(f); curlCmd != "" {
 					safeCurl := html.EscapeString(curlCmd)
 					fmt.Fprintf(&b, `<p><strong>Reproduce with curl:</strong></p>
 <div class="code" id="curl-%d">%s</div>
@@ -267,7 +330,7 @@ details summary{cursor:pointer;color:#666;margin-top:8px}
 				fmt.Fprintf(&b, `<details><summary>Raw Request (paste into Burp Repeater)</summary>
 <div class="code" id="raw-req-%d">%s</div>
 <button class="copy-btn" data-req="%s" onclick="copyToClipboard(this.getAttribute('data-req'))">📋 Copy for Burp</button>
-</details>`+"\n", i, safeReq, safeReq)
+</details>`+"\n", i, safeReq, strings.ReplaceAll(strings.ReplaceAll(safeReq, "\r", "&#13;"), "\n", "&#10;"))
 			}
 			if f.RawResponse != "" {
 				safeResp := html.EscapeString(f.RawResponse)
@@ -327,13 +390,21 @@ function showCopied() {
 
 // ScanData is the unified report data structure
 type ScanData struct {
-	Target   string
-	Duration int64
-	WAF      *model.WAFInfo
-	Findings []FindingData
+	SchemaVersion string
+	Modules       []model.ModuleResult
+	Status        model.ScanStatus
+	Issues        []model.ScanIssue
+	RequestsSent  int
+	PayloadsSent  int
+	Errors        int
+	Target        string
+	Duration      int64
+	WAF           *model.WAFInfo
+	Findings      []FindingData
 }
 
 type FindingData struct {
+	Evidence            model.Evidence
 	Type                string
 	Severity            string
 	Confidence          float64
@@ -353,9 +424,31 @@ type FindingData struct {
 	CSPBypasses         []model.CSPBypass
 }
 
+// evidenceFields keeps candidate provenance visible in human-readable reports.
+func evidenceFields(e model.Evidence) [][2]string {
+	all := [][2]string{{"Analysis Method", e.AnalysisMethod}, {"Parse Error", e.ParseError}, {"Detection Method", e.DetectionMethod}, {"Trigger URL", e.TriggerURL}, {"Verification Payload", e.VerificationPayload}, {"Dialog Message", e.DialogMessage}, {"Interaction", e.Interaction}}
+	if e.HTTP != nil {
+		all = append(all, [2]string{"Initial Request", e.HTTP.InitialRequest}, [2]string{"Initial Request Base64", e.HTTP.InitialRequestBase64})
+		all = append(all, [2]string{"Request Base64", e.HTTP.RequestBase64}, [2]string{"Response Base64", e.HTTP.ResponseBase64})
+		all = append(all, [2]string{"HTTP Body Limits", fmt.Sprintf("request_truncated=%t; response_truncated=%t; response_incomplete=%t", e.HTTP.RequestTruncated, e.HTTP.ResponseTruncated, e.HTTP.ResponseIncomplete)})
+		if e.SubmissionHTTP != nil {
+			all = append(all, [2]string{"Trigger Request", e.HTTP.Request}, [2]string{"Submission Response", e.SubmissionHTTP.Response})
+			all = append(all, [2]string{"Submission Request Base64", e.SubmissionHTTP.RequestBase64}, [2]string{"Submission Response Base64", e.SubmissionHTTP.ResponseBase64})
+		}
+	}
+
+	var fields [][2]string
+	for _, field := range all {
+		if field[1] != "" {
+			fields = append(fields, field)
+		}
+	}
+	return fields
+}
+
 // FromScanResult converts a model.ScanResult to report.ScanData
 func FromScanResult(result *model.ScanResult, durationMs int64) *ScanData {
-	scanData := &ScanData{Target: result.Target, Duration: durationMs, WAF: result.Stats.WAF}
+	scanData := &ScanData{SchemaVersion: "1.0", Modules: result.Stats.Modules, Target: result.Target, Duration: durationMs, WAF: result.Stats.WAF, Status: result.Stats.Status, Issues: result.Stats.Issues, RequestsSent: result.Stats.RequestsSent, PayloadsSent: result.Stats.PayloadsSent, Errors: result.Stats.Errors}
 	for _, f := range result.Findings {
 		// Extract scheme from the finding URL for accurate curl POC reconstruction
 		scheme := "http"
@@ -363,6 +456,7 @@ func FromScanResult(result *model.ScanResult, durationMs int64) *ScanData {
 			scheme = u.Scheme
 		}
 		fd := FindingData{
+			Evidence:            f.Evidence,
 			Type:                string(f.Type),
 			Severity:            string(f.Severity),
 			Confidence:          f.Confidence,
@@ -380,8 +474,9 @@ func FromScanResult(result *model.ScanResult, durationMs int64) *ScanData {
 			ExecutionConfidence: f.ExecutionConfidence,
 			CSPBypasses:         f.CSPBypasses,
 		}
-		// Build curl POC for query parameters
-		if f.ParamType == model.ParamQuery {
+		// Prefer the captured request so authentication and CSRF remain reproducible.
+		fd.CurlPOC = findingCurl(fd)
+		if fd.CurlPOC == "" && f.ParamType == model.ParamQuery && f.RawRequest == "" {
 			fd.CurlPOC = buildCurlPOC(f.URL, f.Parameter, f.Payload, f.ParamType)
 		}
 		scanData.Findings = append(scanData.Findings, fd)
@@ -467,7 +562,6 @@ func buildCurlCommand(rawReq, scheme string) string {
 	hasHost := false
 
 	// Parse headers
-	hasBody := false
 	if len(lines) > 1 {
 		bodyLines := strings.SplitN(lines[1], "\r\n\r\n", 2)
 		for _, hdr := range strings.Split(bodyLines[0], "\r\n") {
@@ -482,14 +576,13 @@ func buildCurlCommand(rawReq, scheme string) string {
 			}
 			// Skip headers curl adds automatically
 			if strings.HasPrefix(lower, "content-length:") {
-				hasBody = true
 				continue
 			}
 			b.WriteString(" \\\n  -H ")
 			b.WriteString(shellSingleQuote(hdr))
 		}
 		// Include body if present
-		if hasBody && len(bodyLines) > 1 && bodyLines[1] != "" {
+		if len(bodyLines) > 1 && bodyLines[1] != "" {
 			b.WriteString(" \\\n  -d ")
 			b.WriteString(shellSingleQuote(bodyLines[1]))
 		}
@@ -506,4 +599,32 @@ func buildCurlCommand(rawReq, scheme string) string {
 	b.WriteString(shellSingleQuote(reqURL))
 
 	return b.String()
+}
+
+func reportStatus(data *ScanData) model.ScanStatus {
+	if data.Status == "" {
+		return model.ScanCompleted
+	}
+	return data.Status
+}
+
+func httpFence(raw string) string {
+	longest, run := 0, 0
+	for _, char := range raw {
+		if char == '`' {
+			run++
+			longest = max(longest, run)
+		} else {
+			run = 0
+		}
+	}
+	fence := strings.Repeat("`", max(3, longest+1))
+	return fence + "http\n" + raw + "\n" + fence + "\n"
+}
+
+func findingCurl(f FindingData) string {
+	if f.Evidence.HTTP != nil && (f.Evidence.HTTP.RequestTruncated || f.Evidence.HTTP.InitialRequestTruncated) {
+		return ""
+	}
+	return buildCurlCommand(f.RawRequest, f.Scheme)
 }

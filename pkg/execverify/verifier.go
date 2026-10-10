@@ -5,6 +5,7 @@ package execverify
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -27,14 +28,16 @@ import (
 
 // ExecutionResult holds the outcome of browser-based execution verification.
 type ExecutionResult struct {
-	Executed       bool     // true if alert/confirm/prompt was called
-	DialogType     string   // "alert" | "confirm" | "prompt"
-	DialogMessage  string   // the message passed to the dialog
-	ConsoleErrors  []string // JS console errors observed
-	DOMMutations   []string // observed DOM changes (tag names injected)
-	Confidence     float64  // 0.0-1.0 execution confidence
-	ScreenshotPath string   // path to proof screenshot (empty if none)
-	LoadError      string   // page load error if any
+	VerificationPayload string   // exact instrumented probe sent for correlation
+	Executed            bool     // true if alert/confirm/prompt was called
+	DialogType          string   // "alert" | "confirm" | "prompt"
+	DialogMessage       string   // the message passed to the dialog
+	ConsoleErrors       []string // JS console errors observed
+	DOMMutations        []string // observed DOM changes (tag names injected)
+	Confidence          float64  // 0.0-1.0 execution confidence
+	ScreenshotPath      string   // path to proof screenshot (empty if none)
+	Interaction         string   // controlled focus/mouseover used for this candidate
+	LoadError           string   // page load error if any
 }
 
 // Verifier manages a headless Chrome instance for XSS execution verification.
@@ -90,17 +93,31 @@ func (v *Verifier) Close() error {
 // VerifyFinding verifies a reflected XSS finding by injecting its payload
 // into a real browser and checking whether JavaScript executes.
 func (v *Verifier) VerifyFinding(ctx context.Context, finding model.Finding, target model.Target) (*ExecutionResult, error) {
+	var err error
+	target, err = capturedTarget(finding.Evidence.HTTP, target)
+	if err != nil {
+		return nil, err
+	}
 	return v.VerifyPayload(ctx, target, finding.Parameter, finding.ParamType, finding.Payload)
 }
 
 // VerifyPayload verifies a specific payload against a target parameter.
-func (v *Verifier) VerifyPayload(ctx context.Context, target model.Target, paramName string, paramType model.ParamType, payload string) (*ExecutionResult, error) {
-	result := &ExecutionResult{}
-	if err := ssrfguard.IsURLTargetAllowed(target.URL); err != nil {
+func (v *Verifier) VerifyPayload(ctx context.Context, target model.Target, paramName string, paramType model.ParamType, payload string) (result *ExecutionResult, err error) {
+	result = &ExecutionResult{}
+	payload, message, err := InstrumentDialogPayload(payload)
+	if err != nil {
+		return result, err
+	}
+	defer func() {
+		if result != nil {
+			result.VerificationPayload = payload
+		}
+	}()
+	if err := ssrfguard.IsURLTargetAllowedContext(ctx, target.URL); err != nil {
 		return nil, err
 	}
 	if paramType == model.ParamBody || paramType == model.ParamHeader || paramType == model.ParamCookie {
-		return v.verifyRequest(ctx, target, paramName, paramType, payload)
+		return v.verifyRequest(ctx, target, paramName, paramType, payload, message)
 	}
 
 	// Build the target URL/navigation based on parameter type
@@ -110,9 +127,22 @@ func (v *Verifier) VerifyPayload(ctx context.Context, target model.Target, param
 	}
 	if target.HTTPMethod() != http.MethodGet || target.Body != "" || len(target.Headers) > 0 || len(target.Cookies) > 0 {
 		target.URL = navURL
-		return v.verifyRequest(ctx, target, "", "", "")
+		return v.verifyRequest(ctx, target, "", "", "", message)
 	}
-	return v.runBrowserCheck(ctx, navURL, result)
+	return v.runBrowserCheckMatching(ctx, navURL, result, message)
+}
+
+// VerifyStoredPage visits the trigger without resubmitting the saved payload.
+func (v *Verifier) VerifyStoredPage(ctx context.Context, target model.Target, message string) (*ExecutionResult, error) {
+	if message == "" {
+		return nil, fmt.Errorf("stored execution message is empty")
+	}
+	if err := ssrfguard.IsURLTargetAllowedContext(ctx, target.URL); err != nil {
+		return nil, err
+	}
+	target.Method = http.MethodGet
+	target.Body = ""
+	return v.verifyRequest(ctx, target, "", "", "", message)
 }
 
 // buildNavigationURL creates a URL with the payload injected at the right position.
@@ -138,9 +168,22 @@ func (v *Verifier) buildNavigationURL(target model.Target, paramName string, par
 }
 
 // runBrowserCheck navigates to the URL and checks for dialog execution.
-func (v *Verifier) runBrowserCheck(ctx context.Context, navURL string, result *ExecutionResult, setup ...chromedp.Action) (*ExecutionResult, error) {
-	tabCtx, tabCancel := chromedp.NewContext(v.allocCtx)
+func (v *Verifier) runBrowserCheck(ctx context.Context, navURL string, result *ExecutionResult, rewrites ...allocopts.RequestRewrite) (*ExecutionResult, error) {
+	return v.runBrowserCheckMatching(ctx, navURL, result, "", rewrites...)
+}
+
+func (v *Verifier) runBrowserCheckMatching(ctx context.Context, navURL string, result *ExecutionResult, message string, rewrites ...allocopts.RequestRewrite) (out *ExecutionResult, resultErr error) {
+	tabCtx, tabCancel, diagnostics := allocopts.NewTabContext(v.allocCtx)
 	defer tabCancel()
+	defer func() {
+		if err := diagnostics.Err(); err != nil {
+			result.Executed = false
+			result.Confidence = 0
+			result.LoadError = err.Error()
+			out = result
+			resultErr = errors.Join(resultErr, err)
+		}
+	}()
 	stopCancel := context.AfterFunc(ctx, tabCancel)
 	defer stopCancel()
 
@@ -151,8 +194,13 @@ func (v *Verifier) runBrowserCheck(ctx context.Context, navURL string, result *E
 	// survive document changes and detect synchronous as well as async dialogs.
 	dialogDetected := make(chan dialogInfo, 1)
 	var consoleErrors []string
-	v.installConsoleHandler(tctx, &consoleErrors, dialogDetected)
-	if err := chromedp.Run(tctx, setup...); err != nil {
+	v.installConsoleHandler(tctx, &consoleErrors, dialogDetected, message)
+	var rewrite allocopts.RequestRewrite
+	if len(rewrites) > 0 {
+		rewrite = rewrites[0]
+	}
+	guard, policy := allocopts.GuardRequests(navURL, cancel, rewrite)
+	if err := chromedp.Run(tctx, policy); err != nil {
 		return result, fmt.Errorf("browser setup: %w", err)
 	}
 
@@ -173,6 +221,28 @@ func (v *Verifier) runBrowserCheck(ctx context.Context, navURL string, result *E
 	if err != nil {
 		loadErr = err
 		result.LoadError = err.Error()
+	}
+
+	if message != "" && loadErr == nil && len(dialogDetected) == 0 {
+		// Dispatch only to handlers carrying this exact candidate token; no click,
+		// form submission, or direct evaluation of submitted payload source.
+		encoded, _ := json.Marshal(message)
+		script := fmt.Sprintf(`(() => {
+    const token=%s; let actions=[]; let count=0;
+    for(const el of document.querySelectorAll('[onfocus],[onmouseover]')) {
+      const focus=(el.getAttribute('onfocus')||'').includes(token);
+      const hover=(el.getAttribute('onmouseover')||'').includes(token);
+      if(!focus && !hover) continue;
+      if(count++ >= 16) break;
+      if(focus) {el.focus();actions.push('focus');}
+      if(hover) {el.dispatchEvent(new MouseEvent('mouseover',{bubbles:true}));actions.push('synthetic mouseover');}
+    }
+    return [...new Set(actions)].join(', ');
+  })()`, encoded)
+		if err := chromedp.Run(tctx, chromedp.Evaluate(script, &result.Interaction), chromedp.Sleep(100*time.Millisecond)); err != nil {
+			loadErr = err
+			result.LoadError = err.Error()
+		}
 	}
 
 	// Check if a dialog was detected
@@ -200,7 +270,14 @@ func (v *Verifier) runBrowserCheck(ctx context.Context, navURL string, result *E
 		}
 	}
 
-	if loadErr != nil && !result.Executed {
+	if policyErr := guard.Err(); policyErr != nil {
+		result.Executed = false
+		result.Confidence = 0
+		return result, policyErr
+	}
+	if loadErr != nil {
+		result.Executed = false
+		result.Confidence = 0
 		return result, fmt.Errorf("navigation failed: %w", loadErr)
 	}
 
@@ -214,12 +291,15 @@ type dialogInfo struct {
 }
 
 // installConsoleHandler captures JavaScript console errors.
-func (v *Verifier) installConsoleHandler(ctx context.Context, errors *[]string, detected chan<- dialogInfo) {
+func (v *Verifier) installConsoleHandler(ctx context.Context, errors *[]string, detected chan<- dialogInfo, expected ...string) {
 	chromedp.ListenTarget(ctx, func(ev interface{}) {
 		if e, ok := ev.(*page.EventJavascriptDialogOpening); ok {
-			select {
-			case detected <- dialogInfo{dialogType: string(e.Type), message: e.Message}:
-			default:
+			matched := len(expected) == 0 || expected[0] == "" || e.Message == expected[0]
+			if matched && (e.Type == page.DialogTypeAlert || e.Type == page.DialogTypeConfirm || e.Type == page.DialogTypePrompt) {
+				select {
+				case detected <- dialogInfo{dialogType: string(e.Type), message: e.Message}:
+				default:
+				}
 			}
 			// Auto-dismiss any real dialogs
 			go func() {

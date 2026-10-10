@@ -13,9 +13,18 @@ const (
 )
 
 type Evidence struct {
-	Reflection     string `json:"reflection"`
-	Context        string `json:"context"`
-	ScreenshotPath string `json:"screenshot_path,omitempty"`
+	AnalysisMethod      string        `json:"analysis_method,omitempty"`
+	ParseError          string        `json:"parse_error,omitempty"`
+	HTTP                *HTTPExchange `json:"http,omitempty"`
+	SubmissionHTTP      *HTTPExchange `json:"submission_http,omitempty"`
+	VerificationPayload string        `json:"verification_payload,omitempty"`
+	DialogMessage       string        `json:"dialog_message,omitempty"`
+	TriggerURL          string        `json:"trigger_url,omitempty"`
+	DetectionMethod     string        `json:"detection_method,omitempty"`
+	Interaction         string        `json:"interaction,omitempty"`
+	Reflection          string        `json:"reflection"`
+	Context             string        `json:"context"`
+	ScreenshotPath      string        `json:"screenshot_path,omitempty"`
 }
 
 // CSPBypass represents a detected Content-Security-Policy bypass that can

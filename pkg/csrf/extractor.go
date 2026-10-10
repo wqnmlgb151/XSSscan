@@ -3,6 +3,7 @@
 package csrf
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -25,7 +26,6 @@ var csrfMetaNames = []string{
 	"csrf-token", "csrf_token", "_csrf", "xsrf-token",
 }
 
-
 // Token holds an extracted CSRF token and its field name.
 type Token struct {
 	Value     string
@@ -47,12 +47,28 @@ func NewExtractor(client *http.Client) *Extractor {
 // from form inputs, meta tags, response headers, or cookies.
 // Returns the first non-empty token found, prioritizing form inputs.
 func (e *Extractor) ExtractCSRF(pageURL string) (*Token, error) {
+	return e.ExtractCSRFContext(context.Background(), pageURL)
+}
+
+// ExtractCSRFContext supports cancellation while fetching a token.
+func (e *Extractor) ExtractCSRFContext(ctx context.Context, pageURL string) (*Token, error) {
+	return e.ExtractCSRFContextWithHeaders(ctx, pageURL, nil)
+}
+
+func (e *Extractor) ExtractCSRFContextWithHeaders(ctx context.Context, pageURL string, headers map[string]string) (*Token, error) {
 	u, err := url.Parse(pageURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL: %w", err)
 	}
 
-	resp, err := e.client.Get(pageURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
+	resp, err := e.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch page: %w", err)
 	}

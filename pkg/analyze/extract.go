@@ -243,6 +243,10 @@ func extractPathParams(targetURL string) []model.Parameter {
 		}
 
 		// Check framework-style patterns: {id}, :id, <id>, [id]
+		if strings.HasPrefix(seg, ":") && len(seg) > 1 {
+			params = append(params, model.Parameter{Name: strings.TrimPrefix(seg, ":"), Value: seg, Type: model.ParamPath})
+			continue
+		}
 		if matches := pathSegmentPattern.FindStringSubmatch(seg); matches != nil {
 			paramName := matches[1]
 			params = append(params, model.Parameter{

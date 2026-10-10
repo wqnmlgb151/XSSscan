@@ -1,6 +1,7 @@
 package report
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -24,6 +25,7 @@ func (r *Reporter) generateSARIF(data *ScanData) ([]byte, error) {
 		Results: []sarifResult{},
 	}
 
+	run.Invocations = []sarifInvocation{{ExecutionSuccessful: reportStatus(data) == model.ScanCompleted, Properties: map[string]interface{}{"status": reportStatus(data), "issues": data.Issues, "modules": data.Modules}}}
 	ruleMap := make(map[string]sarifRule)
 	for _, f := range data.Findings {
 		ruleID := fmt.Sprintf("xsscan/%s", strings.ToLower(f.Type))
@@ -63,6 +65,8 @@ func (r *Reporter) generateSARIF(data *ScanData) ([]byte, error) {
 				},
 			},
 			Properties: sarifProperties{
+				Evidence:   f.Evidence,
+				RawRequest: f.RawRequest, RawResponse: f.RawResponse,
 				Tags:        f.Contexts,
 				Payload:     f.Payload,
 				Payloads:    f.Payloads,
@@ -108,9 +112,15 @@ type sarifReport struct {
 	Runs    []sarifRun `json:"runs"`
 }
 
+type sarifInvocation struct {
+	ExecutionSuccessful bool                   `json:"executionSuccessful"`
+	Properties          map[string]interface{} `json:"properties"`
+}
+
 type sarifRun struct {
-	Tool    sarifTool     `json:"tool"`
-	Results []sarifResult `json:"results"`
+	Invocations []sarifInvocation `json:"invocations"`
+	Tool        sarifTool         `json:"tool"`
+	Results     []sarifResult     `json:"results"`
 }
 
 type sarifTool struct {
@@ -166,11 +176,14 @@ type sarifRegion struct {
 }
 
 type sarifProperties struct {
-	Tags        []string `json:"tags,omitempty"`
-	Payload     string   `json:"payload,omitempty"`
-	Payloads    []string `json:"payloads,omitempty"`
-	Severity    string   `json:"severity,omitempty"`
-	CSPBypasses string   `json:"csp_bypasses,omitempty"`
+	RawRequest  string         `json:"raw_request,omitempty"`
+	RawResponse string         `json:"raw_response,omitempty"`
+	Evidence    model.Evidence `json:"evidence,omitempty"`
+	Tags        []string       `json:"tags,omitempty"`
+	Payload     string         `json:"payload,omitempty"`
+	Payloads    []string       `json:"payloads,omitempty"`
+	Severity    string         `json:"severity,omitempty"`
+	CSPBypasses string         `json:"csp_bypasses,omitempty"`
 }
 
 // formatCSPBypassesForSARIF converts CSP bypass entries to a single
@@ -191,34 +204,59 @@ func (r *Reporter) generateJUnit(data *ScanData) string {
 	var b strings.Builder
 	timestamp := time.Now().Format(time.RFC3339)
 	findings := len(data.Findings)
+	errorCount := 0
+	if reportStatus(data) != model.ScanCompleted {
+		errorCount = 1
+	}
 
 	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
-	fmt.Fprintf(&b, `<testsuites name="xsscan" tests="%d" failures="%d" time="%d">`+"\n",
-		findings, findings, data.Duration)
-	fmt.Fprintf(&b, `  <testsuite name="xsscan-xss" tests="%d" failures="%d" timestamp="%s">`+"\n",
-		findings, findings, timestamp)
+	fmt.Fprintf(&b, `<testsuites name="xsscan" tests="%d" failures="%d" errors="%d" time="%d">`+"\n",
+		findings+errorCount, findings, errorCount, data.Duration)
+	fmt.Fprintf(&b, `  <testsuite name="xsscan-xss" tests="%d" failures="%d" errors="%d" timestamp="%s">`+"\n",
+		findings+errorCount, findings, errorCount, timestamp)
+	if len(data.Modules) > 0 {
+		b.WriteString("<system-out>")
+		for _, module := range data.Modules {
+			fmt.Fprintf(&b, "Module: %s / %s / %s — %s\n", xmlText(module.Type), xmlText(module.Target), xmlText(string(module.Status)), xmlText(module.Reason))
+		}
+		b.WriteString("</system-out>\n")
+	}
 
+	if errorCount > 0 {
+		fmt.Fprintf(&b, `    <testcase name="scan completion"><error message="%s">`, xmlText(string(reportStatus(data))))
+		for _, issue := range data.Issues {
+			fmt.Fprintf(&b, "%s / %s: %s\n", xmlText(issue.Target), xmlText(issue.Stage), xmlText(issue.Message))
+			if issue.HTTP != nil {
+				fmt.Fprintf(&b, "%s\n%s\n", xmlText(issue.HTTP.Request), xmlText(issue.HTTP.Response))
+			}
+		}
+		b.WriteString("</error></testcase>\n")
+	}
 	for _, f := range data.Findings {
-		safeDesc := html.EscapeString(f.Description)
-		safePayload := html.EscapeString(f.Payload)
-		safeParam := html.EscapeString(f.Parameter)
-		safeURL := html.EscapeString(f.URL)
+		safeDesc := xmlText(f.Description)
+		safePayload := xmlText(f.Payload)
+		safeParam := xmlText(f.Parameter)
+		safeURL := xmlText(f.URL)
 
 		fmt.Fprintf(&b, `    <testcase name="%s" classname="%s">`+"\n",
 			safeDesc, safeURL)
 		fmt.Fprintf(&b, `      <failure message="%s" type="%s">`+"\n",
-			safeDesc, f.Type)
+			safeDesc, xmlText(f.Type))
 		fmt.Fprintf(&b, "        Parameter: %s\n", safeParam)
 		fmt.Fprintf(&b, "        Payload: %s\n", safePayload)
+		for _, field := range evidenceFields(f.Evidence) {
+			fmt.Fprintf(&b, "        %s: %s\n", xmlText(field[0]), xmlText(field[1]))
+		}
 		// Variants excluding the primary payload (already printed above)
 		for _, v := range f.Payloads {
 			if v != f.Payload {
-				fmt.Fprintf(&b, "        Variant: %s\n", html.EscapeString(v))
+				fmt.Fprintf(&b, "        Variant: %s\n", xmlText(v))
 			}
 		}
-		fmt.Fprintf(&b, "        Severity: %s\n", f.Severity)
+		fmt.Fprintf(&b, "        Raw Request: %s\n        Raw Response: %s\n", strings.ReplaceAll(xmlText(f.RawRequest), "\r", "&#13;"), strings.ReplaceAll(xmlText(f.RawResponse), "\r", "&#13;"))
+		fmt.Fprintf(&b, "        Severity: %s\n", xmlText(f.Severity))
 		fmt.Fprintf(&b, "        Confidence: %.0f%%\n", f.Confidence*100)
-		fmt.Fprintf(&b, "        Contexts: %s\n", strings.Join(f.Contexts, ", "))
+		fmt.Fprintf(&b, "        Contexts: %s\n", xmlText(strings.Join(f.Contexts, ", ")))
 		fmt.Fprintf(&b, "      </failure>\n")
 		fmt.Fprintf(&b, "    </testcase>\n")
 	}
@@ -226,4 +264,11 @@ func (r *Reporter) generateJUnit(data *ScanData) string {
 	b.WriteString("  </testsuite>\n")
 	b.WriteString("</testsuites>\n")
 	return b.String()
+}
+
+func xmlText(raw string) string {
+	if model.NeedsBinaryEvidence(raw) {
+		return "[base64]" + base64.StdEncoding.EncodeToString([]byte(raw))
+	}
+	return strings.ReplaceAll(html.EscapeString(raw), "\r", "&#13;")
 }

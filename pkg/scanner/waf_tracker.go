@@ -7,7 +7,6 @@ import (
 	"github.com/xsscan/xsscan/pkg/model"
 )
 
-
 // WAFTracker accumulates WAF detection state across concurrent scan workers.
 // All methods are safe for concurrent use.
 type WAFTracker struct {

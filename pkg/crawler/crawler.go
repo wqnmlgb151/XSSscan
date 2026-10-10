@@ -6,6 +6,7 @@ package crawler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,6 +21,8 @@ import (
 	"github.com/xsscan/xsscan/pkg/ssrfguard"
 	"golang.org/x/net/html"
 )
+
+var errNonHTML = errors.New("non-HTML content")
 
 const (
 	defaultMaxDepth = 2
@@ -117,6 +120,7 @@ func (c *Crawler) Crawl(ctx context.Context, startURL string) (*CrawlResult, err
 	// Run sitemap/robots discovery before BFS crawl if enabled.
 	discoveryURLs := c.discoverSeeds(ctx, startURL)
 
+	var problems []error
 	var resultURLs []string
 	var resultForms []FormInfo
 	pageCount := 0
@@ -135,6 +139,9 @@ func (c *Crawler) Crawl(ctx context.Context, startURL string) (*CrawlResult, err
 		// Phase 1 — serial: filter visited, enforce maxPages, collect toProcess.
 		var toProcess []string
 		for _, u := range currentLevel {
+			if c.sameHostOnly && !ssrfguard.SameOrigin(startURL, u) {
+				continue
+			}
 			if c.isVisited(u) {
 				continue
 			}
@@ -157,7 +164,10 @@ func (c *Crawler) Crawl(ctx context.Context, startURL string) (*CrawlResult, err
 		}
 
 		// Phase 2 — parallel: fetch and extract links + forms for all URLs at this depth.
-		allLinks, allForms := c.fetchLevelParallel(ctx, toProcess, startHost)
+		allLinks, allForms, levelErr := c.fetchLevelParallel(ctx, toProcess, startHost)
+		if levelErr != nil {
+			problems = append(problems, levelErr)
+		}
 		resultForms = append(resultForms, allForms...)
 
 		// Phase 3 — serial: collect next level with deduplication.
@@ -184,16 +194,16 @@ func (c *Crawler) Crawl(ctx context.Context, startURL string) (*CrawlResult, err
 		currentLevel = nextLevel
 	}
 
-	return &CrawlResult{URLs: resultURLs, Forms: resultForms}, nil
+	return &CrawlResult{URLs: resultURLs, Forms: resultForms}, errors.Join(problems...)
 }
 
 // fetchLevelParallel fetches and extracts links and forms from all URLs
 // concurrently using a bounded worker pool. Returns the union of all
 // discovered links and forms.
-func (c *Crawler) fetchLevelParallel(ctx context.Context, urls []string, startHost string) ([]string, []FormInfo) {
+func (c *Crawler) fetchLevelParallel(ctx context.Context, urls []string, startHost string) ([]string, []FormInfo, error) {
 	n := len(urls)
 	if n == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	// Adaptive worker count: one goroutine per URL for small levels,
@@ -208,6 +218,7 @@ func (c *Crawler) fetchLevelParallel(ctx context.Context, urls []string, startHo
 		mu       sync.Mutex
 		allLinks []string
 		allForms []FormInfo
+		problems []error
 	)
 
 	workCh := make(chan string, numWorkers)
@@ -219,6 +230,11 @@ func (c *Crawler) fetchLevelParallel(ctx context.Context, urls []string, startHo
 			defer wg.Done()
 			for pageURL := range workCh {
 				links, forms, err := c.fetchAndExtract(ctx, pageURL, startHost)
+				if err != nil {
+					mu.Lock()
+					problems = append(problems, fmt.Errorf("crawl %s: %w", pageURL, err))
+					mu.Unlock()
+				}
 				if err == nil {
 					mu.Lock()
 					allLinks = append(allLinks, links...)
@@ -236,7 +252,7 @@ func (c *Crawler) fetchLevelParallel(ctx context.Context, urls []string, startHo
 	close(workCh)
 
 	wg.Wait()
-	return allLinks, allForms
+	return allLinks, allForms, errors.Join(problems...)
 }
 
 // discoverSeeds runs sitemap.xml and robots.txt discovery concurrently if enabled.
@@ -301,6 +317,9 @@ func (c *Crawler) discoverSeeds(ctx context.Context, startURL string) []string {
 // fetchAndExtract retrieves a page and extracts links and forms from it.
 func (c *Crawler) fetchAndExtract(ctx context.Context, pageURL, startHost string) ([]string, []FormInfo, error) {
 	bodyStr, err := fetchPage(ctx, c.client, pageURL, c.extraHeaders)
+	if errors.Is(err, errNonHTML) {
+		return nil, nil, nil
+	}
 	if err != nil {
 		return nil, nil, err
 	}
@@ -355,7 +374,7 @@ func extractLinks(body string, baseURL, startHost string, sameHostOnly bool) ([]
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
 			return
 		}
-		if sameHostOnly && u.Host != startHost {
+		if sameHostOnly && !ssrfguard.SameOrigin(base.Scheme+"://"+startHost, resolved) {
 			return
 		}
 		normalized := urlutil.NormalizeForCrawl(u)
@@ -447,7 +466,7 @@ func getAttr(n *html.Node, key string) string {
 // Shared by all page-extraction functions so a single page fetch can feed
 // form discovery, link-parameter mining, and any future extractors.
 func fetchPage(ctx context.Context, client *http.Client, pageURL string, headers map[string]string) (string, error) {
-	if err := ssrfguard.IsURLTargetAllowed(pageURL); err != nil {
+	if err := ssrfguard.IsURLTargetAllowedContext(ctx, pageURL); err != nil {
 		return "", fmt.Errorf("ssrf blocked: %w", err)
 	}
 
@@ -460,7 +479,7 @@ func fetchPage(ctx context.Context, client *http.Client, pageURL string, headers
 		req.Header.Set(k, v)
 	}
 
-	resp, err := client.Do(req)
+	resp, err := httpclient.WithRedirectPolicy(client).Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -476,7 +495,7 @@ func fetchPage(ctx context.Context, client *http.Client, pageURL string, headers
 
 	ct := resp.Header.Get("Content-Type")
 	if ct != "" && !strings.Contains(ct, "text/html") && !strings.Contains(ct, "application/xhtml") {
-		return "", fmt.Errorf("non-HTML content: %s", ct)
+		return "", fmt.Errorf("%w: %s", errNonHTML, ct)
 	}
 
 	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, httpclient.MaxResponseSize))
@@ -556,7 +575,7 @@ func extractForms(body string, baseURL string) ([]FormInfo, error) {
 
 			// Collect named input fields within this form.
 			inputs := collectFormInputs(n)
-			if len(inputs) > 0 {
+			if len(inputs) > 0 && ssrfguard.SameOrigin(baseURL, action) {
 				forms = append(forms, FormInfo{
 					Action: action,
 					Method: method,
@@ -645,7 +664,7 @@ func DiscoverFromRobotsContext(ctx context.Context, client *http.Client, baseURL
 	if err != nil {
 		return nil, err
 	}
-	resp, err := client.Do(req)
+	resp, err := httpclient.WithRedirectPolicy(client).Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -698,7 +717,7 @@ func DiscoverFromSitemapContext(ctx context.Context, client *http.Client, baseUR
 	if err != nil {
 		return nil, err
 	}
-	resp, err := client.Do(req)
+	resp, err := httpclient.WithRedirectPolicy(client).Do(req)
 	if err != nil {
 		return nil, err
 	}

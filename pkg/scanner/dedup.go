@@ -323,6 +323,10 @@ func AggregateFindings(findings []model.Finding) []model.Finding {
 			// (highest-confidence) entry may be a different payload.
 			out.ExecutionVerified = true
 			out.ExecutionConfidence = entry.verifiedEntry.ExecutionConfidence
+			out.Evidence.VerificationPayload = entry.verifiedEntry.Evidence.VerificationPayload
+			out.Evidence.DialogMessage = entry.verifiedEntry.Evidence.DialogMessage
+			out.Evidence.Interaction = entry.verifiedEntry.Evidence.Interaction
+			out.ScreenshotPath = entry.verifiedEntry.ScreenshotPath
 			verifiedPayload := entry.verifiedEntry.Payload
 			reordered := make([]string, 0, len(entry.order))
 			reordered = append(reordered, verifiedPayload)

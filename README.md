@@ -14,10 +14,15 @@
 
 ---
 
+## [Releases](https://github.com/wqnmlgb151/XSSscan/releases)
+
 当前发布版本为 **[v1.0.0-rc.1](https://github.com/wqnmlgb151/XSSscan/releases/tag/v1.0.0-rc.1)**（2026-10-10，预发布）。[下载 Windows EXE](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.0.0-rc.1/xsscan_1.0.0-rc.1_windows_amd64.exe)，其他平台见[安装](#安装)。默认调度反射型、DOM、存储型和盲 XSS 四类检测，可用 `--types` 选择检测类型。
+
+发布页的 **Assets** 提供六个预编译附件：Windows EXE/ZIP，以及 Linux、macOS 的 amd64/arm64 TAR.GZ。GitHub 自动提供的 Source code ZIP/TAR.GZ 为源码；直接运行请下载带 `xsscan_1.0.0-rc.1_` 前缀的附件。完整平台下载表见[安装](#安装)。
 
 ## 目录
 
+- [Releases](#releases)
 - [特性](#特性)
 - [安装](#安装)
 - [快速开始](#快速开始)

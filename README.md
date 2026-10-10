@@ -14,11 +14,14 @@
 
 ---
 
+当前发布版本为 **[v1.0.0-rc.1](https://github.com/wqnmlgb151/XSSscan/releases/tag/v1.0.0-rc.1)**（2026-10-10，预发布）。[下载 Windows EXE](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.0.0-rc.1/xsscan_1.0.0-rc.1_windows_amd64.exe)，其他平台见[安装](#安装)。默认调度反射型、DOM、存储型和盲 XSS 四类检测，可用 `--types` 选择检测类型。
+
 ## 目录
 
 - [特性](#特性)
 - [安装](#安装)
 - [快速开始](#快速开始)
+- [默认检测与类型选择](#默认检测与类型选择)
 - [扫描模式](#扫描模式)
 - [认证扫描](#认证扫描)
 - [高级用法](#高级用法)
@@ -26,6 +29,8 @@
 - [架构](#架构)
 - [性能指标](#性能指标)
 - [开发](#开发)
+- [发布验证](#发布验证)
+- [更新日志](#更新日志)
 - [免责声明](#免责声明)
 
 ---
@@ -73,7 +78,34 @@
 
 ### 下载预编译版本
 
-从 [v1.0.0-rc.1 Releases](https://github.com/wqnmlgb151/XSSscan/releases/tag/v1.0.0-rc.1) 下载对应平台的文件：Windows amd64 提供直接运行的 EXE 和 ZIP；Linux/macOS 的 amd64、arm64 提供 TAR.GZ。压缩包包含程序、README 和许可证。
+从 [v1.0.0-rc.1 Releases](https://github.com/wqnmlgb151/XSSscan/releases/tag/v1.0.0-rc.1) 下载对应平台的文件。使用预编译程序无需安装 Go。
+
+| 平台 | 架构 | 下载 |
+| --- | --- | --- |
+| Windows | amd64（x64） | [EXE](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.0.0-rc.1/xsscan_1.0.0-rc.1_windows_amd64.exe) / [ZIP](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.0.0-rc.1/xsscan_1.0.0-rc.1_windows_amd64.zip) |
+| Linux | amd64（x64） | [TAR.GZ](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.0.0-rc.1/xsscan_1.0.0-rc.1_linux_amd64.tar.gz) |
+| Linux | arm64 | [TAR.GZ](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.0.0-rc.1/xsscan_1.0.0-rc.1_linux_arm64.tar.gz) |
+| macOS | amd64（Intel） | [TAR.GZ](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.0.0-rc.1/xsscan_1.0.0-rc.1_darwin_amd64.tar.gz) |
+| macOS | arm64（Apple Silicon） | [TAR.GZ](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.0.0-rc.1/xsscan_1.0.0-rc.1_darwin_arm64.tar.gz) |
+
+ZIP/TAR.GZ 包含程序、`README.md`、`LICENSE` 和 `THIRD_PARTY_NOTICES.md`。Windows 下载后在 PowerShell 中运行：
+
+```powershell
+# 直接下载 EXE 后，在下载目录执行
+.\xsscan_1.0.0-rc.1_windows_amd64.exe --version
+.\xsscan_1.0.0-rc.1_windows_amd64.exe --help
+
+# 使用 ZIP 时，解压后运行包内的 xsscan.exe
+.\xsscan.exe --version
+```
+
+Linux/macOS 解压后运行包内的程序，例如 Linux amd64：
+
+```bash
+tar -xzf xsscan_1.0.0-rc.1_linux_amd64.tar.gz
+./xsscan --version
+./xsscan --help
+```
 
 本版是预发布候选。Windows amd64 已实际运行；其他平台产物由交叉编译生成，需在对应平台验证。Chrome 不包含在包内；默认 DOM 和执行验证需要本机已安装 Chrome/Chromium。
 
@@ -83,7 +115,8 @@
 # 需要 Go 1.26+（推荐 Go 1.26.9）
 git clone https://github.com/wqnmlgb151/XSSscan.git
 cd XSSscan
-make build
+git checkout v1.0.0-rc.1
+make build VERSION=1.0.0-rc.1
 ```
 
 Windows 没有 make 时可直接构建 EXE：
@@ -93,7 +126,7 @@ go build -trimpath -ldflags "-X main.Version=1.0.0-rc.1" -o xsscan.exe ./cmd
 .\xsscan.exe --version
 ```
 
-当前版本为预发布候选版本。默认检查四类能力；只运行反射模块可使用 `--types reflected`。
+默认检查四类能力。只运行反射模块可使用 `--types reflected`；没有 Chrome 且只需 HTTP 结构分析时，同时添加 `--verify-execution=false`。
 
 ### Docker
 
@@ -115,8 +148,12 @@ docker run --rm xsscan --url "http://target.com/page?q=test"
 # 查看版本
 ./xsscan --version
 
-# 最简扫描
+# 默认调度全部类型（缺少能力时报告未完成原因）
 ./xsscan --url "http://target.com/search?q=test"
+
+# 仅检查反射型 XSS，并关闭浏览器执行验证
+./xsscan --url "http://target.com/search?q=test" \
+  --types reflected --verify-execution=false
 
 # 管道模式 — 从 stdin 读取 URL
 echo "http://target.com/search?q=test" | ./xsscan
@@ -126,16 +163,16 @@ cat urls.txt | ./xsscan --silent
 ./xsscan --url "http://target.com/search?q=test" \
   --probe --waf-bypass --random-ua
 
-# 全功能扫描
+# 四类检测：指定存储展示页和回调地址（需要本机 Chrome）
 ./xsscan --url "http://target.com/page?q=test" \
-  --probe --verify-execution --headless --waf-bypass \
-  --stored --trigger-url "http://target.com/profile" \
+  --probe --waf-bypass \
+  --trigger-url "http://target.com/profile" --callback "localhost:8080" \
   --discover-headers --random-ua --adaptive-rate
 ```
 
 ---
 
-## 默认检测与类型选择（1.0.0-rc.1）
+## 默认检测与类型选择
 
 不指定类型时，调度 reflected、dom、stored、blind 四类能力。浏览器、存储展示页或回调服务缺失时，会在报告的 Modules 中保留 skipped/failed/partial 和具体原因，整次扫描不会显示“全部检查无漏洞”。浏览器执行验证默认启用；`--verify-execution=false` 可关闭。
 
@@ -148,18 +185,18 @@ xsscan --url "https://authorized.example/page?q=test" --exclude-types blind,dom
 
 `--headless` / `--stored` 保留兼容；显式 `--headless=false` / `--stored=false` 排除对应类型。显式类型与开启的旧开关相冲突时报配置错误。盲检测独立提交，即使没有即时回显也能检查；每个候选使用独立关联 token。本地回调观察完整 30 秒，外部/DNS 回调没有结果收集器时明确标记未完成。
 
-`--module-timeout 300` 为每目标、每模块的时间预算（秒，0 无限制）；`--request-budget 10000` 限制 Go HTTP 实际尝试，包括重试和重定向（0 无限制）。Chrome 网络请求暂单独处理，未计入该 HTTP 数值；模块 Candidates 表示提交/检测尝试，非独立漏洞数。默认 DOM 会测试完整源矩阵，耗时明显高于单反射扫描。
+`--module-timeout 300` 为每目标、每模块的时间预算（秒，0 无限制）；`--request-budget 10000` 为整批目标共享的 Go HTTP 请求预算，包括重试和重定向（0 无限制）。Chrome 网络请求暂单独处理，未计入该 HTTP 数值；模块 Candidates 表示提交/检测尝试，非独立漏洞数。默认 DOM 会测试完整源矩阵，耗时明显高于单反射扫描。
 
 页面发现先执行一次，发现的 GET/POST 表单交给同一组检测模块；链接跟随仍需 `--crawl`。DOM 使用原认证头、HttpOnly Cookie 和首文档 POST 请求体，存储源在目标站点初始化；referrer 来源为显式模拟输入，sink 命中仍是候选。
 
 ## 扫描模式
 
-### 反射型 XSS（默认）
+### 反射型 XSS
 
 扫描 Query、POST Body (JSON/Form)、Header、Cookie 参数：
 
 ```bash
-./xsscan --url "http://target.com/page?id=1"
+./xsscan --url "http://target.com/page?id=1" --types reflected
 ```
 
 #### 自动表单发现
@@ -204,7 +241,7 @@ xsscan --url "https://authorized.example/page?q=test" --exclude-types blind,dom
 
 ```bash
 # 需要 Chrome/Chromium
-./xsscan --url "http://target.com/page?q=test" --headless
+./xsscan --url "http://target.com/page?q=test" --types dom
 ```
 
 保留 10 种 DOM XSS source 测试配置，使用 CDP hook 记录目标代码的 marker 流转：
@@ -234,23 +271,23 @@ Hook 不可用或读取失败会记录检测错误；不会用 URL、控制台�
 # 指定触发页面（存储内容展示的位置）
 ./xsscan --url "http://target.com/feedback" -X POST \
   -d "message=test" \
-  --stored --trigger-url "http://target.com/view-feedback"
+  --types stored --trigger-url "http://target.com/view-feedback"
 
 # 不指定 --trigger-url 时自动发现：同域爬虫（BFS，深度 2，最多 20 页）
 # 发现的每个页面都会作为触发 URL 轮询，整个扫描只爬取一次
 ./xsscan --url "http://target.com/comment" -X POST \
-  -d "body=test" --stored
+  -d "body=test" --types stored
 
 # 自定义轮询参数
 ./xsscan --url "http://target.com/comment" -X POST \
   -d "body=test" \
-  --stored --trigger-url "http://target.com/posts/123" \
+  --types stored --trigger-url "http://target.com/posts/123" \
   --stored-max-polls 10 --stored-poll-interval 3
 ```
 
 存储型检测先提交唯一 marker 定位持久化展示页，再提交上下文候选并检查触发响应。只有 marker 回显不会生成漏洞；转义内容、JSON、纯文本及惰性 textarea 不作为执行结构证据。
 
-`Evidence.detection_method` 为 `stored_context` 时表示结构候选，`stored_execution` 表示候选专属弹窗已被浏览器确认；`Evidence.trigger_url` 指明展示页。使用 `--stored --verify-execution --verify-timeout 20` 可启用存储型执行确认，并保留认证头、Cookie 和原提交体中的其他字段。
+`Evidence.detection_method` 为 `stored_context` 时表示结构候选，`stored_execution` 表示候选专属弹窗已被浏览器确认；`Evidence.trigger_url` 指明展示页。存储型执行确认默认启用，可用 `--types stored --verify-timeout 20` 调整验证时间，并保留认证头、Cookie 和原提交体中的其他字段；`--verify-execution=false` 只保留结构分析。
 
 候选生成当前最多 8 个、每种上下文最多 2 个，选择可关联的本地对话框模板；不构成所有可能 payload 的穷尽验证。同一目标 URL 的提交/轮询生命周期串行，防止候选互相覆盖。自动触发发现会排除带同一参数的提交入口及其片段、端口、尾斜杠等价形式；没有独立展示页时明确提示配置 `--trigger-url`。已知安全展示端点可显式指定。
 
@@ -260,21 +297,21 @@ Hook 不可用或读取失败会记录检测错误；不会用 URL、控制台�
 # 第三方回调地址（Burp Collaborator、xss.ht 等）— payload 直接指向该地址
 ./xsscan --url "http://target.com/contact" -X POST \
   -d "message=test" \
-  --callback "https://your-server.com/xss"
+  --types blind --callback "https://your-server.com/xss"
 
 # 本地回调 — loopback 地址自动启动内置 HTTP 监听器（省略端口默认 :80）
 ./xsscan --url "http://target.com/contact" -X POST \
   -d "message=test" \
-  --callback "localhost:8080"
+  --types blind --callback "localhost:8080"
 
 # DNS 外带模式 — 裸域名（无 scheme/端口）生成 <xsscan-随机>.<域名> 子域名
-# payload，目标只需发出 DNS 查询即证明执行（HTTP 出口被封时仍然有效）
+# payload；本工具未接入外部 DNS 日志收集，须在对应平台独立核查
 ./xsscan --url "http://target.com/contact" -X POST \
   -d "message=test" \
-  --callback "abc.dnslog.cn"
+  --types blind --callback "abc.dnslog.cn"
 ```
 
-扫描后等待 30 秒收集回调（`sync.Cond` 零 CPU 等待）。
+本地监听模式在提交后等待完整 30 秒收集回调。目标浏览器必须能够访问回调地址；`localhost:8080` 适用于浏览器与监听器在同一台机器的测试环境。第三方 HTTP/DNS 模式仅提交候选，本工具没有对应结果收集器，模块会明确显示未完成，须在回调平台核查。
 
 ---
 
@@ -373,7 +410,7 @@ cat urls.txt | ./xsscan --targets-file - --silent -o report.json
 
 ```bash
 # 手动指定 Chrome/Chromium 二进制（自动检测失败时）
-./xsscan --url "http://target.com/page?q=test" --headless   --chrome-path "C:\Program Files\Google\Chrome\Application\chrome.exe"
+./xsscan --url "http://target.com/page?q=test" --chrome-path "C:\Program Files\Google\Chrome\Application\chrome.exe"
 ```
 
 Chrome 默认启用沙箱并校验 TLS 证书。需要兼容自签名证书时显式添加 `--chrome-ignore-cert-errors`；运行环境确实无法使用沙箱时显式添加 `--chrome-no-sandbox`。YAML 使用相同键名，CLI 显式设置（包括 `=false`）优先。
@@ -437,7 +474,7 @@ CLI 参数优先于配置文件。
 
 ---
 
-### 配置与认证判据（1.0 开发版）
+### 配置与认证判据
 
 `--config` 支持全部扫描配置。未知键、重复键、多份 YAML 文档和 merge key 会报错；显式 `false`、`0`、空字符串仍生效，CLI 显式参数优先。比如 `verify-execution: false` 关闭浏览器复核，`request-budget: 0` 不限 Go HTTP 尝试数，`confidence: 0` 保留零阈值。
 
@@ -445,7 +482,7 @@ CLI 参数优先于配置文件。
 
 OIDC 保留 issuer 租户路径和尾斜杠，发现文档的 issuer 必须精确一致。端点默认限于 issuer 同源；合法跨源认证端点可显式用 `--oauth-allow-origin https://tokens.example` 授权，并继续经过地址/重定向检查。
 
-### 原始 HTTP 证据（1.0 开发版）
+### 原始 HTTP 证据
 
 报告保留实际请求中的 Authorization、Cookie、刷新后的 CSRF、请求体，以及响应 Set-Cookie 和响应体。HTML 的 Copy for Burp、Markdown HTTP 代码块、JSON/SARIF 原始字段保留这些内容；浏览器复核使用捕获请求中的认证状态。存储型证据同时保存提交和展示页面的 HTTP 交换。
 
@@ -461,29 +498,42 @@ JSON 增加 `SchemaVersion: "1.0"`，原有字段名称继续保留。文件先�
 ./xsscan --url "http://target.com/page?q=test" -o result.json
 ```
 
+以下为报告结构节选，省略空值与原始 HTTP 证据。顶层和 finding 字段保留 PascalCase，Modules 和 Evidence 内部使用各自的 JSON 字段名；`Duration` 单位为毫秒。
+
 ```json
 {
-  "target": "http://target.com/page?q=test",
-  "scan_time": "2026-08-02T10:30:00Z",
-  "findings": [
+  "SchemaVersion": "1.0",
+  "Target": "http://target.com/page?q=test",
+  "Status": "completed",
+  "Duration": 3200,
+  "RequestsSent": 30,
+  "PayloadsSent": 25,
+  "Modules": [
     {
-      "id": "XSS-1722586200000000000-1",
-      "parameter": "q",
       "type": "reflected",
-      "context": "html_body",
-      "payload": "<script>alert(1)</script>",
-      "confidence": 0.90,
-      "severity": "critical",
-      "url": "http://target.com/page?q=%3Cscript%3Ealert%281%29%3C%2Fscript%3E",
-      "curl": "curl -X GET 'http://target.com/page?q=%3Cscript%3Ealert%281%29%3C%2Fscript%3E'"
+      "target": "http://target.com/page?q=test",
+      "status": "completed",
+      "requests": 30,
+      "candidates": 25,
+      "findings": 1,
+      "duration_ms": 3200
     }
   ],
-  "stats": {
-    "parameters_found": 1,
-    "payloads_sent": 25,
-    "findings_count": 1,
-    "duration_seconds": 3.2
-  }
+  "Findings": [
+    {
+      "Parameter": "q",
+      "Type": "reflected_xss",
+      "Contexts": ["html_body"],
+      "Payload": "<script>alert(1)</script>",
+      "Confidence": 0.76,
+      "Severity": "high",
+      "ExecutionVerified": false,
+      "Evidence": {
+        "reflection": "<script>alert(1)</script>",
+        "context": "html_body"
+      }
+    }
+  ]
 }
 ```
 
@@ -518,6 +568,18 @@ JSON 增加 `SchemaVersion: "1.0"`，原有字段名称继续保留。文件先�
 ```
 
 兼容 Jenkins、GitLab CI、Azure DevOps。
+
+### 扫描完成状态与错误处理
+
+退出码 `0` 表示扫描完成且未发现漏洞，`2` 表示扫描完成且发现漏洞，`1` 表示错误或扫描未完成（即使已经发现漏洞）。未发现不等于目标没有漏洞。未授权私网、请求失败、取消或请求的浏览器功能不可用时，不会输出正常完成的“无漏洞”结论。
+
+报告保留已发现结果，并附上 `Status` 和 `Issues`。状态包括 `completed`、`partial`、`failed`、`canceled`、`skipped`；混合成功与失败通常为 `partial`，取消优先。JSON、Markdown、HTML、SARIF、JUnit 均表达未完成状态。自动化流程应同时检查退出码及报告状态。
+
+`RequestsSent` 是 Go HTTP 请求尝试数，包含分析、探测、重试、发现和存储型检测，CLI 从认证初始化后开始计数；不包含 Chrome 自身网络请求和回调监听。`PayloadsSent` 包含 payload 的重试及变异请求，因此不等于独立 payload 数。
+
+库调用方应处理 `Engine.Run` 同时返回结果与错误的情况，保留部分结果。一个 Engine 的 Run 调用串行执行，等待可取消；目标级状态每次重置，会话 Cookie 仍正常保留。存储型调用方使用 `DetectWithError` 获取失败信息，旧 `Detect` 保持兼容。
+
+重定向链保存 InitialURL/InitialRequest 与最终 HTTP.Request/Response，反射原始请求和浏览器验证使用初始实际提交。POST→302→GET 的本地 Chrome 回归通过；不同虚拟主机 Host 无法在 Chrome 保持时明确返回不支持复核，不静默验证其他站点。
 
 ---
 
@@ -581,7 +643,7 @@ Target URL
 │  • URL 归一化去重，同参数保留有效变体      │
 └─────────────────────────────────────────────────┘
     │
-    ▼ (可选)
+    ▼ (默认开启，可关闭)
 ┌─────────────────────────────────────────────────┐
 │  Execution Verification (--verify-execution)     │
 │  • 4-worker Chrome 并发验证                     │
@@ -664,7 +726,6 @@ AST 调用表示语法上的候选证据，不保证分支可达、函数被调�
 | WAF 签名 | 12 种（8 国际 + 阿里云/腾讯云/安全狗/宝塔）+ 17 种绕过策略（11 结构 + 6 编码） |
 | DOM XSS Source | 10 种测试配置 + CDP sink hook |
 | 框架 Payload | 7 种（React, Vue, Angular, Svelte, jQuery, HTMX, Jinja2） |
-| 零数据竞争 | `go test -race` 全通过 |
 
 ---
 
@@ -697,7 +758,7 @@ make coverage-scanner   # 仅 scanner 包
 make coverage-cli       # 仅 cmd 包
 
 # 开发模式（不编译直接运行；dev target 不转发参数，带 flag 时用 go run）
-go run ./cmd -- --url "http://target.com/page?q=test"
+go run ./cmd --url "http://target.com/page?q=test"
 
 # 静态检查
 make lint
@@ -711,6 +772,24 @@ make clean
 
 ---
 
+## 发布验证
+
+v1.0.0-rc.1 的发布前检查（2026-10-10）：
+
+| 检查 | 结果 |
+| --- | --- |
+| 全项目本地回归 | `go test -race -short ./...` 通过 |
+| 静态与依赖检查 | `go vet ./...`、`go mod verify` 通过 |
+| 真实 Chrome 回归 | 五个浏览器相关包完整 race 回归及九场景 JS 语料通过 |
+| 已知依赖漏洞 | `govulncheck` 未发现已知漏洞条目；不代表不存在未知漏洞 |
+| Windows amd64 EXE | 本地及从 Release 下载后的程序运行检查通过 |
+| 六个 Release 附件 | 远端文件大小与内容摘要均与本地编译产物一致 |
+| Linux/macOS/arm64 | 交叉编译通过，未在对应系统实机运行 |
+| 远端 CI | Windows/Linux 构建 workflow 已推送；GitHub 返回账号 Actions 被禁用，尚未执行 |
+| Docker | 未构建验证 |
+
+浏览器进程复用、浏览器网络统一计入请求预算及完整 ESM 支持尚未完成，因此本版仍标记为预发布候选。
+
 ## 更新日志
 
 ### v1.0.0-rc.1 — 2026-10-10（预发布）
@@ -720,6 +799,7 @@ make clean
 - 报告保留实际凭据、CSRF、请求/响应和存储提交链；二进制证据及截断有明确标记，五格式保持原始值。
 - JS 从引号计数迁移到 Goja AST/span；增加正则/注释突破、嵌套模板及 tagged call 关联，按真实响应证明候选来源；按参数/上下文隔离过滤剪枝。
 - 修复 HTML 解析依赖的已知漏洞，升级 Go 1.26.9 和 Chrome/CDP 协议依赖。
+- 发布 Windows amd64 EXE/ZIP 和 Linux/macOS amd64、arm64 压缩包，附项目与依赖许可证。
 - 浏览器进程复用、浏览器网络共享预算及完整 ESM 支持仍未完成，本版本按预发布候选交付。
 
 ### v0.9.10 — 2026-10-07
@@ -743,7 +823,7 @@ make clean
 构建时通过 ldflags 注入版本：
 
 ```bash
-make build VERSION=1.0.0
+make build VERSION=1.0.0-rc.1
 ```
 
 `--version` 输出当前构建版本。
@@ -759,16 +839,3 @@ make build VERSION=1.0.0
 ## License
 
 [MIT](LICENSE)；依赖许可证见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
-
-
-### 扫描完成状态与错误处理
-
-退出码 `0` 表示扫描完成且未发现漏洞，`2` 表示扫描完成且发现漏洞，`1` 表示错误或扫描未完成（即使已经发现漏洞）。未发现不等于目标没有漏洞。未授权私网、请求失败、取消或请求的浏览器功能不可用时，不会输出正常完成的“无漏洞”结论。
-
-报告保留已发现结果，并附上 `Status` 和 `Issues`。状态包括 `completed`、`partial`、`failed`、`canceled`、`skipped`；混合成功与失败通常为 `partial`，取消优先。JSON、Markdown、HTML、SARIF、JUnit 均表达未完成状态。自动化流程应同时检查退出码及报告状态。
-
-`RequestsSent` 是 Go HTTP 请求尝试数，包含分析、探测、重试、发现和存储型检测，CLI 从认证初始化后开始计数；不包含 Chrome 自身网络请求和回调监听。`PayloadsSent` 包含 payload 的重试及变异请求，因此不等于独立 payload 数。
-
-库调用方应处理 `Engine.Run` 同时返回结果与错误的情况，保留部分结果。一个 Engine 的 Run 调用串行执行，等待可取消；目标级状态每次重置，会话 Cookie 仍正常保留。存储型调用方使用 `DetectWithError` 获取失败信息，旧 `Detect` 保持兼容。
-
-重定向链保存 InitialURL/InitialRequest 与最终 HTTP.Request/Response，反射原始请求和浏览器验证使用初始实际提交。POST→302→GET 的本地 Chrome 回归通过；不同虚拟主机 Host 无法在 Chrome 保持时明确返回不支持复核，不静默验证其他站点。

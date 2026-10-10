@@ -39,4 +39,3 @@ level*_report
 /.agents/
 /.codex/
 /pkg/dom/sinks.js
-/.github/workflows/build.yml

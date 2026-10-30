@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"golang.org/x/net/html"
 
@@ -12,6 +13,7 @@ import (
 	ctx "github.com/xsscan/xsscan/pkg/context"
 	"github.com/xsscan/xsscan/pkg/httpclient"
 	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/xsscan/xsscan/pkg/payload"
 	"github.com/xsscan/xsscan/pkg/ssrfguard"
 	"go.uber.org/zap"
 )
@@ -330,7 +332,12 @@ the response body. Reuses the same inject + throttle + client pipeline as
 doScanPayload but without retry/WAF logic — probes are one-shot. */
 
 func (e *Engine) sendProbeRequest(stdctx context.Context, injection model.InjectionPoint, probeValue, host string) (bodyText string, resultErr error) {
+	o := e.observations.begin(injection, payload.Payload{Value: probeValue}, 0, "probe")
+	trace, started := &attemptTrace{phase: failureBuild}, time.Now()
+	stdctx = context.WithValue(stdctx, attemptTraceKey{}, trace)
 	defer func() {
+		finishAttempt(&o, trace, started, resultErr)
+		e.observations.record(o)
 		if resultErr != nil {
 			e.recordRunError("probe", resultErr)
 		}
@@ -340,30 +347,38 @@ func (e *Engine) sendProbeRequest(stdctx context.Context, injection model.Inject
 		return "", fmt.Errorf("probe inject: %w", err)
 	}
 
+	markAttemptPhase(stdctx, failurePolicy)
 	if err := ssrfguard.IsURLTargetAllowed(modifiedTarget.URL); err != nil {
 		return "", fmt.Errorf("ssrf blocked: %w", err)
 	}
 
+	markAttemptPhase(stdctx, failureWait)
 	if err := e.throttle.Wait(stdctx, host); err != nil {
 		return "", err
 	}
 
+	markAttemptPhase(stdctx, failureBuild)
 	req, err := e.buildRequest(stdctx, modifiedTarget)
 	if err != nil {
 		return "", err
 	}
 
+	markAttemptPhase(stdctx, failureTransport)
 	resp, err := e.client.Do(req)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
 
+	markAttemptPhase(stdctx, failureRead)
 	body, err := io.ReadAll(io.LimitReader(resp.Body, httpclient.MaxResponseSize))
+	captureAttemptResponse(&o, resp, body, probeValue)
 	if err != nil {
+		markAttemptReadError(stdctx)
 		return "", err
 	}
 
+	markAttemptPhase(stdctx, failureStatus)
 	if resp.StatusCode >= 400 {
 		return "", fmt.Errorf("probe HTTP %d", resp.StatusCode)
 	}

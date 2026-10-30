@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -43,6 +44,7 @@ func CloneCookies(src []*http.Cookie) []*http.Cookie {
 	for i, c := range src {
 		if c != nil {
 			cp := *c
+			cp.Unparsed = slices.Clone(c.Unparsed)
 			dst[i] = &cp
 		}
 	}
@@ -283,7 +285,8 @@ func injectBodyGraphQL(body, name, value string) string {
 
 // parseKeyPath splits a dot-notation and bracket-notation key into segments.
 // e.g., "user.address.city" → ["user", "address", "city"]
-//       "items[0].name"     → ["items", "0", "name"]
+//
+//	"items[0].name"     → ["items", "0", "name"]
 func parseKeyPath(key string) []string {
 	var segments []string
 	var current strings.Builder

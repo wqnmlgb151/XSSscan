@@ -322,7 +322,7 @@ func (s *Scanner) detectSingleWithError(ctx context.Context, inj Injection, trig
 		return nil, err
 	}
 
-	observations, pollErr := s.pollObservations(ctx, triggerURLs, inj.Target, inj.Marker)
+	observations, pollErr := s.pollObservations(ctx, triggerURLs, inj.Target, inj.Marker, fmt.Sprintf("stored polling %s:%s", inj.Parameter.Type, inj.Parameter.Name))
 	if len(observations) == 0 {
 		return nil, pollErr
 	}

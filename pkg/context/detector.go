@@ -34,9 +34,26 @@ func NewDetector() *Detector {
 	}
 }
 
-// Detect runs a single HTML tokenizer pass to classify all contexts
+// Detect runs a single HTML tokenizer pass to classify all contexts.
+//
+// One pass classifies every reflection occurrence in the document, which is why
+// a single call returns contexts for several positions at once: the JavaScript
+// path reports one context per occurrence, and the HTML path one per matching
+// token. Each context therefore anchors itself at the site that produced it.
+//
+// The loop below only fills in an anchor for contexts whose classification
+// cannot know its own position (raw-text bodies, malformed markup). They fall
+// back to the reflection offset the caller searched for, marked "response_bytes"
+// so a fallback anchor is never mistaken for a located one.
 func (d *Detector) Detect(ref Reflection) ([]Context, error) {
-	return d.detectAll(ref), nil
+	contexts := d.detectAll(ref)
+	for i := range contexts {
+		if contexts[i].ReflectionUnit == "" {
+			contexts[i].ReflectionAt = ref.Offset
+			contexts[i].ReflectionUnit = "response_bytes"
+		}
+	}
+	return contexts, nil
 }
 
 // rawTextElements are HTML elements whose content is not parsed as HTML.
@@ -65,6 +82,7 @@ func (d *Detector) detectAll(ref Reflection) []Context {
 	tokenizer := html.NewTokenizer(strings.NewReader(content))
 	var inScript, inStyle, inSVG, inMath bool
 	var scriptExecutable bool
+	var scriptModule bool
 	position := 0
 	var inRawText bool
 	var parentStack []string
@@ -79,6 +97,8 @@ func (d *Detector) detectAll(ref Reflection) []Context {
 
 		switch tt {
 		case html.StartTagToken, html.SelfClosingTagToken:
+			// TagAttr decodes entities in place, so preserve raw delimiters first.
+			rawTag := string(tokenizer.Raw())
 			tagName, hasAttr := tokenizer.TagName()
 			name := string(tagName)
 			// TAG NAME injection: <MARKER>content</MARKER> — marker reflected
@@ -87,17 +107,19 @@ func (d *Detector) detectAll(ref Reflection) []Context {
 			// suffices — no ToLower needed on the hot path.
 			if strings.Contains(name, value) {
 				contexts = append(contexts, Context{
-					Type:        ContextHTMLTag,
-					TagName:     name,
-					Raw:         text.Snippet(name, value, 50),
-					Enclosed:    true,
-					ParentStack: copyStack(parentStack),
+					Type:         ContextHTMLTag,
+					TagName:      name,
+					Raw:          text.Snippet(name, value, 50),
+					Enclosed:     true,
+					ParentStack:  copyStack(parentStack),
+					ReflectionAt: start,
 				})
 			}
 			switch name {
 			case "script":
 				inScript = true
 				scriptExecutable = executableScriptRaw(string(tokenizer.Raw()))
+				scriptModule = moduleScriptRaw(string(tokenizer.Raw()))
 			case "style":
 				inStyle = true
 			case "svg":
@@ -109,7 +131,7 @@ func (d *Detector) detectAll(ref Reflection) []Context {
 				inRawText = true
 			}
 			if hasAttr {
-				d.detectAttrContexts(tokenizer, name, value, parentStack, &contexts)
+				d.detectAttrContexts(tokenizer, tagStartPos{start: start, raw: rawTag}, name, value, parentStack, &contexts, attributeDelimiters(rawTag))
 			}
 			// Only push non-void elements onto the parent stack.
 			// Void elements (<img>, <br>, <input>, etc.) never generate
@@ -139,13 +161,13 @@ func (d *Detector) detectAll(ref Reflection) []Context {
 		case html.TextToken:
 			if txt := string(tokenizer.Text()); strings.Contains(txt, value) {
 				if inScript && scriptExecutable && !inRawText {
-					for _, c := range jsContexts(txt, value, false, start) {
+					for _, c := range jsContexts(txt, value, false, start, scriptModule) {
 						c.ParentStack = copyStack(parentStack)
 						contexts = append(contexts, c)
 					}
 					continue
 				}
-				ctx := Context{Raw: text.Snippet(txt, value, 50), ParentStack: copyStack(parentStack)}
+				ctx := Context{Raw: text.Snippet(txt, value, 50), ParentStack: copyStack(parentStack), ReflectionAt: start + strings.Index(txt, value)}
 				switch {
 				case inRawText:
 					// Raw-text elements (textarea, title, xmp, etc.) — content is inert
@@ -168,9 +190,10 @@ func (d *Detector) detectAll(ref Reflection) []Context {
 		case html.CommentToken:
 			if comment := string(tokenizer.Text()); strings.Contains(comment, value) {
 				contexts = append(contexts, Context{
-					Type:        ContextHTMLComment,
-					Raw:         text.Snippet(comment, value, 50),
-					ParentStack: copyStack(parentStack),
+					Type:         ContextHTMLComment,
+					Raw:          text.Snippet(comment, value, 50),
+					ParentStack:  copyStack(parentStack),
+					ReflectionAt: start + strings.Index(comment, value),
 				})
 			}
 		}
@@ -180,7 +203,36 @@ func (d *Detector) detectAll(ref Reflection) []Context {
 	return rankContexts(contexts)
 }
 
-func (d *Detector) detectAttrContexts(tokenizer *html.Tokenizer, tagName, value string, parentStack []string, contexts *[]Context) {
+// tagStartPos carries where the current start tag begins in the response and
+// its raw bytes. Attribute values are located relative to that raw tag, which
+// yields an exact document offset instead of a whole-tag approximation.
+type tagStartPos struct {
+	start int
+	raw   string
+}
+
+// locate returns the document offset of needle within the raw tag, preferring
+// the occurrence at or after fromRaw (a raw-tag-relative hint), and falling
+// back to the first occurrence. found reports whether the needle was located
+// at all; callers must treat false as "anchor unknown", never as offset 0.
+func (p tagStartPos) locate(needle string, fromRaw int) (offset int, found bool) {
+	if needle == "" || p.raw == "" {
+		return 0, false
+	}
+	if fromRaw >= 0 && fromRaw < len(p.raw) {
+		if i := strings.Index(p.raw[fromRaw:], needle); i >= 0 {
+			return p.start + fromRaw + i, true
+		}
+	}
+	if i := strings.Index(p.raw, needle); i >= 0 {
+		return p.start + i, true
+	}
+	return 0, false
+}
+
+func (d *Detector) detectAttrContexts(tokenizer *html.Tokenizer, tag tagStartPos, tagName, value string, parentStack []string, contexts *[]Context, delimiters []attributeDelimiter) {
+	index := 0
+	rawCursor := 0
 	for {
 		var key, val []byte
 		key, val, _ = tokenizer.TagAttr()
@@ -189,22 +241,41 @@ func (d *Detector) detectAttrContexts(tokenizer *html.Tokenizer, tagName, value 
 		}
 		attrName := string(key)
 		attrVal := string(val)
+		quote := ""
+		if index < len(delimiters) && delimiters[index].name == attrName {
+			quote = delimiters[index].quote
+		}
+		// Advance a raw-tag cursor past the attribute name so that repeated
+		// values resolve to the attribute actually being examined rather than
+		// to an earlier identically-valued attribute.
+		nameAt := rawCursor
+		if i := strings.Index(tag.raw[rawCursor:], attrName); i >= 0 {
+			nameAt = rawCursor + i
+			rawCursor = nameAt + len(attrName)
+		}
+		index++
 		// Attribute NAME injection: marker reflected in the attribute name
 		// itself (<div MARKER=...>) — exploitable via on* event injection.
 		// The tokenizer lowercases attribute names and markers are lowercase
 		// (GenerateMarker), so plain Contains suffices.
 		if strings.Contains(attrName, value) {
-			*contexts = append(*contexts, Context{
+			ctx := Context{
 				Type:        ContextHTMLAttrName,
 				TagName:     tagName,
 				AttrName:    attrName,
 				Raw:         text.Snippet(attrName, value, 50),
 				Enclosed:    true,
 				ParentStack: copyStack(parentStack),
-			})
+			}
+			if at, ok := tag.locate(attrName, nameAt); ok {
+				ctx.ReflectionAt = at + strings.Index(attrName, value)
+			}
+			*contexts = append(*contexts, ctx)
 			continue
 		}
 		if strings.Contains(attrVal, value) {
+			// The value itself follows the name; locate it forward from there.
+			valAt, valFound := tag.locate(attrVal, nameAt+len(attrName))
 			ctxType := ContextHTMLAttrValue
 			switch {
 			case d.eventAttrRe.MatchString(attrName):
@@ -217,6 +288,13 @@ func (d *Detector) detectAttrContexts(tokenizer *html.Tokenizer, tagName, value 
 					sub.TagName = tagName
 					sub.AttrName = attrName
 					sub.ParentStack = copyStack(parentStack)
+					// In handler mode the parser only sees the attribute VALUE,
+					// so SourceStart is value-relative. Translate it into a
+					// document offset and keep the value-relative span intact —
+					// the span is script evidence, ReflectionAt is the anchor.
+					if valFound {
+						sub.ReflectionAt = valAt + sub.SourceStart
+					}
 					*contexts = append(*contexts, sub)
 				}
 				continue
@@ -230,11 +308,15 @@ func (d *Detector) detectAttrContexts(tokenizer *html.Tokenizer, tagName, value 
 			}
 			ctx := Context{
 				Type:        ctxType,
+				QuoteChar:   quote,
 				TagName:     tagName,
 				AttrName:    attrName,
 				Raw:         text.Snippet(attrVal, value, 50),
 				Enclosed:    true,
 				ParentStack: copyStack(parentStack),
+			}
+			if valFound {
+				ctx.ReflectionAt = valAt + strings.Index(attrVal, value)
 			}
 			// ContextHTMLEntity is non-exploitable by type (IsExploitableType);
 			// Escaped only zeroes the ranking priority so the inert context
@@ -274,21 +356,40 @@ func analyzeURLContext(attrVal, value string) ContextType {
 }
 
 func (d *Detector) detectTemplateContext(content, value string, contexts *[]Context) {
-	for _, m := range d.templateRe.FindAllStringSubmatch(content, -1) {
-		if strings.Contains(m[1], value) {
-			*contexts = append(*contexts, Context{
+	// FindAllStringSubmatchIndex (not ...Submatch) because a template reflection
+	// needs its document offset: two {{...}} blocks in one page are different
+	// injection positions, and only the offset tells them apart.
+	for _, m := range d.templateRe.FindAllStringSubmatchIndex(content, -1) {
+		if len(m) < 4 || m[2] < 0 {
+			continue
+		}
+		inner := content[m[2]:m[3]]
+		if strings.Contains(inner, value) {
+			ctx := Context{
 				Type: ContextTemplate,
-				Raw:  text.Snippet(m[1], value, 50),
-			})
+				Raw:  text.Snippet(inner, value, 50),
+			}
+			if i := strings.Index(inner, value); i >= 0 {
+				ctx.ReflectionAt = m[2] + i
+			}
+			*contexts = append(*contexts, ctx)
 		}
 	}
-	for _, m := range d.angularRe.FindAllStringSubmatch(content, -1) {
-		if strings.Contains(m[2], value) {
-			*contexts = append(*contexts, Context{
+	for _, m := range d.angularRe.FindAllStringSubmatchIndex(content, -1) {
+		if len(m) < 6 || m[4] < 0 {
+			continue
+		}
+		attrVal := content[m[4]:m[5]]
+		if strings.Contains(attrVal, value) {
+			ctx := Context{
 				Type:     ContextTemplate,
-				AttrName: m[1],
-				Raw:      text.Snippet(m[2], value, 50),
-			})
+				AttrName: content[m[2]:m[3]],
+				Raw:      text.Snippet(attrVal, value, 50),
+			}
+			if i := strings.Index(attrVal, value); i >= 0 {
+				ctx.ReflectionAt = m[4] + i
+			}
+			*contexts = append(*contexts, ctx)
 		}
 	}
 }

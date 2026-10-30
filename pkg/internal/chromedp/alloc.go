@@ -23,6 +23,10 @@ var StandardHeadlessOptions = []ext.ExecAllocatorOption{
 	ext.NoDefaultBrowserCheck,
 	ext.Headless,
 	ext.DisableGPU,
+	// Preserve chromedp v0.16's disabled features, and keep explicit HTTP
+	// scan targets on HTTP instead of Chrome silently changing their origin.
+	// Server redirects and HSTS remain subject to the request scope policy.
+	ext.Flag("disable-features", "site-per-process,Translate,BlinkGenPropertyTrees,HttpsUpgrades"),
 	ext.Flag("no-sandbox", false),
 	ext.Flag("ignore-certificate-errors", false),
 	ext.WindowSize(1280, 800),

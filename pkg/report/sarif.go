@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
+	"sort"
 	"strings"
 	"time"
 
@@ -25,7 +26,7 @@ func (r *Reporter) generateSARIF(data *ScanData) ([]byte, error) {
 		Results: []sarifResult{},
 	}
 
-	run.Invocations = []sarifInvocation{{ExecutionSuccessful: reportStatus(data) == model.ScanCompleted, Properties: map[string]interface{}{"status": reportStatus(data), "issues": data.Issues, "modules": data.Modules}}}
+	run.Invocations = []sarifInvocation{{ExecutionSuccessful: reportStatus(data) == model.ScanCompleted, Properties: map[string]interface{}{"status": reportStatus(data), "issues": data.Issues, "modules": data.Modules, "coverage": data.Coverage, "requests_sent": data.RequestsSent, "payloads_sent": data.PayloadsSent, "errors": data.Errors, "cross_module": data.CrossModule}}}
 	ruleMap := make(map[string]sarifRule)
 	for _, f := range data.Findings {
 		ruleID := fmt.Sprintf("xsscan/%s", strings.ToLower(f.Type))
@@ -65,8 +66,10 @@ func (r *Reporter) generateSARIF(data *ScanData) ([]byte, error) {
 				},
 			},
 			Properties: sarifProperties{
-				Evidence:   f.Evidence,
-				RawRequest: f.RawRequest, RawResponse: f.RawResponse,
+				ExecutionVerified:   f.ExecutionVerified,
+				ExecutionConfidence: f.ExecutionConfidence,
+				Evidence:            f.Evidence,
+				RawRequest:          f.RawRequest, RawResponse: f.RawResponse,
 				Tags:        f.Contexts,
 				Payload:     f.Payload,
 				Payloads:    f.Payloads,
@@ -80,6 +83,7 @@ func (r *Reporter) generateSARIF(data *ScanData) ([]byte, error) {
 	for _, rule := range ruleMap {
 		run.Tool.Driver.Rules = append(run.Tool.Driver.Rules, rule)
 	}
+	sort.Slice(run.Tool.Driver.Rules, func(i, j int) bool { return run.Tool.Driver.Rules[i].ID < run.Tool.Driver.Rules[j].ID })
 
 	sarif := sarifReport{
 		Version: "2.1.0",
@@ -176,14 +180,16 @@ type sarifRegion struct {
 }
 
 type sarifProperties struct {
-	RawRequest  string         `json:"raw_request,omitempty"`
-	RawResponse string         `json:"raw_response,omitempty"`
-	Evidence    model.Evidence `json:"evidence,omitempty"`
-	Tags        []string       `json:"tags,omitempty"`
-	Payload     string         `json:"payload,omitempty"`
-	Payloads    []string       `json:"payloads,omitempty"`
-	Severity    string         `json:"severity,omitempty"`
-	CSPBypasses string         `json:"csp_bypasses,omitempty"`
+	ExecutionVerified   bool           `json:"execution_verified"`
+	ExecutionConfidence float64        `json:"execution_confidence"`
+	RawRequest          string         `json:"raw_request,omitempty"`
+	RawResponse         string         `json:"raw_response,omitempty"`
+	Evidence            model.Evidence `json:"evidence,omitempty"`
+	Tags                []string       `json:"tags,omitempty"`
+	Payload             string         `json:"payload,omitempty"`
+	Payloads            []string       `json:"payloads,omitempty"`
+	Severity            string         `json:"severity,omitempty"`
+	CSPBypasses         string         `json:"csp_bypasses,omitempty"`
 }
 
 // formatCSPBypassesForSARIF converts CSP bypass entries to a single
@@ -210,14 +216,21 @@ func (r *Reporter) generateJUnit(data *ScanData) string {
 	}
 
 	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
-	fmt.Fprintf(&b, `<testsuites name="xsscan" tests="%d" failures="%d" errors="%d" time="%d">`+"\n",
-		findings+errorCount, findings, errorCount, data.Duration)
-	fmt.Fprintf(&b, `  <testsuite name="xsscan-xss" tests="%d" failures="%d" errors="%d" timestamp="%s">`+"\n",
-		findings+errorCount, findings, errorCount, timestamp)
-	if len(data.Modules) > 0 {
+	fmt.Fprintf(&b, `<testsuites name="xsscan" tests="%d" failures="%d" errors="%d" time="%.3f">`+"\n",
+		findings+errorCount, findings, errorCount, float64(data.Duration)/1000)
+	fmt.Fprintf(&b, `  <testsuite name="xsscan-xss" tests="%d" failures="%d" errors="%d" timestamp="%s" time="%.3f">`+"\n",
+		findings+errorCount, findings, errorCount, timestamp, float64(data.Duration)/1000)
+	{
 		b.WriteString("<system-out>")
+		fmt.Fprintf(&b, "Status: %s\nRequests: %d | Payloads: %d | Errors: %d\n", xmlText(string(reportStatus(data))), data.RequestsSent, data.PayloadsSent, data.Errors)
+		for _, coverage := range data.Coverage {
+			fmt.Fprintf(&b, "Coverage: %s\n", xmlText(coverage.String()))
+		}
+		for _, observation := range data.CrossModule {
+			fmt.Fprintf(&b, "Observation: %s / %s / %s: %s\n", xmlText(observation.Module), xmlText(string(observation.Kind)), xmlText(observation.Subject), xmlText(observation.Detail))
+		}
 		for _, module := range data.Modules {
-			fmt.Fprintf(&b, "Module: %s / %s / %s — %s\n", xmlText(module.Type), xmlText(module.Target), xmlText(string(module.Status)), xmlText(module.Reason))
+			fmt.Fprintf(&b, "Module: %s / %s / %s — %s | Requests: %d | Candidates: %d | Findings: %d\n", xmlText(module.Type), xmlText(module.Target), xmlText(string(module.Status)), xmlText(module.Reason), module.Requests, module.Candidates, module.Findings)
 		}
 		b.WriteString("</system-out>\n")
 	}
@@ -256,6 +269,7 @@ func (r *Reporter) generateJUnit(data *ScanData) string {
 		fmt.Fprintf(&b, "        Raw Request: %s\n        Raw Response: %s\n", strings.ReplaceAll(xmlText(f.RawRequest), "\r", "&#13;"), strings.ReplaceAll(xmlText(f.RawResponse), "\r", "&#13;"))
 		fmt.Fprintf(&b, "        Severity: %s\n", xmlText(f.Severity))
 		fmt.Fprintf(&b, "        Confidence: %.0f%%\n", f.Confidence*100)
+		fmt.Fprintf(&b, "        Execution verified: %t\n", f.ExecutionVerified)
 		fmt.Fprintf(&b, "        Contexts: %s\n", xmlText(strings.Join(f.Contexts, ", ")))
 		fmt.Fprintf(&b, "      </failure>\n")
 		fmt.Fprintf(&b, "    </testcase>\n")

@@ -94,7 +94,7 @@ func runSelectedModules(ctx context.Context, engine *scanner.Engine, client *htt
 		{Type: orchestrator.Reflected, Run: func(ctx context.Context, target model.Target) (*model.ScanResult, error) {
 			return engine.Run(ctx, target)
 		}},
-		orchestrator.DOMModule(client, time.Duration(cfg.Timeout)*time.Second),
+		orchestrator.DOMModule(client, time.Duration(cfg.Timeout)*time.Second, cfg.VerifyExecution),
 		orchestrator.StoredModule(client, stored.Config{TriggerURLs: cfg.TriggerURLs, PollingInterval: time.Duration(cfg.StoredPollInterval) * time.Second, MaxPolls: cfg.StoredMaxPolls, RequestTimeout: time.Duration(cfg.Timeout) * time.Second, Concurrency: cfg.Workers, VerifyExecution: cfg.VerifyExecution, VerifyTimeout: time.Duration(cfg.VerifyTimeout) * time.Second}, cfg.DiscoverHeaders),
 		{Type: orchestrator.Blind, Check: func(context.Context, model.Target) error {
 			if cfg.Callback == "" {
@@ -136,6 +136,7 @@ func runSelectedModules(ctx context.Context, engine *scanner.Engine, client *htt
 	var problems []error
 	discoverer := orchestrator.Discoverer{Client: client, Config: orchestrator.DiscoveryConfig{Crawl: cfg.Crawl, RenderSPA: cfg.RenderSPA, Depth: cfg.CrawlDepth, MaxPages: cfg.CrawlMaxPages}}
 	for _, rawURL := range urls {
+		model.ReportProgress(ctx, "page discovery", 0, 0)
 		targets, discoveryIssues := discoverer.Expand(ctx, deriveTarget(base, rawURL))
 		if len(discoveryIssues) > 0 {
 			stats.Status = model.MergeStatus(stats.Status, model.ScanFailed)
@@ -150,6 +151,10 @@ func runSelectedModules(ctx context.Context, engine *scanner.Engine, client *htt
 			if result != nil {
 				*findings = append(*findings, result.Findings...)
 				stats.Modules = append(stats.Modules, result.Stats.Modules...)
+				stats.Coverage = append(stats.Coverage, result.Stats.Coverage...)
+				for _, observation := range result.Stats.CrossModule.Observations {
+					stats.CrossModule.Add(observation)
+				}
 				stats.Status = model.MergeStatus(stats.Status, result.Stats.Status)
 				stats.Issues = append(stats.Issues, result.Stats.Issues...)
 				stats.Errors += result.Stats.Errors

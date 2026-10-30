@@ -108,13 +108,21 @@ func (g *Generator) SetCustomPayloads(payloads []Payload) {
 	g.customPayloads = payloads
 }
 
-// QuoteCompatible reports whether a JS-string payload can break out of the
-// detected string quote. quoteChar is the QuoteChar from context detection
+// QuoteCompatible reports whether a JS-string or HTML-attribute payload can
+// break out of the detected quote. quoteChar comes from context detection
 // (' or ", empty when unknown). Only payloads starting with a quote
 // character are gated — e.g. "-alert(1)-" is inert inside a single-quoted
 // string and would produce a false-positive finding.
 func QuoteCompatible(value string, ctxType context.ContextType, quoteChar string) bool {
-	if ctxType != context.ContextJSString || quoteChar == "" || value == "" {
+	if (ctxType != context.ContextJSString && ctxType != context.ContextHTMLAttrValue) || quoteChar == "" || value == "" {
+		return true
+	}
+	if ctxType == context.ContextHTMLAttrValue {
+		// An opposite leading quote can be literal data before a later quote
+		// closes the attribute. Keep mixed-quote/custom payloads conservative.
+		if (quoteChar == "'" && value[0] == '"') || (quoteChar == `"` && value[0] == '\'') {
+			return strings.Contains(value, quoteChar)
+		}
 		return true
 	}
 	switch value[0] {
@@ -137,7 +145,7 @@ func (g *Generator) Generate(injection model.InjectionPoint) []Payload {
 		if !ctx.IsExploitable() {
 			continue
 		}
-		templates := g.filterTemplates(GetTemplates(ctx.Type))
+		templates := g.filterTemplates(GetTemplates(ctx.Type), ctx)
 		for _, tmpl := range templates {
 			if !QuoteCompatible(tmpl.Value, ctx.Type, ctx.QuoteChar) {
 				continue
@@ -210,14 +218,17 @@ func (g *Generator) Generate(injection model.InjectionPoint) []Payload {
 }
 
 // filterTemplates returns a subset of templates based on the active preset.
-func (g *Generator) filterTemplates(templates []PayloadTemplate) []PayloadTemplate {
+func (g *Generator) filterTemplates(templates []PayloadTemplate, contexts ...context.Context) []PayloadTemplate {
 	switch g.preset {
 	case PresetMinimal:
-		// Return only the first (highest-priority) template per context
-		if len(templates) > 0 {
-			return templates[:1]
+		// Select after quote compatibility: the first template may otherwise
+		// be rejected later, leaving this context with no candidates.
+		for i, tmpl := range templates {
+			if len(contexts) == 0 || QuoteCompatible(tmpl.Value, contexts[0].Type, contexts[0].QuoteChar) {
+				return templates[i : i+1]
+			}
 		}
-		return templates
+		return nil
 	case PresetFull:
 		// Return all templates including WAF bypass variants
 		return templates

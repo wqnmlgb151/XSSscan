@@ -2,7 +2,6 @@ package orchestrator
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -17,7 +16,12 @@ import (
 )
 
 // DOMModule keeps browser creation and detector lifecycle out of CLI parsing.
-func DOMModule(client *http.Client, timeout time.Duration) Module {
+// DOMModule builds the DOM detection module.
+//
+// replayOriginal controls whether each DOM candidate is additionally confirmed with its
+// unmarked payload in a fresh browser context. It costs a second page load per test, so
+// it follows the execution-verification setting rather than being unconditional.
+func DOMModule(client *http.Client, timeout time.Duration, replayOriginal bool) Module {
 	return Module{Type: DOM, Check: func(ctx context.Context, target model.Target) error {
 		if err := ssrfguard.IsURLTargetAllowedContext(ctx, target.URL); err != nil {
 			return err
@@ -36,20 +40,16 @@ func DOMModule(client *http.Client, timeout time.Duration) Module {
 			return result, err
 		}
 		defer detector.Close()
-		var problems []error
-		for _, probe := range []string{`<img src=x onerror=alert(1)>`, `<script>alert(1)</script>`, `javascript:alert(1)`, `'-alert(1)-'`, `"><svg onload=alert(1)>`} {
-			if ctx.Err() != nil {
-				problems = append(problems, ctx.Err())
-				break
-			}
-			result.Stats.PayloadsSent++
-			findings, err := detector.DetectDOMXSS(ctx, target, probe)
-			result.Findings = append(result.Findings, findings...)
-			if err != nil {
-				problems = append(problems, err)
-			}
+		detector.SetOriginalReplay(replayOriginal)
+		if err := detector.CheckTarget(ctx, target); err != nil {
+			return result, err
 		}
-		return result, errors.Join(problems...)
+		probes := []string{`<img src=x onerror=alert(1)>`, `<script>alert(1)</script>`, `javascript:alert(1)`, `'-alert(1)-'`, `"><svg onload=alert(1)>`}
+		var coverage model.CheckCoverage
+		result.Findings, coverage, err = detector.DetectPayloadsWithCoverage(ctx, target, probes)
+		result.Stats.Coverage = []model.CheckCoverage{coverage}
+		result.Stats.PayloadsSent = len(probes)
+		return result, err
 	}}
 }
 

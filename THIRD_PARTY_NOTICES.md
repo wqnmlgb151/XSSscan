@@ -1,6 +1,6 @@
 # Third-party notices
 
-Licenses for external modules included in the xsscan CLI build. The project license is in LICENSE. Goja is used for parser/AST analysis only; source map loading is disabled.
+Licenses for external modules included in the xsscan CLI build. The project license is in LICENSE. Sobek (a Goja fork) is used for parser/AST analysis only; source map loading is disabled. esbuild Transform validates syntax in memory only; transformed output is discarded and imports are not resolved.
 
 ## github.com/chromedp/cdproto
 
@@ -92,9 +92,39 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-## github.com/dop251/goja
+## github.com/evanw/esbuild
 
-Version: `v0.0.0-20261009133625-a4bedf5f6000`
+Version: `v0.25.12`
+
+### LICENSE.md
+
+```text
+MIT License
+
+Copyright (c) 2020 Evan Wallace
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+## github.com/grafana/sobek
+
+Version: `v0.0.0-20261005111419-f56574604191`
 
 ### LICENSE
 
@@ -183,7 +213,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ## github.com/go-sourcemap/sourcemap
 
-Version: `v2.1.3+incompatible`
+Version: `v2.1.4+incompatible`
 
 ### LICENSE
 

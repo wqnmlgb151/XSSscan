@@ -8,6 +8,19 @@ import (
 	"golang.org/x/net/html"
 )
 
+// Keep repeated evidence queries local to one unchanged document/candidate.
+// Nested documents must create their own probe; no scan state is shared.
+func memoizedResponseJSCall(body, candidate string) func() (bool, string) {
+	checked, confirmed, parseError := false, false, ""
+	return func() (bool, string) {
+		if !checked {
+			confirmed, parseError = responseJSCall(body, candidate)
+			checked = true
+		}
+		return confirmed, parseError
+	}
+}
+
 func candidateJSCall(source, candidate string, handler bool) (bool, string) {
 	if candidate == "" {
 		return false, ""
@@ -57,6 +70,7 @@ func responseJSCall(body, p string) (bool, string) {
 	t := html.NewTokenizer(strings.NewReader(body))
 	position := 0
 	inScript, executable := false, false
+	scriptMode := jsanalysis.ScriptMode
 	templateDepth := 0
 	rawTextElement := ""
 	var parseError string
@@ -89,6 +103,7 @@ func responseJSCall(body, p string) (bool, string) {
 		if tt == html.StartTagToken && token.Data == "script" {
 			inScript = true
 			executable = executableScript(token) && !scriptHasSource(token)
+			scriptMode = scriptSourceMode(token)
 		}
 		if tt == html.EndTagToken && token.Data == "script" {
 			inScript = false
@@ -100,7 +115,7 @@ func responseJSCall(body, p string) (bool, string) {
 			if spanIndex >= len(spans) || spans[spanIndex].start >= position {
 				continue
 			}
-			a := jsanalysis.Parse(raw, false)
+			a := jsanalysis.ParseWithMode(raw, scriptMode)
 			for j := spanIndex; j < len(spans) && spans[j].start < position; j++ {
 				s := spans[j]
 				checks++
@@ -170,4 +185,16 @@ func responseJSCall(body, p string) (bool, string) {
 		}
 	}
 	return false, parseError
+}
+
+func scriptSourceMode(token html.Token) jsanalysis.SourceMode {
+	for _, a := range token.Attr {
+		if a.Key == "type" {
+			if strings.EqualFold(strings.TrimSpace(a.Val), "module") {
+				return jsanalysis.ModuleMode
+			}
+			break
+		}
+	}
+	return jsanalysis.ScriptMode
 }

@@ -135,45 +135,48 @@ func (a *Analyzer) Analyze(gtx stdctx.Context, target model.Target) (*AnalysisRe
 		if len(reflections) == 0 {
 			continue
 		}
-		// The detector classifies every occurrence in the whole response once.
-		// Repeating it duplicated injection points and quadratic parse/probe work.
-		for _, ref := range reflections[:1] {
-			var contexts []ctx.Context
+		/* One injection point per parameter, all reflection occurrences kept.
+		The detector classifies every occurrence in a single pass and each
+		context carries its own anchor, so this call must NOT be repeated per
+		occurrence: doing so re-classified the whole document once per
+		reflection and duplicated the context list. The first occurrence's
+		offset is passed only as the fallback anchor for contexts that cannot
+		locate themselves (see context.Detector.Detect). */
+		var contexts []ctx.Context
 
-			if isJSON {
-				// For JSON responses, detect JSON string context.
-				jsonCtx := detectJSONContext(bodyStr, ref.Offset, marker, jsonValid)
-				if jsonCtx != nil {
-					contexts = []ctx.Context{*jsonCtx}
-				}
+		// JSON string values are a separate classification path, kept ahead of
+		// the HTML detector so a JSON reflection is not silently treated as
+		// markup. detectJSONContext resolves one offset, so it is only
+		// meaningful against the first occurrence — the same limit the previous
+		// single-occurrence design had for this path.
+		if isJSON {
+			if jsonCtx := detectJSONContext(bodyStr, reflections[0].Offset, marker, jsonValid); jsonCtx != nil {
+				jsonCtx.ReflectionAt, jsonCtx.ReflectionUnit = reflections[0].Offset, "response_bytes"
+				contexts = append(contexts, *jsonCtx)
 			}
-
-			if len(contexts) == 0 {
-				// Fall back to HTML context detection for non-JSON responses
-				// or when JSON parsing fails.
-				refl := ctx.Reflection{
-					Content:    bodyStr,
-					Offset:     ref.Offset,
-					ParamValue: marker,
-					StatusCode: resp.StatusCode,
-				}
-				htmlContexts, err := a.contextDetector.Detect(refl)
-				if err != nil {
-					return nil, fmt.Errorf("context detection failed for %s: %w", param.Name, err)
-				}
-				contexts = htmlContexts
-			}
-
-			if len(contexts) == 0 {
-				continue
-			}
-			result.InjectionPoints = append(result.InjectionPoints, model.InjectionPoint{
-				Target:     target,
-				Parameter:  param,
-				Contexts:   contexts,
-				Reflection: ref,
-			})
 		}
+
+		refl := ctx.Reflection{
+			Content:    bodyStr,
+			Offset:     reflections[0].Offset,
+			ParamValue: marker,
+			StatusCode: resp.StatusCode,
+		}
+		detected, err := a.contextDetector.Detect(refl)
+		if err != nil {
+			return nil, fmt.Errorf("context detection failed for %s: %w", param.Name, err)
+		}
+		contexts = append(contexts, detected...)
+
+		if len(contexts) == 0 {
+			continue
+		}
+		result.InjectionPoints = append(result.InjectionPoints, model.InjectionPoint{
+			Target:     target,
+			Parameter:  param,
+			Contexts:   contexts,
+			Reflection: reflections[0],
+		})
 	}
 	return result, nil
 }
@@ -306,27 +309,28 @@ func (a *Analyzer) analyzePerParam(gtx stdctx.Context, target model.Target, para
 			continue
 		}
 
-		for _, ref := range reflections[:1] {
-			refl := ctx.Reflection{
-				Content:    bodyStr,
-				Offset:     ref.Offset,
-				ParamValue: marker,
-				StatusCode: resp.StatusCode,
-			}
-			contexts, err := a.contextDetector.Detect(refl)
-			if err != nil {
-				continue
-			}
-			if len(contexts) == 0 {
-				continue
-			}
-			result.InjectionPoints = append(result.InjectionPoints, model.InjectionPoint{
-				Target:     target,
-				Parameter:  param,
-				Contexts:   contexts,
-				Reflection: ref,
-			})
+		// Same single-pass rule as the shared-body path above: the detector
+		// already classifies every occurrence, so this must not loop.
+		refl := ctx.Reflection{
+			Content:    bodyStr,
+			Offset:     reflections[0].Offset,
+			ParamValue: marker,
+			StatusCode: resp.StatusCode,
 		}
+		contexts, err := a.contextDetector.Detect(refl)
+		if err != nil {
+			continue
+		}
+
+		if len(contexts) == 0 {
+			continue
+		}
+		result.InjectionPoints = append(result.InjectionPoints, model.InjectionPoint{
+			Target:     target,
+			Parameter:  param,
+			Contexts:   contexts,
+			Reflection: reflections[0],
+		})
 	}
 	return result, nil
 }

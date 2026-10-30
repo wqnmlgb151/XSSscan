@@ -57,6 +57,7 @@ func RenderPage(ctx context.Context, targetURL string, headers map[string]string
 	defer cancel()
 
 	guard, policy := allocopts.GuardRequests(targetURL, cancel, nil)
+	defer guard.Close()
 	actions := []chromedp.Action{network.Enable(), policy}
 	if len(headers) > 0 {
 		h := toNetworkHeaders(headers)

@@ -202,12 +202,15 @@ type dedupKey struct {
 	contextClass string
 	vectorClass  string
 	exploitClass string
+	paramType    model.ParamType
 }
 
 // betterFinding reports whether candidate should replace current as the
-// group representative: strictly higher confidence wins; on ties,
-// execution-verified entries win.
+// group representative. Execution proof takes precedence over structural scores.
 func betterFinding(current, candidate *model.Finding) bool {
+	if candidate.ExecutionVerified != current.ExecutionVerified {
+		return candidate.ExecutionVerified
+	}
 	if candidate.Confidence != current.Confidence {
 		return candidate.Confidence > current.Confidence
 	}
@@ -232,6 +235,7 @@ func SemanticDedup(findings []model.Finding) []model.Finding {
 			contextClass: string(primaryContextClass(parseContextTypes(f.Contexts))),
 			vectorClass:  string(classifyAttackVector(f.Payload)),
 			exploitClass: string(classifyExploit(f.Payload)),
+			paramType:    f.ParamType,
 		}
 
 		if existing, ok := seen[key]; ok {
@@ -264,6 +268,7 @@ func AggregateFindings(findings []model.Finding) []model.Finding {
 		param        string
 		contextClass string
 		vulnType     string
+		paramType    model.ParamType
 	}
 	type aggEntry struct {
 		primary       *model.Finding
@@ -283,6 +288,7 @@ func AggregateFindings(findings []model.Finding) []model.Finding {
 			param:        f.Parameter,
 			contextClass: string(primaryContextClass(parseContextTypes(f.Contexts))),
 			vulnType:     string(f.Type),
+			paramType:    f.ParamType,
 		}
 		entry, ok := groups[key]
 		if !ok {
@@ -293,6 +299,12 @@ func AggregateFindings(findings []model.Finding) []model.Finding {
 		if _, seen := entry.payloads[f.Payload]; !seen {
 			entry.payloads[f.Payload] = true
 			entry.order = append(entry.order, f.Payload)
+		}
+		for _, value := range f.Payloads {
+			if !entry.payloads[value] {
+				entry.payloads[value] = true
+				entry.order = append(entry.order, value)
+			}
 		}
 		if betterFinding(entry.primary, f) {
 			entry.primary = f
@@ -311,19 +323,23 @@ func AggregateFindings(findings []model.Finding) []model.Finding {
 	result := make([]model.Finding, 0, len(keys))
 	for _, key := range keys {
 		entry := groups[key]
-		out := *entry.primary
+		primary := entry.primary
+		if entry.verifiedEntry != nil {
+			primary = entry.verifiedEntry
+		}
+		out := *primary
 		out.Severity = entry.maxSev
 		// Payloads must not be appended to downstream: when no verified
 		// entry exists, out.Payloads aliases entry.order (sole owner).
 		out.Payloads = entry.order
 		if entry.verifiedEntry != nil {
 			// A variant executed in a real browser — the group is proven.
-			// Propagate the verified entry's execution confidence and lead
-			// the variant list with the proven payload, since the primary
-			// (highest-confidence) entry may be a different payload.
+			// Preserve the verified candidate as primary, with its own request
+			// and evidence, and lead the alternatives with that proven payload.
 			out.ExecutionVerified = true
 			out.ExecutionConfidence = entry.verifiedEntry.ExecutionConfidence
 			out.Evidence.VerificationPayload = entry.verifiedEntry.Evidence.VerificationPayload
+			out.Evidence.VerificationError = ""
 			out.Evidence.DialogMessage = entry.verifiedEntry.Evidence.DialogMessage
 			out.Evidence.Interaction = entry.verifiedEntry.Evidence.Interaction
 			out.ScreenshotPath = entry.verifiedEntry.ScreenshotPath

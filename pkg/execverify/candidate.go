@@ -12,10 +12,14 @@ import (
 var dialogCall = regexp.MustCompile(`\b(alert|confirm|prompt)\(\s*(?:1|'[^'\r\n]*'|"[^"\r\n]*")\s*\)`)
 var dialogTag = regexp.MustCompile("\\b(alert|confirm|prompt)`[^`\\\\$\\r\\n]*`")
 
+func SupportsDialogVerification(value string) bool {
+	return dialogCall.MatchString(value) || dialogTag.MatchString(value)
+}
+
 // InstrumentDialogPayload gives supported dialog calls a unique candidate token.
 // Numeric character codes preserve HTML attribute quote compatibility.
 func InstrumentDialogPayload(value string) (string, string, error) {
-	if !dialogCall.MatchString(value) && !dialogTag.MatchString(value) {
+	if !SupportsDialogVerification(value) {
 		return "", "", fmt.Errorf("payload has no supported dialog call for candidate-specific verification")
 	}
 	token := analyze.GenerateMarker()

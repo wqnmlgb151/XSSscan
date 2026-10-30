@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chromedp/cdproto/emulation"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
@@ -47,7 +48,12 @@ type Verifier struct {
 	timeout       time.Duration
 	auth          *AuthState
 	screenshotDir string
+	screenshotErr error
 	consoleMu     sync.Mutex
+	browserOnce   sync.Once
+	browserCtx    context.Context
+	browserCancel context.CancelFunc
+	browserErr    error
 }
 
 // AuthState carries authentication context for verification.
@@ -64,13 +70,14 @@ func NewVerifier(ctx context.Context, timeout time.Duration) (*Verifier, error) 
 	allocCtx, allocCancel := allocopts.NewExecAllocator(ctx, allocopts.StandardHeadlessOptions...)
 
 	tmpDir := filepath.Join(os.TempDir(), "xsscan-screenshots")
-	os.MkdirAll(tmpDir, 0755)
+	screenshotErr := os.MkdirAll(tmpDir, 0755)
 
 	return &Verifier{
 		allocCtx:      allocCtx,
 		allocCancel:   allocCancel,
 		timeout:       timeout,
 		screenshotDir: tmpDir,
+		screenshotErr: screenshotErr,
 	}, nil
 }
 
@@ -80,12 +87,17 @@ func NewVerifierWithAuth(ctx context.Context, timeout time.Duration, auth *AuthS
 	if err != nil {
 		return nil, err
 	}
-	v.auth = auth
+	if auth != nil {
+		v.auth = &AuthState{Cookies: request.CloneCookies(auth.Cookies)}
+	}
 	return v, nil
 }
 
 // Close terminates the browser and releases resources.
 func (v *Verifier) Close() error {
+	if v.browserCancel != nil {
+		v.browserCancel()
+	}
 	v.allocCancel()
 	return nil
 }
@@ -173,13 +185,32 @@ func (v *Verifier) runBrowserCheck(ctx context.Context, navURL string, result *E
 }
 
 func (v *Verifier) runBrowserCheckMatching(ctx context.Context, navURL string, result *ExecutionResult, message string, rewrites ...allocopts.RequestRewrite) (out *ExecutionResult, resultErr error) {
-	tabCtx, tabCancel, diagnostics := allocopts.NewTabContext(v.allocCtx)
-	defer tabCancel()
+	v.browserOnce.Do(func() {
+		v.browserCtx, v.browserCancel, _ = allocopts.NewTabContext(v.allocCtx)
+		timer := time.AfterFunc(v.timeout, v.browserCancel)
+		defer timer.Stop()
+		stop := context.AfterFunc(ctx, v.browserCancel)
+		defer stop()
+		v.browserErr = chromedp.Run(v.browserCtx)
+	})
+	if v.browserErr != nil {
+		return result, fmt.Errorf("browser startup: %w", v.browserErr)
+	}
+	tabCtx, tabCancel, diagnostics, setupErr := allocopts.NewIsolatedTabContext(ctx, v.browserCtx, v.timeout)
+	if setupErr != nil {
+		return result, fmt.Errorf("browser tab: %w", setupErr)
+	}
 	defer func() {
+		tabCancel()
 		if err := diagnostics.Err(); err != nil {
 			result.Executed = false
 			result.Confidence = 0
 			result.LoadError = err.Error()
+			out = result
+			resultErr = errors.Join(resultErr, err)
+		}
+		if err := diagnostics.CleanupErr(); err != nil {
+			result.ConsoleErrors = append(result.ConsoleErrors, err.Error())
 			out = result
 			resultErr = errors.Join(resultErr, err)
 		}
@@ -194,13 +225,15 @@ func (v *Verifier) runBrowserCheckMatching(ctx context.Context, navURL string, r
 	// survive document changes and detect synchronous as well as async dialogs.
 	dialogDetected := make(chan dialogInfo, 1)
 	var consoleErrors []string
-	v.installConsoleHandler(tctx, &consoleErrors, dialogDetected, message)
+	stopDialogs := v.installConsoleHandler(tctx, cancel, &consoleErrors, dialogDetected, message)
+	defer stopDialogs()
 	var rewrite allocopts.RequestRewrite
 	if len(rewrites) > 0 {
 		rewrite = rewrites[0]
 	}
 	guard, policy := allocopts.GuardRequests(navURL, cancel, rewrite)
-	if err := chromedp.Run(tctx, policy); err != nil {
+	defer guard.Close()
+	if err := chromedp.Run(tctx, policy, emulation.SetFocusEmulationEnabled(true)); err != nil {
 		return result, fmt.Errorf("browser setup: %w", err)
 	}
 
@@ -216,56 +249,89 @@ func (v *Verifier) runBrowserCheckMatching(ctx context.Context, navURL string, r
 	err := chromedp.Run(tctx,
 		chromedp.Navigate(navURL),
 		chromedp.WaitReady("body", chromedp.ByQuery),
-		chromedp.Sleep(3*time.Second), // wait for async handlers (onload, setTimeout, etc.)
 	)
 	if err != nil {
 		loadErr = err
 		result.LoadError = err.Error()
 	}
 
+	var interactionScript string
 	if message != "" && loadErr == nil && len(dialogDetected) == 0 {
 		// Dispatch only to handlers carrying this exact candidate token; no click,
 		// form submission, or direct evaluation of submitted payload source.
 		encoded, _ := json.Marshal(message)
-		script := fmt.Sprintf(`(() => {
+		interactionScript = fmt.Sprintf(`(() => {
     const token=%s; let actions=[]; let count=0;
     for(const el of document.querySelectorAll('[onfocus],[onmouseover]')) {
       const focus=(el.getAttribute('onfocus')||'').includes(token);
       const hover=(el.getAttribute('onmouseover')||'').includes(token);
       if(!focus && !hover) continue;
       if(count++ >= 16) break;
-      if(focus) {el.focus();actions.push('focus');}
+      if(focus) {if(document.activeElement===el)el.blur();el.focus();actions.push('focus');}
       if(hover) {el.dispatchEvent(new MouseEvent('mouseover',{bubbles:true}));actions.push('synthetic mouseover');}
     }
     return [...new Set(actions)].join(', ');
   })()`, encoded)
-		if err := chromedp.Run(tctx, chromedp.Evaluate(script, &result.Interaction), chromedp.Sleep(100*time.Millisecond)); err != nil {
+		if err := chromedp.Run(tctx, chromedp.Evaluate(interactionScript, &result.Interaction)); err != nil {
 			loadErr = err
 			result.LoadError = err.Error()
 		}
 	}
 
 	// Check if a dialog was detected
-	select {
-	case d := <-dialogDetected:
-		result.Executed = true
-		result.DialogType = d.dialogType
-		result.DialogMessage = d.message
-		result.Confidence = 0.95
-	case <-time.After(100 * time.Millisecond):
-		// No dialog detected
+	if loadErr == nil {
+		select {
+		case d := <-dialogDetected:
+			result.Executed = true
+			result.DialogType = d.dialogType
+			result.DialogMessage = d.message
+			result.Confidence = 0.95
+		case <-time.After(3 * time.Second):
+			// Preserve the late-handler check for applications that create inputs
+			// asynchronously, while immediate execution no longer waits this long.
+			if interactionScript != "" {
+				if err := chromedp.Run(tctx, chromedp.Evaluate(interactionScript, &result.Interaction)); err != nil {
+					loadErr = err
+					result.LoadError = err.Error()
+				}
+				select {
+				case d := <-dialogDetected:
+					result.Executed = true
+					result.DialogType = d.dialogType
+					result.DialogMessage = d.message
+					result.Confidence = .95
+				case <-time.After(100 * time.Millisecond):
+				case <-tctx.Done():
+					loadErr = tctx.Err()
+					result.LoadError = loadErr.Error()
+				}
+			}
+		case <-tctx.Done():
+			if loadErr == nil {
+				loadErr = tctx.Err()
+				result.LoadError = loadErr.Error()
+			}
+		}
 	}
 
 	result.ConsoleErrors = v.consoleLoad(&consoleErrors)
 
 	// Capture screenshot if execution was detected
 	if result.Executed && result.Confidence >= 0.9 {
-		screenshotPath := filepath.Join(v.screenshotDir,
-			fmt.Sprintf("xsscan-proof-%d.png", time.Now().UnixNano()))
-		var buf []byte
-		if err := chromedp.Run(tctx, chromedp.CaptureScreenshot(&buf)); err == nil {
-			if err := os.WriteFile(screenshotPath, buf, 0600); err == nil {
-				result.ScreenshotPath = screenshotPath
+		if v.screenshotErr != nil {
+			result.ConsoleErrors = append(result.ConsoleErrors, "screenshot directory: "+v.screenshotErr.Error())
+		} else {
+			screenshotPath := filepath.Join(v.screenshotDir,
+				fmt.Sprintf("xsscan-proof-%d.png", time.Now().UnixNano()))
+			var buf []byte
+			if err := chromedp.Run(tctx, chromedp.CaptureScreenshot(&buf)); err == nil {
+				if err := os.WriteFile(screenshotPath, buf, 0600); err == nil {
+					result.ScreenshotPath = screenshotPath
+				} else {
+					result.ConsoleErrors = append(result.ConsoleErrors, "save screenshot: "+err.Error())
+				}
+			} else {
+				result.ConsoleErrors = append(result.ConsoleErrors, "capture screenshot: "+err.Error())
 			}
 		}
 	}
@@ -273,6 +339,7 @@ func (v *Verifier) runBrowserCheckMatching(ctx context.Context, navURL string, r
 	if policyErr := guard.Err(); policyErr != nil {
 		result.Executed = false
 		result.Confidence = 0
+		result.LoadError = policyErr.Error()
 		return result, policyErr
 	}
 	if loadErr != nil {
@@ -291,24 +358,23 @@ type dialogInfo struct {
 }
 
 // installConsoleHandler captures JavaScript console errors.
-func (v *Verifier) installConsoleHandler(ctx context.Context, errors *[]string, detected chan<- dialogInfo, expected ...string) {
-	chromedp.ListenTarget(ctx, func(ev interface{}) {
-		if e, ok := ev.(*page.EventJavascriptDialogOpening); ok {
-			matched := len(expected) == 0 || expected[0] == "" || e.Message == expected[0]
-			if matched && (e.Type == page.DialogTypeAlert || e.Type == page.DialogTypeConfirm || e.Type == page.DialogTypePrompt) {
-				select {
-				case detected <- dialogInfo{dialogType: string(e.Type), message: e.Message}:
-				default:
-				}
+func (v *Verifier) installConsoleHandler(ctx context.Context, cancel context.CancelFunc, errors *[]string, detected chan<- dialogInfo, expected ...string) func() {
+	return allocopts.ListenDialogs(ctx, cancel, true, func(e *page.EventJavascriptDialogOpening) {
+		matched := len(expected) == 0 || expected[0] == "" || e.Message == expected[0]
+		if matched && (e.Type == page.DialogTypeAlert || e.Type == page.DialogTypeConfirm || e.Type == page.DialogTypePrompt) {
+			select {
+			case detected <- dialogInfo{dialogType: string(e.Type), message: e.Message}:
+			default:
 			}
-			// Auto-dismiss any real dialogs
-			go func() {
-				chromedp.Run(ctx, page.HandleJavaScriptDialog(true))
-			}()
-			v.consoleMu.Lock()
-			*errors = append(*errors, fmt.Sprintf("JS dialog: %s", e.Message))
-			v.consoleMu.Unlock()
 		}
+		v.consoleMu.Lock()
+		if len(*errors) < 100 {
+			message := e.Message[:min(len(e.Message), 1024)]
+			*errors = append(*errors, fmt.Sprintf("JS dialog: %s", message))
+		} else if len(*errors) == 100 {
+			*errors = append(*errors, "additional browser diagnostics omitted")
+		}
+		v.consoleMu.Unlock()
 	})
 }
 

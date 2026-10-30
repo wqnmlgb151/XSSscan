@@ -18,6 +18,9 @@ type countedTransport struct {
 
 func (t countedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	atomic.AddInt64(t.count, 1)
+	if trace := traceFrom(req.Context()); trace != nil {
+		return trace.roundTrip(req, t.base)
+	}
 	return t.base.RoundTrip(req)
 }
 
@@ -32,6 +35,7 @@ func (e *Engine) Run(ctx context.Context, target model.Target) (*model.ScanResul
 		return &model.ScanResult{Target: target.URL, Stats: model.ScanStats{Status: model.ScanCanceled, Issues: []model.ScanIssue{{Target: target.URL, Stage: "queue", Message: ctx.Err().Error()}}}}, ctx.Err()
 	}
 	start := time.Now()
+	e.observations.reset()
 	atomic.StoreInt64(&e.payloadsSent, 0)
 	atomic.StoreInt64(&e.requestsSent, 0)
 	atomic.StoreInt64(&e.succeeded, 0)
@@ -49,6 +53,7 @@ func (e *Engine) Run(ctx context.Context, target model.Target) (*model.ScanResul
 	e.mutator.Store(mutator)
 	e.issueMu.Lock()
 	e.runIssues = nil
+	e.runCoverage = nil
 	e.firstError = nil
 	e.runTarget = target.URL
 	e.issueMu.Unlock()
@@ -64,6 +69,7 @@ func (e *Engine) Run(ctx context.Context, target model.Target) (*model.ScanResul
 	}
 	e.issueMu.Lock()
 	result.Stats.Issues = append([]model.ScanIssue(nil), e.runIssues...)
+	result.Stats.Coverage = append([]model.CheckCoverage(nil), e.runCoverage...)
 	if err == nil && e.firstError != nil {
 		err = fmt.Errorf("scan incomplete: %w", e.firstError)
 	}
@@ -92,6 +98,13 @@ func (e *Engine) Run(ctx context.Context, target model.Target) (*model.ScanResul
 	return result, err
 }
 
+func (e *Engine) recordCoverage(coverage model.CheckCoverage) {
+	e.issueMu.Lock()
+	coverage.Target = e.runTarget
+	e.runCoverage = append(e.runCoverage, coverage)
+	e.issueMu.Unlock()
+}
+
 func (e *Engine) recordRunError(stage string, err error) {
 	if err == nil {
 		return
@@ -101,6 +114,11 @@ func (e *Engine) recordRunError(stage string, err error) {
 	defer e.issueMu.Unlock()
 	if e.firstError == nil {
 		e.firstError = err
+	}
+	for _, issue := range e.runIssues {
+		if issue.Stage == stage && issue.Message == err.Error() {
+			return
+		}
 	}
 	if len(e.runIssues) < 100 {
 		e.runIssues = append(e.runIssues, model.ScanIssue{Target: e.runTarget, Stage: stage, Message: err.Error()})

@@ -14,6 +14,7 @@ import (
 	xctx "github.com/xsscan/xsscan/pkg/context"
 	"github.com/xsscan/xsscan/pkg/execverify"
 	"github.com/xsscan/xsscan/pkg/httpclient"
+	allocopts "github.com/xsscan/xsscan/pkg/internal/chromedp"
 	"github.com/xsscan/xsscan/pkg/internal/request"
 	"github.com/xsscan/xsscan/pkg/model"
 	"github.com/xsscan/xsscan/pkg/payload"
@@ -56,18 +57,39 @@ func (s *Scanner) fetchObservation(ctx context.Context, rawURL string, target mo
 
 // pollObservations preserves the exact response being assessed and partial errors.
 // At most four trigger requests run concurrently per injection.
-func (s *Scanner) pollObservations(ctx context.Context, urls []string, target model.Target, needle string) ([]*triggerObservation, error) {
+//
+// Polling the whole round window rather than stopping at the first round that shows the
+// marker is what keeps the outcome independent of trigger-page ordering. Trigger URLs are
+// commonly a configuration or edit page next to the page that actually renders stored
+// content, and they become ready at different times; returning as soon as one page shows
+// the value ends the observation while a slower page is still about to render it. The
+// budget is unchanged — a round that shows nothing still runs all MaxPolls rounds — and
+// only rounds still lacking evidence are polled, so a page that has already displayed the
+// marker is not re-fetched.
+func (s *Scanner) pollObservations(ctx context.Context, urls []string, target model.Target, needle, stage string) ([]*triggerObservation, error) {
 	if needle == "" {
 		return nil, fmt.Errorf("empty observation marker")
 	}
 	var problems []error
+	completed, total := 0, len(urls)*s.config.MaxPolls
+	model.ReportProgress(ctx, stage, completed, total)
+	// Evidence is accumulated per trigger page and kept across rounds, so a page that
+	// displayed the marker early is still reported after a later page displays it too.
+	var evidence []*triggerObservation
+	shown := make(map[string]bool, len(urls))
+	pending := append([]string(nil), urls...)
 	for poll := 0; poll < s.config.MaxPolls; poll++ {
+		if len(pending) == 0 {
+			// Every trigger page has displayed the marker; further rounds would only
+			// re-fetch pages that already answered.
+			break
+		}
 		if poll > 0 {
 			timer := time.NewTimer(s.config.PollingInterval)
 			select {
 			case <-ctx.Done():
 				timer.Stop()
-				return nil, errors.Join(append(problems, ctx.Err())...)
+				return evidence, errors.Join(append(problems, ctx.Err())...)
 			case <-timer.C:
 			}
 		}
@@ -75,14 +97,14 @@ func (s *Scanner) pollObservations(ctx context.Context, urls []string, target mo
 			observation *triggerObservation
 			err         error
 		}
-		jobs := make(chan string, len(urls))
-		results := make(chan outcome, len(urls))
-		for _, u := range urls {
+		jobs := make(chan string, len(pending))
+		results := make(chan outcome, len(pending))
+		for _, u := range pending {
 			jobs <- u
 		}
 		close(jobs)
 		var wg sync.WaitGroup
-		for i := 0; i < min(4, len(urls)); i++ {
+		for i := 0; i < min(4, len(pending)); i++ {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -98,25 +120,31 @@ func (s *Scanner) pollObservations(ctx context.Context, urls []string, target mo
 				}
 			}()
 		}
-		wg.Wait()
-		close(results)
-		var found []*triggerObservation
+		go func() { wg.Wait(); close(results) }()
 		for item := range results {
+			completed++
+			model.ReportProgress(ctx, stage, completed, total)
 			if item.err != nil {
 				problems = append(problems, item.err)
 			}
-			if item.observation != nil && strings.Contains(item.observation.body, needle) {
-				found = append(found, item.observation)
+			if item.observation != nil && strings.Contains(item.observation.body, needle) && !shown[item.observation.url] {
+				shown[item.observation.url] = true
+				evidence = append(evidence, item.observation)
 			}
 		}
 		if ctx.Err() != nil {
 			problems = append(problems, ctx.Err())
+			return evidence, errors.Join(problems...)
 		}
-		if len(found) > 0 || ctx.Err() != nil {
-			return found, errors.Join(problems...)
+		// Only pages that have not yet displayed the marker need another round.
+		pending = pending[:0]
+		for _, u := range urls {
+			if !shown[u] {
+				pending = append(pending, u)
+			}
 		}
 	}
-	return nil, errors.Join(problems...)
+	return evidence, errors.Join(problems...)
 }
 
 func storedPayloads(inj Injection, observations []*triggerObservation) []payload.Payload {
@@ -170,9 +198,14 @@ func (s *Scanner) confirmStored(ctx context.Context, inj Injection, urls []strin
 			defer browser.Close()
 		}
 	}
+	// Each trigger page is verified in its own right. A page that displays the payload
+	// says nothing about whether a different page does: they are separate display sites
+	// with separate output contexts, so an execution on one is not a verification of
+	// another. The loop therefore does not stop at the first success — it evaluates every
+	// page that produced evidence and keeps the strongest result.
 	var best *model.Finding
 	verifier := verify.NewVerifier()
-	for _, candidate := range candidates {
+	for index, candidate := range candidates {
 		if ctx.Err() != nil {
 			problems = append(problems, ctx.Err())
 			break
@@ -188,7 +221,10 @@ func (s *Scanner) confirmStored(ctx context.Context, inj Injection, urls []strin
 			problems = append(problems, err)
 			continue
 		}
-		responses, err := s.pollObservations(ctx, urls, inj.Target, message)
+		// Every round's observations are considered, not only the round this candidate
+		// happened to be confirmed in: a page that started displaying the payload later is
+		// still a page that displays it.
+		responses, err := s.pollObservations(ctx, urls, inj.Target, message, fmt.Sprintf("stored confirmation %s:%s candidate %d/%d", inj.Parameter.Type, inj.Parameter.Name, index+1, len(candidates)))
 		if err != nil {
 			problems = append(problems, err)
 		}
@@ -210,10 +246,15 @@ func (s *Scanner) confirmStored(ctx context.Context, inj Injection, urls []strin
 				target := inj.Target
 				target.URL = response.url
 				execution, err := browser.VerifyStoredPage(ctx, target, message)
+				finding.Evidence.VerificationPayload = value
 				if err != nil {
+					finding.Evidence.VerificationError = err.Error()
 					problems = append(problems, err)
 				}
-				if err == nil && execution != nil && execution.Executed {
+				if execution != nil {
+					finding.Evidence.Diagnostics = append([]string(nil), execution.ConsoleErrors...)
+				}
+				if (err == nil || allocopts.OnlyCleanupErrors(err)) && execution != nil && execution.Executed {
 					finding.ExecutionVerified = true
 					finding.ExecutionConfidence = execution.Confidence
 					finding.Confidence = min(1.0, finding.Confidence+verify.VerificationBoost)
@@ -223,17 +264,29 @@ func (s *Scanner) confirmStored(ctx context.Context, inj Injection, urls []strin
 					finding.Evidence.VerificationPayload = value
 					finding.Evidence.DialogMessage = execution.DialogMessage
 					finding.Description = fmt.Sprintf("Stored XSS in parameter '%s': candidate-specific %s executed on %s", inj.Parameter.Name, execution.DialogType, response.url)
-					return finding, errors.Join(problems...)
+				} else if err == nil {
+					finding.Confidence *= 0.85
 				}
-				finding.Confidence *= 0.85
 			}
-			if best == nil || finding.Confidence > best.Confidence {
+			// Keep the strongest result rather than the first one, so a display page that
+			// executed is preferred over one that merely rendered.
+			if best == nil || betterStoredFinding(finding, best) {
 				best = finding
 			}
 		}
-		if best != nil && !s.config.VerifyExecution {
-			return best, errors.Join(problems...)
-		}
 	}
 	return best, errors.Join(problems...)
+}
+
+// betterStoredFinding reports whether candidate should replace current as the reported
+// finding for one injection point.
+//
+// Execution outweighs everything: a verified execution is a direct observation, while a
+// structural match is an inference about the response. Confidence decides only among
+// results of the same standing.
+func betterStoredFinding(candidate, current *model.Finding) bool {
+	if candidate.ExecutionVerified != current.ExecutionVerified {
+		return candidate.ExecutionVerified
+	}
+	return candidate.Confidence > current.Confidence
 }

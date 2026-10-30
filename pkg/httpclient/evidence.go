@@ -2,7 +2,9 @@ package httpclient
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -63,6 +65,34 @@ func Captured(resp *http.Response) model.HTTPExchange {
 	}
 	c, _ := resp.Request.Context().Value(recordKey{}).(*Capture)
 	return c.Snapshot()
+}
+
+// CaptureSummary identifies the final captured request without copying response
+// bodies or encoding binary evidence. A truncated digest covers the saved prefix.
+type CaptureSummary struct {
+	RequestDigest      string
+	RequestTruncated   bool
+	ResponseIncomplete bool
+}
+
+func CapturedSummary(resp *http.Response) CaptureSummary {
+	if resp == nil || resp.Request == nil {
+		return CaptureSummary{}
+	}
+	c, _ := resp.Request.Context().Value(recordKey{}).(*Capture)
+	if c == nil {
+		return CaptureSummary{}
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := CaptureSummary{RequestTruncated: c.exchange.RequestTruncated, ResponseIncomplete: c.responseHead != "" && !c.complete}
+	if c.requestHead != "" {
+		h := sha256.New()
+		h.Write([]byte(c.requestHead))
+		h.Write(c.requestBody)
+		out.RequestDigest = hex.EncodeToString(h.Sum(nil))
+	}
+	return out
 }
 
 // WithCapture records after net/http adds cookie-jar values. Neither credentials

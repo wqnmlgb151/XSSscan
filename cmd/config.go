@@ -49,6 +49,7 @@ type FileConfig struct {
 	TargetsFile            string   `yaml:"targets-file"`
 	RandomUA               bool     `yaml:"random-ua"`
 	AdaptiveRate           bool     `yaml:"adaptive-rate"`
+	Strategy               string   `yaml:"strategy"`
 	PayloadPreset          string   `yaml:"payload-preset"`
 	PayloadWordlist        string   `yaml:"payload-wordlist"`
 	Headless               bool     `yaml:"headless"`
@@ -174,6 +175,7 @@ var configFlags = map[string]string{
 	"TargetsFile":            "targets-file",
 	"RandomUA":               "random-ua",
 	"AdaptiveRate":           "adaptive-rate",
+	"Strategy":               "strategy",
 	"PayloadPreset":          "payload-preset",
 	"PayloadWordlist":        "payload-wordlist",
 	"Headless":               "headless",

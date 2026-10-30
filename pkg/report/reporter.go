@@ -30,6 +30,32 @@ func NewReporter() *Reporter {
 }
 
 func (r *Reporter) Generate(data *ScanData, format OutputFormat) ([]byte, error) {
+	if data == nil {
+		return nil, fmt.Errorf("report data is nil")
+	}
+	copy := *data
+	copy.Issues = append([]model.ScanIssue(nil), data.Issues...)
+	if len(data.Coverage) == 0 {
+		for _, module := range data.Modules {
+			copy.Coverage = append(copy.Coverage, module.Coverage...)
+		}
+	}
+	for _, module := range data.Modules {
+		for _, issue := range module.Issues {
+			present := false
+			for _, existing := range copy.Issues {
+				present = present || (existing.Target == issue.Target && existing.Stage == issue.Stage && existing.Message == issue.Message)
+			}
+			if !present {
+				copy.Issues = append(copy.Issues, issue)
+			}
+		}
+	}
+	if copy.Errors == 0 {
+		copy.Errors = len(copy.Issues)
+	}
+	copy.Status = model.ResolveStatus(data.Status, data.Modules, copy.Issues, copy.Errors)
+	data = &copy
 	switch format {
 	case FormatJSON:
 		return json.MarshalIndent(data, "", "  ")
@@ -83,10 +109,18 @@ func (r *Reporter) generateMarkdown(data *ScanData) string {
 	fmt.Fprintf(&b, "**Findings:** %d\n\n", len(data.Findings))
 
 	fmt.Fprintf(&b, "**Status:** %s\n\n", reportStatus(data))
+	fmt.Fprintf(&b, "**Requests:** %d | **Payloads:** %d | **Errors:** %d\n\n", data.RequestsSent, data.PayloadsSent, data.Errors)
+	for _, coverage := range data.Coverage {
+		fmt.Fprintf(&b, "- Coverage: %s\n", text.EscapeMarkdown(coverage.String()))
+	}
+	for _, observation := range data.CrossModule {
+		fmt.Fprintf(&b, "\n- Observation: %s / %s / %s: %s\n", text.EscapeMarkdown(observation.Module), text.EscapeMarkdown(string(observation.Kind)), text.EscapeMarkdown(observation.Subject), text.EscapeMarkdown(observation.Detail))
+	}
+	b.WriteString("\n")
 	if len(data.Modules) > 0 {
-		b.WriteString("| Type | Target | Status | Reason |\n| --- | --- | --- | --- |\n")
+		b.WriteString("| Type | Target | Status | Requests | Candidates | Findings | Reason |\n| --- | --- | --- | --- | --- | --- | --- |\n")
 		for _, module := range data.Modules {
-			fmt.Fprintf(&b, "| %s | %s | %s | %s |\n", text.EscapeMarkdown(module.Type), text.EscapeMarkdown(module.Target), module.Status, text.EscapeMarkdown(module.Reason))
+			fmt.Fprintf(&b, "| %s | %s | %s | %d | %d | %d | %s |\n", text.EscapeMarkdown(module.Type), text.EscapeMarkdown(module.Target), module.Status, module.Requests, module.Candidates, module.Findings, text.EscapeMarkdown(module.Reason))
 		}
 		b.WriteString("\n")
 	}
@@ -207,8 +241,15 @@ details summary{cursor:pointer;color:#666;margin-top:8px}
 	fmt.Fprintf(&b, "<strong>Findings:</strong> %d</p>\n", len(data.Findings))
 
 	fmt.Fprintf(&b, "<p><strong>Status:</strong> %s</p>\n", html.EscapeString(string(reportStatus(data))))
+	fmt.Fprintf(&b, "<p>Requests: %d | Payloads: %d | Errors: %d</p>\n", data.RequestsSent, data.PayloadsSent, data.Errors)
+	for _, coverage := range data.Coverage {
+		fmt.Fprintf(&b, "<p>Coverage: %s</p>\n", html.EscapeString(coverage.String()))
+	}
+	for _, observation := range data.CrossModule {
+		fmt.Fprintf(&b, "<p>Observation: %s / %s / %s: %s</p>\n", html.EscapeString(observation.Module), html.EscapeString(string(observation.Kind)), html.EscapeString(observation.Subject), html.EscapeString(observation.Detail))
+	}
 	for _, module := range data.Modules {
-		fmt.Fprintf(&b, "<p>Module: %s / %s / %s — %s</p>\n", html.EscapeString(module.Type), html.EscapeString(module.Target), html.EscapeString(string(module.Status)), html.EscapeString(module.Reason))
+		fmt.Fprintf(&b, "<p>Module: %s / %s / %s — %s | Requests: %d | Candidates: %d | Findings: %d</p>\n", html.EscapeString(module.Type), html.EscapeString(module.Target), html.EscapeString(string(module.Status)), html.EscapeString(module.Reason), module.Requests, module.Candidates, module.Findings)
 	}
 	for _, issue := range data.Issues {
 		fmt.Fprintf(&b, "<p>%s / %s: %s</p>\n", html.EscapeString(issue.Target), html.EscapeString(issue.Stage), html.EscapeString(issue.Message))
@@ -246,6 +287,8 @@ details summary{cursor:pointer;color:#666;margin-top:8px}
 			var execBadge string
 			if f.ExecutionVerified {
 				execBadge = fmt.Sprintf(`<span class="badge badge-verified" title="Browser execution verified">✓ Browser Verified (%.0f%%)</span>`, f.ExecutionConfidence*100)
+			} else if f.Evidence.VerificationError != "" {
+				execBadge = `<span class="badge badge-partial">⚠ Execution Verification Incomplete</span>`
 			} else if f.ExecutionConfidence > 0 {
 				execBadge = `<span class="badge badge-partial" title="DOM mutation detected but not full execution">⚠ DOM Mutation Only</span>`
 			} else {
@@ -390,6 +433,7 @@ function showCopied() {
 
 // ScanData is the unified report data structure
 type ScanData struct {
+	Coverage      []model.CheckCoverage `json:"coverage,omitempty"`
 	SchemaVersion string
 	Modules       []model.ModuleResult
 	Status        model.ScanStatus
@@ -400,18 +444,27 @@ type ScanData struct {
 	Target        string
 	Duration      int64
 	WAF           *model.WAFInfo
-	Findings      []FindingData
+	// CrossModule carries the leads the modules produced for each other. It is reported
+	// so a reader can see what each module observed beyond its own verdict; it contains
+	// no conclusion about the target, by construction.
+	CrossModule []model.CrossModuleObservation `json:"cross_module,omitempty"`
+	Findings    []FindingData
 }
 
 type FindingData struct {
-	Evidence            model.Evidence
-	Type                string
-	Severity            string
-	Confidence          float64
-	URL                 string
-	Scheme              string // http or https, used for curl POC reconstruction
-	Parameter           string
-	ParamType           model.ParamType
+	Evidence   model.Evidence
+	Type       string
+	Severity   string
+	Confidence float64
+	URL        string
+	Scheme     string // http or https, used for curl POC reconstruction
+	Parameter  string
+	ParamType  model.ParamType
+	// ReflectionPath scopes this finding to one reflection position. It is
+	// recorded so a reviewer can tell whether two findings share an execution
+	// proof or were verified independently. Omitted when analysis could not
+	// anchor the position.
+	ReflectionPath      string
 	Payload             string
 	Payloads            []string // aggregated variants (same param + context)
 	Contexts            []string
@@ -426,7 +479,13 @@ type FindingData struct {
 
 // evidenceFields keeps candidate provenance visible in human-readable reports.
 func evidenceFields(e model.Evidence) [][2]string {
-	all := [][2]string{{"Analysis Method", e.AnalysisMethod}, {"Parse Error", e.ParseError}, {"Detection Method", e.DetectionMethod}, {"Trigger URL", e.TriggerURL}, {"Verification Payload", e.VerificationPayload}, {"Dialog Message", e.DialogMessage}, {"Interaction", e.Interaction}}
+	all := [][2]string{{"Analysis Method", e.AnalysisMethod}, {"Parse Error", e.ParseError}, {"Detection Method", e.DetectionMethod}, {"Trigger URL", e.TriggerURL}, {"Verification Payload", e.VerificationPayload}, {"Verification Error", e.VerificationError}, {"Dialog Message", e.DialogMessage}, {"Interaction", e.Interaction}}
+	for _, diagnostic := range e.Diagnostics {
+		all = append(all, [2]string{"Browser Diagnostic", diagnostic})
+	}
+	for _, flow := range e.DataFlow {
+		all = append(all, [2]string{"Data Flow (static hypothesis)", fmt.Sprintf("%s[%q] -> %s; script #%d; source bytes [%d,%d); sink bytes [%d,%d)", flow.Source, flow.Key, flow.Sink, flow.ScriptIndex, flow.SourceStart, flow.SourceEnd, flow.SinkStart, flow.SinkEnd)})
+	}
 	if e.HTTP != nil {
 		all = append(all, [2]string{"Initial Request", e.HTTP.InitialRequest}, [2]string{"Initial Request Base64", e.HTTP.InitialRequestBase64})
 		all = append(all, [2]string{"Request Base64", e.HTTP.RequestBase64}, [2]string{"Response Base64", e.HTTP.ResponseBase64})
@@ -448,7 +507,7 @@ func evidenceFields(e model.Evidence) [][2]string {
 
 // FromScanResult converts a model.ScanResult to report.ScanData
 func FromScanResult(result *model.ScanResult, durationMs int64) *ScanData {
-	scanData := &ScanData{SchemaVersion: "1.0", Modules: result.Stats.Modules, Target: result.Target, Duration: durationMs, WAF: result.Stats.WAF, Status: result.Stats.Status, Issues: result.Stats.Issues, RequestsSent: result.Stats.RequestsSent, PayloadsSent: result.Stats.PayloadsSent, Errors: result.Stats.Errors}
+	scanData := &ScanData{SchemaVersion: "1.1", Coverage: append([]model.CheckCoverage(nil), result.Stats.Coverage...), Modules: result.Stats.Modules, Target: result.Target, Duration: durationMs, WAF: result.Stats.WAF, Status: result.Stats.Status, Issues: result.Stats.Issues, RequestsSent: result.Stats.RequestsSent, PayloadsSent: result.Stats.PayloadsSent, Errors: result.Stats.Errors, CrossModule: result.Stats.CrossModule.Sorted()}
 	for _, f := range result.Findings {
 		// Extract scheme from the finding URL for accurate curl POC reconstruction
 		scheme := "http"
@@ -464,6 +523,7 @@ func FromScanResult(result *model.ScanResult, durationMs int64) *ScanData {
 			Scheme:              scheme,
 			Parameter:           f.Parameter,
 			ParamType:           f.ParamType,
+			ReflectionPath:      f.ReflectionPath,
 			Payload:             f.Payload,
 			Payloads:            f.Payloads,
 			Contexts:            f.Contexts,
@@ -602,10 +662,7 @@ func buildCurlCommand(rawReq, scheme string) string {
 }
 
 func reportStatus(data *ScanData) model.ScanStatus {
-	if data.Status == "" {
-		return model.ScanCompleted
-	}
-	return data.Status
+	return model.ResolveStatus(data.Status, data.Modules, data.Issues, data.Errors)
 }
 
 func httpFence(raw string) string {

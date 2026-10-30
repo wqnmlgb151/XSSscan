@@ -41,10 +41,12 @@ var htmlEscaper = strings.NewReplacer(
 var partialEncoder = strings.NewReplacer("<", "&lt;", ">", "&gt;")
 
 type VerificationResult struct {
-	Vulnerable bool           `json:"vulnerable"`
-	Confidence float64        `json:"confidence"`
-	Evidence   model.Evidence `json:"evidence"`
-	Reason     string         `json:"reason"`
+	Code       AssessmentCode  `json:"code"`
+	Facts      AssessmentFacts `json:"facts"`
+	Vulnerable bool            `json:"vulnerable"`
+	Confidence float64         `json:"confidence"`
+	Evidence   model.Evidence  `json:"evidence"`
+	Reason     string          `json:"reason"`
 }
 
 func NewVerifier() *Verifier {
@@ -63,15 +65,17 @@ func (v *Verifier) Verify(respBody, bodyLower string, p payload.Payload, injecti
 // VerifyWithThreshold uses a configurable minimum confidence threshold.
 // bodyLower is the pre-computed lowercase response body (computed once by the caller).
 func (v *Verifier) VerifyWithThreshold(respBody, bodyLower string, p payload.Payload, injection model.InjectionPoint, csp *analyze.CSPPolicy, wafResult WAFResult, threshold float64, contentTypes ...string) *VerificationResult {
-	result := &VerificationResult{Vulnerable: false, Confidence: 0}
+	result := &VerificationResult{Code: AssessmentUnknown, Facts: AssessmentFacts{ActualContext: context.ContextUnknown}}
 	if len(contentTypes) > 0 && contentTypes[0] != "" {
 		mediaType, _, err := mime.ParseMediaType(contentTypes[0])
 		if err != nil || (mediaType != "text/html" && mediaType != "application/xhtml+xml" && mediaType != "image/svg+xml") {
+			result.Code = AssessmentNonMarkup
 			result.Reason = "Response is not an executable markup document"
 			return result
 		}
 	}
 	if p.Value == "" {
+		result.Code = AssessmentEmptyPayload
 		result.Reason = "Empty payload"
 		return result
 	}
@@ -83,7 +87,9 @@ func (v *Verifier) VerifyWithThreshold(respBody, bodyLower string, p payload.Pay
 	if !verbatimFound {
 		partialFound = v.partialMatch(bodyLower, respBody, p.Value)
 	}
+	result.Facts.ReflectionChecked, result.Facts.ExactReflection, result.Facts.PartialReflection = true, verbatimFound, partialFound
 	if !verbatimFound && !partialFound {
+		result.Code = AssessmentNotReflected
 		result.Reason = "Payload not found in response"
 		return result
 	}
@@ -92,25 +98,33 @@ func (v *Verifier) VerifyWithThreshold(respBody, bodyLower string, p payload.Pay
 	// cannot execute scripts without a breakout prefix. Reporting them as vulnerable
 	// wastes hunter time with false positives.
 	if !checkContextBreak(p.Context, csp) {
+		result.Code = AssessmentContextIneligible
 		result.Reason = "Reflection in non-exploitable context"
 		return result
 	}
-	actualContext, contextConfirmed := v.responseContext(respBody, p)
+	callProbe := memoizedResponseJSCall(respBody, p.Value)
+	actualContext, contextConfirmed := v.responseContext(respBody, p, callProbe)
+	result.Facts.ActualContext, result.Facts.ContextConfirmed = actualContext, contextConfirmed
 	if !contextConfirmed {
-		_, result.Evidence.ParseError = responseJSCall(respBody, p.Value)
+		result.Code = AssessmentContextUnconfirmed
+		_, result.Evidence.ParseError = callProbe()
 		if result.Evidence.ParseError != "" {
-			result.Evidence.AnalysisMethod = "goja-ast"
+			result.Evidence.AnalysisMethod = jsanalysis.Method
 		}
 		result.Reason = "No exploitable reflection context in response"
 		return result
 	}
 
-	sanitized := v.detectSanitization(bodyLower, respBody, p.Value, verbatimFound)
-	syntaxValid := v.checkSyntaxValidity(respBody, p.Value)
-	if actualContext == context.ContextJSBlock {
-		syntaxValid = true
-	} // the response gate proved a parsed candidate call
+	sanitized, transformKind := v.detectSanitizationTransform(bodyLower, respBody, p.Value, verbatimFound)
+	// The response gate already proved a parsed candidate call in this case.
+	// Avoid tokenizing and parsing the same document just to prove it again.
+	syntaxValid := actualContext == context.ContextJSBlock
+	if !syntaxValid {
+		syntaxValid = v.checkSyntaxValidity(respBody, p.Value, callProbe)
+	}
 	lengthLimited := v.checkLengthLimited(respBody, p.Value)
+	result.Facts.SyntaxValid, result.Facts.SanitizationDetected, result.Facts.LengthLimited = syntaxValid, sanitized, lengthLimited
+	result.Facts.Transform = transformKind
 
 	contextBreak := checkContextBreak(p.Context, csp) && !sanitized
 
@@ -130,14 +144,18 @@ func (v *Verifier) VerifyWithThreshold(respBody, bodyLower string, p payload.Pay
 		Reflection: text.Snippet(respBody, p.Value, 80),
 		Context:    actualContext.String(),
 	}
-	if confirmed, _ := responseJSCall(respBody, p.Value); confirmed || actualContext == context.ContextJSBlock {
-		result.Evidence.AnalysisMethod = "goja-ast"
+	if actualContext == context.ContextJSBlock {
+		result.Evidence.AnalysisMethod = jsanalysis.Method
+	} else if confirmed, _ := callProbe(); confirmed {
+		result.Evidence.AnalysisMethod = jsanalysis.Method
 	}
 
 	if confidence >= threshold {
+		result.Code = AssessmentCandidate
 		result.Vulnerable = true
 		result.Reason = "Payload reflected in exploitable context"
 	} else {
+		result.Code = AssessmentBelowThreshold
 		result.Vulnerable = false
 		result.Reason = "Payload reflected but filtered or non-executable"
 	}
@@ -217,9 +235,13 @@ func checkContextBreak(ctxType context.ContextType, csp *analyze.CSPPolicy) bool
 	return true
 }
 
-func (v *Verifier) checkSyntaxValidity(body, p string) bool {
+func (v *Verifier) checkSyntaxValidity(body, p string, probes ...func() (bool, string)) bool {
 	if !strings.Contains(p, "<") || !strings.Contains(p, ">") {
-		if confirmed, _ := responseJSCall(body, p); confirmed {
+		callProbe := memoizedResponseJSCall(body, p)
+		if len(probes) > 0 {
+			callProbe = probes[0]
+		}
+		if confirmed, _ := callProbe(); confirmed {
 			return true
 		}
 		a := jsanalysis.Parse(body, false)
@@ -318,30 +340,59 @@ func (v *Verifier) checkLengthLimited(body, p string) bool {
 // detectSanitization checks if the payload was filtered/encoded by the server.
 // payloadFound indicates whether the payload was found verbatim in the body
 // (passed from caller to avoid redundant strings.Contains check).
-func (v *Verifier) detectSanitization(bodyLower, body, p string, payloadFound bool) bool {
+// TransformKind names the transformation a server applied to a payload it did not
+// reflect verbatim. It exists so callers can react to *which* change happened rather
+// than only that something changed: a server that entity-encodes angle brackets is
+// defeated differently from one that strips tags, and a bypass candidate that cannot
+// address the observed change is a wasted request.
+type TransformKind string
+
+const (
+	// TransformNone means no transformation was established. It is not evidence of
+	// safety, only that this check found nothing.
+	TransformNone TransformKind = ""
+	// TransformAngleEncoded covers HTML-entity encoding of angle brackets.
+	TransformAngleEncoded TransformKind = "angle_brackets_encoded"
+	// TransformFullEntity covers whole-payload HTML escaping.
+	TransformFullEntity TransformKind = "full_entity_encoded"
+	// TransformNumericEntity covers decimal/hex numeric character references.
+	TransformNumericEntity TransformKind = "numeric_entity_encoded"
+	// TransformTagStripped covers removal of tag syntax.
+	TransformTagStripped TransformKind = "tag_stripped"
+	// TransformEventHandlerRemoved covers removal of on* handler text.
+	TransformEventHandlerRemoved TransformKind = "event_handler_removed"
+)
+
+// detectSanitizationTransform classifies how the response differs from the payload,
+// returning both the existing boolean and the specific transformation.
+//
+// The boolean is kept for every existing caller; the kind is what the feedback loop
+// needs. Both come from the same checks on purpose — a second, parallel classifier
+// would be free to disagree with this one.
+func (v *Verifier) detectSanitizationTransform(bodyLower, body, p string, payloadFound bool) (bool, TransformKind) {
 	if payloadFound {
-		return false
+		return false, TransformNone
 	}
 
 	// Check partial encoding (e.g., only < and > were escaped — common server behavior)
 	if strings.ContainsAny(p, "<>") {
 		partial := partialEncoder.Replace(p)
 		if strings.Contains(body, partial) {
-			return true
+			return true, TransformAngleEncoded
 		}
 	}
 
 	// Check full HTML entity encoding
 	escaped := htmlEscaper.Replace(p)
 	if strings.Contains(body, escaped) {
-		return true
+		return true, TransformFullEntity
 	}
 
 	// Check numeric entity encoding (e.g., &#60; &#x3C; &#x3c;)
 	if strings.ContainsAny(p, "<>&\"'") {
 		numericEncoded := numericEntityEncode(p)
 		if strings.Contains(body, numericEncoded) {
-			return true
+			return true, TransformNumericEntity
 		}
 		// Check for payload-specific numeric entities NEAR where the payload was expected.
 		// Only flag sanitization if the entities actually decode to payload chars
@@ -355,23 +406,29 @@ func (v *Verifier) detectSanitization(bodyLower, body, p string, payloadFound bo
 		snEnd := min(len(body), payloadIdx+len(p)+300)
 		nearby := body[snStart:snEnd]
 		if !strings.Contains(nearby, p) && numericEntityEncodesPayload(nearby, p) {
-			return true
+			return true, TransformNumericEntity
 		}
 	}
 
 	// Check tag stripping
 	stripped := v.tagStripper.ReplaceAllString(p, "")
 	if stripped != p && strings.Contains(body, stripped) {
-		return true
+		return true, TransformTagStripped
 	}
 
 	// Check event handler filtering (e.g., onerror removed from payload)
 	handlerMatches := v.eventFilter.FindAllString(p, -1)
 	for _, handler := range handlerMatches {
 		if !strings.Contains(bodyLower, strings.ToLower(handler)) {
-			return true
+			return true, TransformEventHandlerRemoved
 		}
 	}
 
-	return false
+	return false, TransformNone
+}
+
+// detectSanitization keeps the long-standing boolean contract.
+func (v *Verifier) detectSanitization(bodyLower, body, p string, payloadFound bool) bool {
+	sanitized, _ := v.detectSanitizationTransform(bodyLower, body, p, payloadFound)
+	return sanitized
 }

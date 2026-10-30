@@ -24,13 +24,17 @@ var urlAttributeAssignRe = regexp.MustCompile(`(?i)\b(?:xlink:href|href|srcdoc|s
 // responseContext checks the returned document rather than trusting a template's
 // context. Token offsets tie newly created executable markup to the payload;
 // substituting a marker recovers the surrounding context for non-markup payloads.
-func (v *Verifier) responseContext(body string, p payload.Payload) (ctx.ContextType, bool) {
-	return v.responseContextAtDepth(body, p, 0)
+func (v *Verifier) responseContext(body string, p payload.Payload, probes ...func() (bool, string)) (ctx.ContextType, bool) {
+	return v.responseContextAtDepth(body, p, 0, probes...)
 }
 
-func (v *Verifier) responseContextAtDepth(body string, p payload.Payload, depth int) (ctx.ContextType, bool) {
+func (v *Verifier) responseContextAtDepth(body string, p payload.Payload, depth int, probes ...func() (bool, string)) (ctx.ContextType, bool) {
 	if depth >= 8 {
 		return ctx.ContextUnknown, false
+	}
+	callProbe := memoizedResponseJSCall(body, p.Value)
+	if len(probes) > 0 {
+		callProbe = probes[0]
 	}
 	var spans []reflectionSpan
 	for offset := 0; offset < len(body); {
@@ -53,6 +57,7 @@ func (v *Verifier) responseContextAtDepth(body string, p payload.Payload, depth 
 	position, spanIndex := 0, 0
 	inertSpans := make([]bool, len(spans))
 	inScript, scriptExecutable := false, false
+	scriptMode := jsanalysis.ScriptMode
 	rawTextElement, templateDepth := "", 0
 	marker := analyze.GenerateMarker()
 	for {
@@ -75,6 +80,7 @@ func (v *Verifier) responseContextAtDepth(body string, p payload.Payload, depth 
 		}
 		if tt == html.StartTagToken && token.Data == "script" {
 			inScript, scriptExecutable = true, executableScript(token) && !scriptHasSource(token)
+			scriptMode = scriptSourceMode(token)
 		}
 		for spanIndex < len(spans) && spans[spanIndex].end <= start {
 			spanIndex++
@@ -93,9 +99,9 @@ func (v *Verifier) responseContextAtDepth(body string, p payload.Payload, depth 
 				}
 			}
 			if templateDepth == 0 && (tt == html.StartTagToken || tt == html.SelfClosingTagToken) {
-				if token.Data == "script" && executableScript(token) && scriptHasSource(token) && start >= span.start && start < span.end {
-					return ctx.ContextHTMLBody, true // executable external-script markup; source not parsed here
-				}
+				// An injected external script element proves markup only. Its URL
+				// may be nonexistent, blocked or point to non-JavaScript content;
+				// it is not proof of an executable candidate in this response.
 				seenAttrs := make(map[string]bool)
 				for _, attr := range token.Attr {
 					if seenAttrs[attr.Key] {
@@ -145,7 +151,7 @@ func (v *Verifier) responseContextAtDepth(body string, p payload.Payload, depth 
 			}
 		}
 		if tt == html.TextToken && inScript && scriptExecutable && templateDepth == 0 && spanIndex < len(spans) && spans[spanIndex].start < end {
-			a := jsanalysis.Parse(raw, false)
+			a := jsanalysis.ParseWithMode(raw, scriptMode)
 			for j := spanIndex; j < len(spans) && spans[j].start < end; j++ {
 				s := spans[j]
 				if a.HasCallStartingIn(max(0, s.start-start), min(len(raw), s.end-start)) {
@@ -212,10 +218,10 @@ func (v *Verifier) responseContextAtDepth(body string, p payload.Payload, depth 
 			if !c.IsExploitable() || !responseContextCompatible(p, c) {
 				continue
 			}
-			if c.AnalysisMethod == "goja-ast" {
+			if c.AnalysisMethod == jsanalysis.Method {
 				// Replacing the payload recovers its original literal context,
 				// but only the unmodified response can prove a code breakout.
-				if confirmed, _ := responseJSCall(body, p.Value); !confirmed {
+				if confirmed, _ := callProbe(); !confirmed {
 					continue
 				}
 			}

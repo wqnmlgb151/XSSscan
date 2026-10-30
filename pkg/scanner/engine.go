@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -18,8 +19,8 @@ import (
 	"github.com/xsscan/xsscan/pkg/csrf"
 	"github.com/xsscan/xsscan/pkg/execverify"
 	"github.com/xsscan/xsscan/pkg/httpclient"
+	allocopts "github.com/xsscan/xsscan/pkg/internal/chromedp"
 	"github.com/xsscan/xsscan/pkg/internal/request"
-	"github.com/xsscan/xsscan/pkg/internal/text"
 	"github.com/xsscan/xsscan/pkg/model"
 	"github.com/xsscan/xsscan/pkg/payload"
 	"github.com/xsscan/xsscan/pkg/ssrfguard"
@@ -39,6 +40,7 @@ type Config struct {
 	ConfidenceMin   float64       // Minimum confidence threshold (default 0.60)
 	RandomUA        bool          // Randomize User-Agent per request
 	AdaptiveRate    bool          // Auto-adjust rate limit on 429 responses
+	Strategy        string        // "adaptive" (default) or "exhaustive" candidate scheduling
 	EnableProbe     bool          // Run context probes before payload scanning
 	VerifyExecution bool          // Browser-based execution verification
 	VerifyTimeout   time.Duration // Per-finding verification timeout
@@ -46,11 +48,28 @@ type Config struct {
 	CSRFFieldName   string        // CSRF token field name (auto-detected if empty)
 }
 
+// Adaptive is the default; exhaustive remains available for full-range comparison.
+const (
+	StrategyExhaustive = "exhaustive"
+	StrategyAdaptive   = "adaptive"
+)
+
+// Empty configuration selects adaptive. Unknown library values retain the
+// exhaustive fallback; the CLI rejects unknown values before constructing us.
+func (c Config) strategyOrDefault() string {
+	if c.Strategy == "" || c.Strategy == StrategyAdaptive {
+		return StrategyAdaptive
+	}
+	return StrategyExhaustive
+}
+
 type Engine struct {
+	observations observationLog
 	wafLogged    int32
 	runGate      chan struct{}
 	issueMu      sync.Mutex
 	runIssues    []model.ScanIssue
+	runCoverage  []model.CheckCoverage
 	firstError   error
 	runTarget    string
 	requestsSent int64
@@ -67,8 +86,12 @@ type Engine struct {
 	payloadsSent  int64
 	errors        int64
 	probeFiltered int
-	wafTracker    *WAFTracker
-	csrfExtractor *csrf.Extractor
+	// releasesDropped counts scheduler slot releases that arrived after the
+	// dispatcher had already returned. It is diagnostic only; a non-zero value
+	// on a completed scan means work finished after dispatch stopped.
+	releasesDropped int64
+	wafTracker      *WAFTracker
+	csrfExtractor   *csrf.Extractor
 
 	// csrfToken/fieldName are accessed concurrently from worker goroutines.
 	// atomic.Value avoids data races on the 403-refresh path without
@@ -140,6 +163,7 @@ func (e *Engine) run(ctx context.Context, target model.Target) (*model.ScanResul
 	result := &model.ScanResult{Target: target.URL}
 
 	e.logger.Info("Starting scan", zap.String("target", target.URL))
+	model.ReportProgress(ctx, "reflection analysis", 0, 0)
 
 	analysisResult, err := e.analyzer.Analyze(ctx, target)
 	if err != nil {
@@ -231,12 +255,21 @@ func (e *Engine) run(ctx context.Context, target model.Target) (*model.ScanResul
 	}
 
 	/* Build scan tasks */
+	model.ReportProgress(ctx, "context and filter probes", 0, 0)
 	type task struct {
 		injection model.InjectionPoint
 		payload   payload.Payload
+		// path is the reflection path this candidate was generated for. It is
+		// carried on the task so a worker can release the scheduler's in-flight
+		// slot for exactly that path.
+		path pathID
 	}
 
 	var tasks []task
+	// Every task sharing a bucket must have reliable attribution before a proof
+	// may stop that bucket. An unmatched fallback must not inherit another task's
+	// permission simply because it shares the same scheduling handle.
+	convergent := make(map[pathID]bool)
 	for _, injection := range analysisResult.InjectionPoints {
 		startMarker, endMarker := analyze.GenerateMarker(), analyze.GenerateMarker()
 		var profiles analyze.ContextFilters
@@ -246,13 +279,60 @@ func (e *Engine) run(ctx context.Context, target model.Target) (*model.ScanResul
 			e.recordRunError("filter-probe", err)
 		}
 		payloads := e.generatePayloads(injection, analysisResult.Frameworks)
-		payloads = pruneContextPayloads(payloads, profiles)
-		if e.config.MaxPayloads > 0 && len(payloads) > e.config.MaxPayloads {
-			payloads = payloads[:e.config.MaxPayloads]
+		generated := len(payloads)
+		payloads, emptiedContexts := pruneContextPayloads(payloads, profiles)
+		afterPrune := len(payloads)
+
+		/* A context the profile emptied is a coverage fact, not a silent no-op.
+		When it happens, widen once: accept payloads written for another context as
+		the safety net, since those are the only ones that do not presuppose the
+		capability this context has been shown not to have. Every such payload is
+		still judged on its own response, so this can only add attempts, not
+		conclusions. */
+		if len(emptiedContexts) > 0 {
+			widened := widenForEmptiedContexts(e.generatePayloads(injection, nil), profiles)
+			payloads = append(payloads, widened...)
+			e.logger.Info("Filter profile emptied a context; widening once as a safety net",
+				zap.String("param", injection.Parameter.Name),
+				zap.Strings("emptied_contexts", contextNames(emptiedContexts)),
+				zap.Int("safety_net_payloads", len(widened)),
+				zap.String("filter_profile", describeFilterProfiles(profiles)))
 		}
-		for _, p := range payloads {
-			tasks = append(tasks, task{injection, p})
+		payloads = limitPayloads(payloads, e.config.MaxPayloads)
+
+		// Attribute each payload to its reflection path. In the exhaustive
+		// strategy this only records identity; the adaptive strategy uses the
+		// same attribution to bound how much equivalent work is in flight.
+		attributed, attrErr := buildScheduledTasks(injection.Target, injection, payloads)
+		if attrErr != nil {
+			// Attribution failure must not drop work: fall back to one path for
+			// this injection point, without permission to stop early.
+			e.recordRunError("scheduling", attrErr)
+			_, inputID, positions := reflectionIdentitiesFor(injection.Target, injection)
+			id := primaryPathID(inputID, positions)
+			attributed = make([]scheduledTask, 0, len(payloads))
+			for i := range payloads {
+				attributed = append(attributed, scheduledTask{path: id, index: i})
+			}
 		}
+		for i, p := range payloads {
+			id := pathID("")
+			canConverge := false
+			if i < len(attributed) {
+				id = attributed[i].path
+				canConverge = attributed[i].canConverge
+			}
+			if previous, seen := convergent[id]; seen {
+				canConverge = canConverge && previous
+			}
+			convergent[id] = canConverge
+			tasks = append(tasks, task{injection: injection, payload: p, path: id})
+		}
+		e.logPayloadBreakdown(injection, payloads, payloadStage{
+			generated: generated,
+			pruned:    generated - afterPrune,
+			limited:   afterPrune - len(payloads),
+		}, profiles)
 	}
 
 	// Concurrent worker pool
@@ -261,29 +341,97 @@ func (e *Engine) run(ctx context.Context, target model.Target) (*model.ScanResul
 		numWorkers = 1
 	}
 
-	taskCh := make(chan task, numWorkers*2)
-	resultCh := make(chan *model.Finding, len(tasks))
+	/* Adaptive mode hands work out through the path scheduler; exhaustive mode keeps
+	the original prebuilt-slice dispatch untouched. Both feed the same workers, so
+	payload identity, scoring and reporting cannot diverge between strategies. */
+	strategy := e.config.strategyOrDefault()
+	adaptive := strategy == StrategyAdaptive
+	resultCh := make(chan *model.Finding, numWorkers*2)
+	var allFindings []model.Finding
+	collected := make(chan struct{})
+	go func() {
+		defer close(collected)
+		for finding := range resultCh {
+			allFindings = append(allFindings, *finding)
+		}
+	}()
+	// The worker queue is deliberately shallow. A deep queue lets the dispatcher
+	// park unaccounted candidates in it, which defeats the per-path in-flight bound:
+	// those parked candidates are not counted as in flight, so a proof arriving while
+	// they wait cannot stop them and they are sent anyway. Keeping the queue at one
+	// item means the bound the scheduler enforces is the bound that actually holds.
+	queueDepth := numWorkers * 2
+	if adaptive {
+		queueDepth = 1
+	}
+	taskCh := make(chan dispatchItem[task], queueDepth)
 	var wg sync.WaitGroup
+	var completed atomic.Int64
+	var started, failed, canceled atomic.Int64
+	model.ReportProgress(ctx, "reflected payloads", 0, len(tasks))
+
+	// Hold a path's slot through browser verification, so feedback arrives before
+	// its next candidate is dispatched. Independent paths retain concurrency.
+	provenPaths := newAtomicPathSet()
+	var sched *scheduler
+	var adaptiveChecks *adaptiveVerification
+	if adaptive && e.config.VerifyExecution {
+		adaptiveChecks = newAdaptiveVerification(ctx, e, target)
+		defer adaptiveChecks.Close()
+	}
+
+	// Each dispatchable candidate carries its own completion channel. The worker that
+	// runs the attempt closes it, which frees that path's in-flight slot — so a proof
+	// arriving while an attempt is queued still stops the path's remaining candidates.
+	// It is created for both strategies so the worker path stays identical; only the
+	// adaptive dispatcher uses it.
+	items := make([]dispatchItem[task], len(tasks))
+	for i, t := range tasks {
+		items[i] = dispatchItem[task]{item: t, path: t.path, done: make(chan struct{})}
+	}
 
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for t := range taskCh {
+			for entry := range taskCh {
+				t := entry.item
 				select {
 				case <-ctx.Done():
+					if entry.done != nil {
+						close(entry.done)
+					}
 					return
 				default:
 				}
+				started.Add(1)
 				finding, err := func() (finding *model.Finding, err error) {
 					defer func() {
 						if recovered := recover(); recovered != nil {
 							err = fmt.Errorf("payload worker panic: %v", recovered)
 						}
 					}()
-					return e.scanPayload(ctx, t.injection, t.payload, analysisResult.CSP, host)
+					finding, err = e.scanPayload(ctx, t.injection, t.payload, analysisResult.CSP, host, t.path)
+					if err == nil && finding != nil && adaptiveChecks != nil {
+						adaptiveChecks.check(ctx, finding)
+						if finding.ExecutionVerified && convergent[t.path] {
+							provenPaths.add(t.path)
+						}
+					}
+					return finding, err
 				}()
+				// Free the path's in-flight slot even when the attempt failed: a failed
+				// request must not block that path forever.
+				if entry.done != nil {
+					close(entry.done)
+				}
+				model.ReportProgress(ctx, "reflected payloads", int(completed.Add(1)), len(tasks))
 				if err != nil {
+					if ctx.Err() != nil {
+						canceled.Add(1)
+					} else {
+						failed.Add(1)
+					}
 					e.recordRunError("payload", err)
 					continue
 				}
@@ -295,26 +443,66 @@ func (e *Engine) run(ctx context.Context, target model.Target) (*model.ScanResul
 		}()
 	}
 
-dispatch:
-	for _, t := range tasks {
-		select {
-		case taskCh <- t:
-		case <-ctx.Done():
-			break dispatch
+	if adaptive {
+		var err error
+		sched, err = newSchedulerWithProof(scheduledTasksOf(tasks, func(t task) pathID { return t.path }), 1, provenPaths)
+		if err != nil {
+			close(taskCh)
+			wg.Wait()
+			close(resultCh)
+			<-collected
+			return nil, fmt.Errorf("adaptive scheduling failed: %w", err)
 		}
+		dispatchIn := make(chan dispatchItem[task], numWorkers*2)
+		producerDone := make(chan struct{})
+		go func() {
+			defer close(producerDone)
+			defer close(dispatchIn)
+			// Send in slice order: the dispatcher numbers arrivals, so order is what
+			// keeps its view of indices aligned with the scheduler's.
+			for _, item := range items {
+				select {
+				case dispatchIn <- item:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+		// Wait for the dispatcher to finish before closing the task channel, so no
+		// worker is left receiving from a closed channel it still owns work for.
+		<-startPathDispatcher(ctx, dispatchIn, taskCh, sched)
+		<-producerDone
+	} else {
+	dispatch:
+		for _, item := range items {
+			select {
+			case taskCh <- item:
+			case <-ctx.Done():
+				break dispatch
+			}
+		}
+		close(taskCh)
 	}
-	close(taskCh)
 
 	wg.Wait()
 	close(resultCh)
+	<-collected
+	e.recordCoverage(model.CheckCoverage{Stage: "reflected_candidates", PlannedKnown: true, Planned: len(tasks), Started: int(started.Load()), Completed: int(started.Load() - failed.Load() - canceled.Load()), Failed: int(failed.Load()), Canceled: int(canceled.Load()), NotStarted: len(tasks) - int(started.Load())})
+
+	// A proof is published before releasing its path's slot. Remaining counts are
+	// candidates actually avoided, not a percentage of checks completed.
+	if adaptive && sched != nil {
+		e.logger.Info("Adaptive scheduling",
+			zap.Int("paths", len(sched.stats())),
+			zap.Int("candidates", len(tasks)),
+			zap.Int("skipped_after_proof", sched.skippedByProof()),
+			zap.Int("proven_paths", provenPaths.len()),
+			zap.Int64("late_releases", atomic.LoadInt64(&e.releasesDropped)))
+	}
 
 	// Semantic dedup: collapse findings with the same attack vector class
 	// and context class, keeping the highest-confidence one. This replaces
 	// crude prefix-based dedup that lost diverse payload variants.
-	var allFindings []model.Finding
-	for f := range resultCh {
-		allFindings = append(allFindings, *f)
-	}
 	result.Findings = SemanticDedup(allFindings)
 
 	/* Browser execution verification: if enabled, inject each finding's
@@ -331,8 +519,12 @@ dispatch:
 	if e.config.VerifyExecution && len(result.Findings) > 0 {
 		e.logger.Info("Starting execution verification",
 			zap.Int("findings", len(result.Findings)))
-		authState := buildAuthState(target)
-		result.Findings = e.verifyFindingsWithAuth(ctx, result.Findings, authState, target)
+		if adaptiveChecks != nil {
+			result.Findings = adaptiveChecks.finish(allFindings)
+		} else {
+			authState := buildAuthState(target)
+			result.Findings = e.verifyGroupedFindings(ctx, allFindings, authState, target)
+		}
 	}
 
 	// Aggregate same-param same-context findings into single entries with
@@ -383,7 +575,18 @@ func prunePayloads(payloads []payload.Payload, profile *analyze.FilterProfile) [
 		out = append(out, p)
 	}
 	if len(out) == 0 {
-		return payloads // never prune everything — fall back to full set
+		/* Nothing survived the profile. Returning the whole set here was the old
+		behaviour and it was worse than useless: a server that encodes angle brackets
+		made every tag payload fail the check, the fallback then restored all of them,
+		and the scan spent its entire candidate budget on payloads the profile had
+		just established cannot execute in this context.
+
+		The fallback exists so a wrong profile cannot cost a finding, so a safety net
+		is kept — but a narrower one. It restores the payloads that do not depend on
+		the capability the profile reports as blocked, and only those. The ones that
+		do depend on it are precisely what the profile measured, so re-sending them
+		re-tests the same hypothesis at full cost. */
+		return filterByProfile(payloads, profile)
 	}
 	return out
 }
@@ -541,142 +744,37 @@ func buildAuthState(target model.Target) *execverify.AuthState {
 	return &execverify.AuthState{Cookies: cookies}
 }
 
-// verifyFindingsWithAuth runs browser-based execution verification on each finding.
-// Uses a worker pool (default 4 concurrent Chrome tabs) to parallelize
-// verification — sequential verification of N findings takes N × timeout,
-// concurrent verification takes ~N/workers × timeout.
-// Findings that fail verification are downgraded in confidence rather than
-// removed — the structural reflection is still valid information.
-//
-// The authState parameter carries cookies and auth headers from the original
-// scan target, allowing the browser verifier to test authenticated pages.
-func (e *Engine) verifyFindingsWithAuth(stdctx context.Context, findings []model.Finding, authState *execverify.AuthState, target model.Target) []model.Finding {
-	if len(findings) == 0 {
-		return findings
-	}
-
-	verifyTimeout := e.config.VerifyTimeout
-	if verifyTimeout <= 0 {
-		verifyTimeout = 15 * time.Second
-	}
-
-	var verifier *execverify.Verifier
-	var err error
-	if authState != nil {
-		verifier, err = execverify.NewVerifierWithAuth(stdctx, verifyTimeout, authState)
-	} else {
-		verifier, err = execverify.NewVerifier(stdctx, verifyTimeout)
-	}
-	if err != nil {
-		e.recordRunError("execution", err)
-		e.logger.Warn("Failed to create execution verifier (skipping verification)",
-			zap.Error(err))
-		return findings
-	}
-	defer verifier.Close()
-
-	// Single finding: skip worker pool overhead
-	if len(findings) == 1 {
-		return e.verifyOneFinding(verifier, stdctx, findings, target)
-	}
-
-	// Worker pool: min(4, len(findings)) concurrent Chrome tabs
-	numWorkers := 4
-	if len(findings) < numWorkers {
-		numWorkers = len(findings)
-	}
-
-	e.logger.Info("Starting concurrent execution verification",
-		zap.Int("findings", len(findings)),
-		zap.Int("workers", numWorkers),
-		zap.Bool("with_auth", authState != nil))
-
-	type indexedResult struct {
-		index   int
-		finding model.Finding
-	}
-
-	taskCh := make(chan int, numWorkers)
-	resultCh := make(chan indexedResult, len(findings))
-	var wg sync.WaitGroup
-
-	for w := 0; w < numWorkers; w++ {
-		wg.Add(1)
-		go func(workerID int) {
-			defer wg.Done()
-			for idx := range taskCh {
-				f := findings[idx]
-				e.logger.Info("Verifying execution",
-					zap.Int("worker", workerID),
-					zap.String("param", f.Parameter),
-					zap.String("payload", text.Truncate(f.Payload, 40)))
-
-				result, err := verifier.VerifyFinding(stdctx, f, target)
-				if err != nil {
-					if result != nil {
-						f.Evidence.VerificationPayload = result.VerificationPayload
-						f.Evidence.Interaction = result.Interaction
-					}
-					e.recordRunError("execution", err)
-					e.logger.Warn("Verification request failed (keeping finding)",
-						zap.Int("worker", workerID),
-						zap.String("param", f.Parameter),
-						zap.Error(err))
-					resultCh <- indexedResult{index: idx, finding: f}
-					continue
-				}
-
-				e.applyVerificationResult(&f, result)
-				resultCh <- indexedResult{index: idx, finding: f}
-			}
-		}(w)
-	}
-
-	// Dispatch all finding indices
-	for i := range findings {
-		taskCh <- i
-	}
-	close(taskCh)
-
-	wg.Wait()
-	close(resultCh)
-
-	// Reassemble in original order
-	verified := make([]model.Finding, len(findings))
-	for r := range resultCh {
-		verified[r.index] = r.finding
-	}
-
-	return verified
+// verifyFindingsWithAuth retains the internal adapter while using one grouped
+// verification path for scans and integration tests.
+func (e *Engine) verifyFindingsWithAuth(ctx context.Context, findings []model.Finding, auth *execverify.AuthState, target model.Target) []model.Finding {
+	return e.verifyGroupedFindings(ctx, findings, auth, target)
 }
 
-// verifyOneFinding handles a single finding without worker pool overhead.
-func (e *Engine) verifyOneFinding(verifier *execverify.Verifier, stdctx context.Context, findings []model.Finding, target model.Target) []model.Finding {
-	f := findings[0]
-	e.logger.Info("Verifying execution",
-		zap.String("param", f.Parameter),
-		zap.String("payload", text.Truncate(f.Payload, 40)))
-
-	result, err := verifier.VerifyFinding(stdctx, f, target)
-	if err != nil {
-		if result != nil {
-			f.Evidence.VerificationPayload = result.VerificationPayload
-			f.Evidence.Interaction = result.Interaction
-		}
-		e.recordRunError("execution", err)
-		e.logger.Warn("Verification request failed (keeping finding)",
-			zap.String("param", f.Parameter),
-			zap.Error(err))
-		return []model.Finding{f}
+// applyVerificationError retains structural evidence without presenting a
+// browser transport/policy failure as a completed execution check.
+func (e *Engine) applyVerificationError(f *model.Finding, result *execverify.ExecutionResult, err error) {
+	if result != nil && result.Executed && allocopts.OnlyCleanupErrors(err) {
+		e.applyVerificationResult(f, result)
+		f.Evidence.VerificationError = err.Error()
+		return
 	}
-
-	e.applyVerificationResult(&f, result)
-	return []model.Finding{f}
+	f.ExecutionVerified = false
+	f.ExecutionConfidence = 0
+	f.ScreenshotPath = ""
+	f.Evidence.DialogMessage = ""
+	f.Evidence.VerificationError = err.Error()
+	if result != nil {
+		f.Evidence.Diagnostics = append([]string(nil), result.ConsoleErrors...)
+		f.Evidence.VerificationPayload = result.VerificationPayload
+		f.Evidence.Interaction = result.Interaction
+	}
 }
 
 // applyVerificationResult updates a finding based on browser verification result.
 // Extracted to shared helper used by both concurrent and single-finding paths.
 func (e *Engine) applyVerificationResult(f *model.Finding, result *execverify.ExecutionResult) {
+	f.Evidence.Diagnostics = append([]string(nil), result.ConsoleErrors...)
+	f.Evidence.VerificationError = ""
 	f.Evidence.VerificationPayload = result.VerificationPayload
 	f.Evidence.Interaction = result.Interaction
 	if result.Executed {
@@ -718,8 +816,8 @@ func (e *Engine) trackWAF(wafResult verify.WAFResult) {
 	}
 }
 
-func (e *Engine) scanPayload(ctx context.Context, injection model.InjectionPoint, p payload.Payload, csp *analyze.CSPPolicy, host string) (*model.Finding, error) {
-	finding, wafResult, err := e.doScanPayload(ctx, injection, p, csp, host)
+func (e *Engine) scanPayload(ctx context.Context, injection model.InjectionPoint, p payload.Payload, csp *analyze.CSPPolicy, host string, path pathID) (*model.Finding, error) {
+	finding, wafResult, attemptID, err := e.observePayload(ctx, injection, p, csp, host, 0, path)
 	if err != nil {
 		return nil, err
 	}
@@ -741,18 +839,47 @@ func (e *Engine) scanPayload(ctx context.Context, injection model.InjectionPoint
 		return finding, nil
 	}
 
+	/* Feedback-gated derivation.
+
+	Mutations are derived only when the attempt actually observed a filter: the
+	payload came back altered, truncated, or was refused outright. Absence of a
+	reflection is not evidence of filtering — a bypass variant still has to be
+	echoed back to be observable — so sending five variants for every
+	non-reflecting candidate was pure cost (see derivation.go).
+
+	The decision costs nothing; only acting on it spends requests. When no signal
+	justifies a derivation the reason is logged, so a reviewer can tell "no filter
+	to bypass" apart from "bypass not attempted". */
+	observed, retained := e.observations.recorded(attemptID)
+	decision := deriveAllowedFor(observed, retained, wafResult)
+	if !decision.mayDerive() {
+		e.logger.Debug("Bypass derivation skipped",
+			zap.String("param", injection.Parameter.Name),
+			zap.String("decision", describeDerivation(decision)))
+		return nil, nil
+	}
+
 	if mutator, _ := e.mutator.Load().(*payload.Mutator); mutator != nil {
 		wafName := ""
 		if wafResult.Detected {
 			wafName = wafResult.Name
 		}
-		mutations := mutator.MutateTargeted(p.Value, p.Context, wafName, 5)
+		// Ask for more candidates than the budget so the family filter has something
+		// to choose from, then narrow to the justified family within the budget.
+		mutations := selectDerivations(
+			mutator.MutateTargeted(p.Value, p.Context, wafName, maxDerivationsPerCandidate*3),
+			decision, maxDerivationsPerCandidate)
+		e.logger.Debug("Deriving bypass candidates",
+			zap.String("param", injection.Parameter.Name),
+			zap.String("decision", describeDerivation(decision)),
+			zap.Int("budget", decision.Budget),
+			zap.Int("candidates", len(mutations)))
 		for _, mut := range mutations {
 			mutatedPayload := p
 			mutatedPayload.Value = mut.Value
 			mutatedPayload.Desc = p.Desc + " (" + string(mut.Type) + ")"
 
-			mutFinding, mutWAF, mutErr := e.doScanPayload(ctx, injection, mutatedPayload, csp, host)
+			mutFinding, mutWAF, _, mutErr := e.observePayload(ctx, injection, mutatedPayload, csp, host, attemptID, path)
 			if mutErr != nil {
 				e.recordRunError("mutation", mutErr)
 				continue
@@ -779,6 +906,74 @@ func (e *Engine) scanPayload(ctx context.Context, injection model.InjectionPoint
 	}
 
 	return nil, nil
+}
+
+// maxDerivationsPerCandidate bounds how many bypass candidates one attempt may
+// spawn. The previous bound of five came from the mutator call site; it is kept so
+// this change alters *when* derivations happen, not how many may happen.
+const maxDerivationsPerCandidate = 5
+
+// payloadStage records how the generated candidates were narrowed before dispatch.
+// It makes the difference between "the generator is large" and "the budget cap is
+// binding" visible, which decides which of the two is worth changing.
+type payloadStage struct {
+	generated int
+	pruned    int
+	limited   int
+}
+
+// logPayloadBreakdown records where a parameter's candidate budget went.
+//
+// It exists to answer "what is actually costing requests?" with data rather than
+// assumption: the plan's request-reduction target cannot be met by tuning a
+// mechanism that turns out to be a small share of the total, so the split between
+// generated candidates, what pruning removed, and what the filter probe learned is
+// reported before any further optimisation is attempted.
+func (e *Engine) logPayloadBreakdown(injection model.InjectionPoint, payloads []payload.Payload, stage payloadStage, profiles analyze.ContextFilters) {
+	byType := make(map[payload.PayloadType]int, 4)
+	byContext := make(map[ctx.ContextType]int, 8)
+	for _, p := range payloads {
+		byType[p.Type]++
+		byContext[p.Context]++
+	}
+	e.logger.Debug("Candidate breakdown",
+		zap.String("param", injection.Parameter.Name),
+		zap.Int("generated", stage.generated),
+		zap.Int("pruned_by_filter_profile", stage.pruned),
+		zap.Int("dropped_by_max_payloads", stage.limited),
+		zap.Int("selected", len(payloads)),
+		zap.Int("reflection_contexts", len(injection.Contexts)),
+		zap.Any("by_type", byType),
+		zap.Int("contexts_in_budget", len(byContext)),
+		zap.String("filter_profile", describeFilterProfiles(profiles)))
+}
+
+// describeFilterProfiles renders what the per-parameter filter probe established.
+// It is a description of observed capability, not a safety verdict: "allows angle
+// brackets" means the probe's delimiters survived, nothing more.
+func describeFilterProfiles(profiles analyze.ContextFilters) string {
+	if len(profiles) == 0 {
+		return "none (no profile established; payloads were not pruned by it)"
+	}
+	parts := make([]string, 0, len(profiles))
+	for contextType, profile := range profiles {
+		if profile == nil {
+			continue
+		}
+		parts = append(parts, contextType.String()+":"+
+			"angle="+yesNo(profile.AllowsAngleBrackets())+
+			" dquote="+yesNo(profile.AllowsDoubleQuote())+
+			" squote="+yesNo(profile.AllowsSingleQuote()))
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, " ")
+}
+
+func yesNo(v bool) string {
+	if v {
+		return "ok"
+	}
+	return "blocked"
 }
 
 // maxRetries for transient failures (network errors, 5xx, 429).
@@ -811,6 +1006,7 @@ func (e *Engine) buildRequest(ctx context.Context, target model.Target) (*http.R
 // This is the network layer — all retry, backoff, 429, 403-refresh, and 5xx
 // handling lives here so the caller can focus on result interpretation.
 func (e *Engine) sendWithRetry(ctx context.Context, injection model.InjectionPoint, modifiedTarget model.Target, p payload.Payload, host string) (*http.Response, []byte, verify.WAFResult, error) {
+	markAttemptPhase(ctx, failurePolicy)
 	if err := ssrfguard.IsURLTargetAllowedContext(ctx, modifiedTarget.URL); err != nil {
 		return nil, nil, verify.WAFResult{}, fmt.Errorf("ssrf blocked: %w", err)
 	}
@@ -835,16 +1031,20 @@ func (e *Engine) sendWithRetry(ctx context.Context, injection model.InjectionPoi
 			}
 		}
 
+		markAttemptPhase(ctx, failureBuild)
 		req, err := e.buildRequest(ctx, modifiedTarget)
 		if err != nil {
 			return nil, nil, verify.WAFResult{}, err
 		}
 
+		markAttemptPhase(ctx, failureWait)
 		if err := e.throttle.Wait(ctx, host); err != nil {
 			return nil, nil, verify.WAFResult{}, err
 		}
 
 		atomic.AddInt64(&e.payloadsSent, 1)
+		markAttemptPhase(ctx, failureTransport)
+		markPayloadSend(ctx)
 		resp, lastErr = e.client.Do(req)
 		if lastErr != nil {
 			e.logger.Debug("request failed", zap.Error(lastErr), zap.Int("attempt", attempt))
@@ -854,13 +1054,16 @@ func (e *Engine) sendWithRetry(ctx context.Context, injection model.InjectionPoi
 			continue
 		}
 
+		markAttemptPhase(ctx, failureRead)
 		body, lastErr = io.ReadAll(io.LimitReader(resp.Body, httpclient.MaxResponseSize))
 		resp.Body.Close()
 		if lastErr != nil {
 			e.logger.Debug("read response failed", zap.Error(lastErr), zap.Int("attempt", attempt))
+			markAttemptReadError(ctx)
 			continue
 		}
 
+		markAttemptPhase(ctx, failureStatus)
 		if resp.StatusCode == http.StatusTooManyRequests {
 			e.throttle.Report429Host(host)
 			retryAfter := resp.Header.Get("Retry-After")
@@ -931,6 +1134,11 @@ func (e *Engine) sendWithRetry(ctx context.Context, injection model.InjectionPoi
 // This is the interpretation layer — WAF detection, confidence scoring,
 // and finding construction live here.
 func (e *Engine) buildFindingFromResponse(resp *http.Response, body []byte, modifiedTarget model.Target, injection model.InjectionPoint, p payload.Payload, csp *analyze.CSPPolicy) (*model.Finding, verify.WAFResult) {
+	finding, waf, _ := e.assessResponse(resp, body, modifiedTarget, injection, p, csp, "")
+	return finding, waf
+}
+
+func (e *Engine) assessResponse(resp *http.Response, body []byte, modifiedTarget model.Target, injection model.InjectionPoint, p payload.Payload, csp *analyze.CSPPolicy, path pathID) (*model.Finding, verify.WAFResult, *verify.VerificationResult) {
 	bodyStr := string(body)
 	bodyLower := strings.ToLower(bodyStr)
 	wafResult := verify.DetectWAFWithLower(resp, bodyLower)
@@ -942,7 +1150,7 @@ func (e *Engine) buildFindingFromResponse(resp *http.Response, body []byte, modi
 		}
 	}
 	if !vResult.Vulnerable {
-		return nil, wafResult
+		return nil, wafResult, vResult
 	}
 
 	exchange := httpclient.Captured(resp)
@@ -959,19 +1167,20 @@ func (e *Engine) buildFindingFromResponse(resp *http.Response, body []byte, modi
 	vResult.Evidence.HTTP = &exchange
 
 	return &model.Finding{
-		ID:          generateID(),
-		Type:        model.ReflectedXSS,
-		Severity:    p.Severity,
-		Confidence:  vResult.Confidence,
-		URL:         modifiedTarget.URL,
-		Parameter:   injection.Parameter.Name,
-		ParamType:   injection.Parameter.Type,
-		Payload:     p.Value,
-		Contexts:    contextsToStrings(injection.Contexts),
-		Evidence:    vResult.Evidence,
-		Description: findingDescription(injection, p),
-		Remediation: "Sanitize and encode all user input. Implement CSP headers. Use framework escaping.",
-		CWE:         "CWE-79",
+		ID:             generateID(),
+		Type:           model.ReflectedXSS,
+		Severity:       p.Severity,
+		Confidence:     vResult.Confidence,
+		URL:            modifiedTarget.URL,
+		Parameter:      injection.Parameter.Name,
+		ParamType:      injection.Parameter.Type,
+		ReflectionPath: string(path),
+		Payload:        p.Value,
+		Contexts:       contextsToStrings(injection.Contexts),
+		Evidence:       vResult.Evidence,
+		Description:    findingDescription(injection, p),
+		Remediation:    "Sanitize and encode all user input. Implement CSP headers. Use framework escaping.",
+		CWE:            "CWE-79",
 		References: []string{
 			"https://owasp.org/www-community/attacks/xss/",
 			"https://portswigger.net/web-security/cross-site-scripting",
@@ -980,24 +1189,43 @@ func (e *Engine) buildFindingFromResponse(resp *http.Response, body []byte, modi
 		RawRequest:  rawReq,
 		RawResponse: rawResp,
 		CSPBypasses: convertCSPBypasses(csp),
-	}, wafResult
+	}, wafResult, vResult
 }
 
 // doScanPayload orchestrates payload injection, network request, and finding construction.
 // Thin composition layer: inject → sendWithRetry → buildFindingFromResponse.
 func (e *Engine) doScanPayload(ctx context.Context, injection model.InjectionPoint, p payload.Payload, csp *analyze.CSPPolicy, host string) (*model.Finding, verify.WAFResult, error) {
+	finding, waf, _, err := e.observePayload(ctx, injection, p, csp, host, 0, "")
+	return finding, waf, err
+}
+
+func (e *Engine) observePayload(ctx context.Context, injection model.InjectionPoint, p payload.Payload, csp *analyze.CSPPolicy, host string, parent uint64, path pathID) (finding *model.Finding, waf verify.WAFResult, id uint64, resultErr error) {
+	kind := "payload"
+	if parent != 0 {
+		kind = "mutation"
+	}
+	o := e.observations.begin(injection, p, parent, kind)
+	id = o.ID
+	trace, started := &attemptTrace{phase: failureBuild}, time.Now()
+	ctx = context.WithValue(ctx, attemptTraceKey{}, trace)
+	defer func() {
+		finishAttempt(&o, trace, started, resultErr)
+		e.observations.record(o)
+	}()
 	modifiedTarget, err := e.injectPayload(injection.Target, injection.Parameter, p.Value)
 	if err != nil {
-		return nil, verify.WAFResult{}, err
+		return nil, verify.WAFResult{}, id, err
 	}
 
 	resp, body, _, err := e.sendWithRetry(ctx, injection, modifiedTarget, p, host)
+	captureAttemptResponse(&o, resp, body, p.Value)
 	if err != nil {
-		return nil, verify.WAFResult{}, err
+		return nil, verify.WAFResult{}, id, err
 	}
 
-	finding, wafResult := e.buildFindingFromResponse(resp, body, modifiedTarget, injection, p, csp)
-	return finding, wafResult, nil
+	finding, wafResult, assessment := e.assessResponse(resp, body, modifiedTarget, injection, p, csp, path)
+	o.Code, o.Facts, o.ParseError = assessment.Code, assessment.Facts, assessment.Evidence.ParseError
+	return finding, wafResult, id, nil
 }
 
 // convertCSPBypasses converts analyze.CSPBypass entries to model.CSPBypass

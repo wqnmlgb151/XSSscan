@@ -8,7 +8,7 @@
 <p align="center">
 <img src="https://img.shields.io/badge/go-1.26+-00ADD8?logo=go" alt="Go">
 <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
-<img src="https://img.shields.io/badge/source-1.1.0-orange" alt="Source version">
+<img src="https://img.shields.io/badge/source-1.1.1-orange" alt="Source version">
 <img src="https://img.shields.io/badge/repo-github.com%2Fwqnmlgb151%2FXSSscan-lightgrey" alt="Repo">
 </p>
 
@@ -16,9 +16,9 @@
 
 ## [Releases](https://github.com/wqnmlgb151/XSSscan/releases)
 
-当前版本为 **[v1.1.0](https://github.com/wqnmlgb151/XSSscan/releases/tag/v1.1.0)**（2026-10-30）。[下载 Windows EXE](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.0/xsscan_1.1.0_windows_amd64.exe)，其他平台见[安装](#安装)。默认使用 `adaptive` 策略，调度反射型、DOM、存储型和盲 XSS 四类检测，可用 `--types` 选择检测类型。
+当前版本为 **[v1.1.1](https://github.com/wqnmlgb151/XSSscan/releases/tag/v1.1.1)**（2026-10-31）。[下载 Windows EXE](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.1/xsscan_1.1.1_windows_amd64.exe)，其他平台见[安装](#安装)。默认使用 `adaptive` 策略，调度反射型、DOM、存储型和盲 XSS 四类检测，可用 `--types` 选择检测类型。
 
-发布页的 **Assets** 提供六个预编译附件：Windows EXE/ZIP，以及 Linux、macOS 的 amd64/arm64 TAR.GZ。GitHub 自动提供的 Source code ZIP/TAR.GZ 为源码；直接运行请下载带 `xsscan_1.1.0_` 前缀的附件。压缩包包含程序、说明和许可证。
+发布页的 **Assets** 提供六个预编译附件：Windows EXE/ZIP，以及 Linux、macOS 的 amd64/arm64 TAR.GZ。GitHub 自动提供的 Source code ZIP/TAR.GZ 为源码；直接运行请下载带 `xsscan_1.1.1_` 前缀的附件。压缩包包含程序、说明和许可证。
 
 ## 目录
 
@@ -84,22 +84,22 @@
 
 ### 下载预编译版本
 
-从 [v1.1.0 Releases](https://github.com/wqnmlgb151/XSSscan/releases/tag/v1.1.0) 下载对应平台的文件。使用预编译程序无需安装 Go。
+从 [v1.1.1 Releases](https://github.com/wqnmlgb151/XSSscan/releases/tag/v1.1.1) 下载对应平台的文件。使用预编译程序无需安装 Go。
 
 | 平台 | 架构 | 下载 |
 | --- | --- | --- |
-| Windows | amd64（x64） | [EXE](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.0/xsscan_1.1.0_windows_amd64.exe) / [ZIP](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.0/xsscan_1.1.0_windows_amd64.zip) |
-| Linux | amd64（x64） | [TAR.GZ](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.0/xsscan_1.1.0_linux_amd64.tar.gz) |
-| Linux | arm64 | [TAR.GZ](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.0/xsscan_1.1.0_linux_arm64.tar.gz) |
-| macOS | amd64（Intel） | [TAR.GZ](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.0/xsscan_1.1.0_darwin_amd64.tar.gz) |
-| macOS | arm64（Apple Silicon） | [TAR.GZ](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.0/xsscan_1.1.0_darwin_arm64.tar.gz) |
+| Windows | amd64（x64） | [EXE](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.1/xsscan_1.1.1_windows_amd64.exe) / [ZIP](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.1/xsscan_1.1.1_windows_amd64.zip) |
+| Linux | amd64（x64） | [TAR.GZ](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.1/xsscan_1.1.1_linux_amd64.tar.gz) |
+| Linux | arm64 | [TAR.GZ](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.1/xsscan_1.1.1_linux_arm64.tar.gz) |
+| macOS | amd64（Intel） | [TAR.GZ](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.1/xsscan_1.1.1_darwin_amd64.tar.gz) |
+| macOS | arm64（Apple Silicon） | [TAR.GZ](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.1/xsscan_1.1.1_darwin_arm64.tar.gz) |
 
-ZIP/TAR.GZ 包含程序、`README.md`、`LICENSE` 和 `THIRD_PARTY_NOTICES.md`。Windows 下载后在 PowerShell 中运行：
+ZIP/TAR.GZ 包含程序、`README.md`、`LICENSE`、`THIRD_PARTY_NOTICES.md` 和 `BUILDINFO.json`。Windows 下载后在 PowerShell 中运行：
 
 ```powershell
 # 直接下载 EXE 后，在下载目录执行
-.\xsscan_1.1.0_windows_amd64.exe --version
-.\xsscan_1.1.0_windows_amd64.exe --help
+.\xsscan_1.1.1_windows_amd64.exe --version
+.\xsscan_1.1.1_windows_amd64.exe --help
 
 # 使用 ZIP 时，解压后运行包内的 xsscan.exe
 .\xsscan.exe --version
@@ -108,7 +108,7 @@ ZIP/TAR.GZ 包含程序、`README.md`、`LICENSE` 和 `THIRD_PARTY_NOTICES.md`�
 Linux/macOS 解压后运行包内的程序，例如 Linux amd64：
 
 ```bash
-tar -xzf xsscan_1.1.0_linux_amd64.tar.gz
+tar -xzf xsscan_1.1.1_linux_amd64.tar.gz
 ./xsscan --version
 ./xsscan --help
 ```
@@ -117,7 +117,7 @@ Windows amd64 已实际运行；其他平台产物由交叉编译生成，需在
 
 ### 从源码构建
 
-源码版本为 `1.1.0`。以下命令在当前源码目录中运行；版本参数只设置程序版本显示，不会下载或升级源码。
+源码版本为 `1.1.1`。以下命令在当前源码目录中运行；版本参数只设置程序版本显示，不会下载或升级源码。
 
 ```bash
 # 需要 Go 1.26+（推荐 Go 1.26.9）
@@ -130,14 +130,14 @@ make build
 ```bash
 git clone https://github.com/wqnmlgb151/XSSscan.git
 cd XSSscan
-git checkout v1.1.0
-make build VERSION=1.1.0
+git checkout v1.1.1
+make build VERSION=1.1.1
 ```
 
 Windows 没有 make 时，在当前源码目录直接构建 EXE：
 
 ```powershell
-go build -trimpath -ldflags "-s -w -X main.Version=1.1.0" -o xsscan.exe ./cmd
+go build -trimpath -ldflags "-s -w -X main.Version=1.1.1" -o xsscan.exe ./cmd
 .\xsscan.exe --version
 ```
 
@@ -864,6 +864,9 @@ make clean
 
 ## 发布验证
 
+v1.1.1 为版本与审计材料整理发布；当前验证记录随 Release 提供。v1.1.0 的完整回归记录保留如下，不能当作 1.1.1 重新运行的完整回归。
+
+
 v1.1.0 发布前检查（2026-10-30，Windows / Go 1.26.9）：
 
 | 检查 | 结果 |
@@ -917,6 +920,14 @@ v1.0.0-rc.1 的发布前检查（2026-10-10）：
 - 本地程序为根目录 `xsscan.exe`。GitHub 下载仍是上方历史 `v1.0.0-rc.1`，本轮未推送、未发布；Docker 未构建，未新增依赖漏洞数据库检查。
 
 ## 更新日志
+
+### v1.1.1 — 2026-10-31
+
+- 维护发布：统一 CLI、Makefile、Dockerfile、构建示例及下载链接的版本号为 1.1.1。
+- 归档 A 路线审计与本地合成基线，见 [审计报告](audit/2026-10-31/REPORT.md)；已知问题及建议顺序不表示已修复。
+- 不改变扫描算法、四类检测、CLI 参数或报告格式；报告 schema 保持 1.1。
+- 从提交源码的独立归档构建五个平台，包内 BUILDINFO.json 记录源码提交和二进制摘要，避免沿用旧的 dirty VCS 信息。
+
 
 ### v1.1.0 — 2026-10-30
 
@@ -981,7 +992,7 @@ v1.0.0-rc.1 的发布前检查（2026-10-10）：
 
 版本号遵循 `x.y.z` 格式：
 
-当前发布版本为 `1.1.0`；源码、程序版本和上方下载链接保持一致。
+当前发布版本为 `1.1.1`；源码、程序版本和上方下载链接保持一致。
 
 | 位 | 含义 |
 |----|------|
@@ -992,7 +1003,7 @@ v1.0.0-rc.1 的发布前检查（2026-10-10）：
 构建时通过 ldflags 注入版本：
 
 ```bash
-make build VERSION=1.1.0
+make build VERSION=1.1.1
 ```
 
 `--version` 输出当前构建版本。

@@ -1,0 +1,40 @@
+=== RUN   TestAuditCleanupExternallyClosedTarget
+    audit_cleanup_test.go:29: underlying chromedp.Cancel=No session with given id (-32602); helper protocol=<nil>; helper cleanup=<nil>
+    audit_cleanup_test.go:31: remaining private contexts=0 err=<nil>
+--- PASS: TestAuditCleanupExternallyClosedTarget (1.77s)
+=== RUN   TestGuardQueueSaturationCancelsWithoutBlocking
+--- PASS: TestGuardQueueSaturationCancelsWithoutBlocking (0.00s)
+=== RUN   TestCleanupDiagnosticsAreSeparateFromProtocolEvidence
+--- PASS: TestCleanupDiagnosticsAreSeparateFromProtocolEvidence (0.00s)
+=== RUN   TestIsolatedLifetimeFollowsCallerAndDisposesExactlyOnce
+--- PASS: TestIsolatedLifetimeFollowsCallerAndDisposesExactlyOnce (1.06s)
+PASS
+ok  	github.com/xsscan/xsscan/pkg/internal/chromedp	4.888s
+=== RUN   TestDefaultAdaptiveWaitsForProofAndPreservesIndependentParameters
+=== RUN   TestDefaultAdaptiveWaitsForProofAndPreservesIndependentParameters/strategy=
+=== RUN   TestDefaultAdaptiveWaitsForProofAndPreservesIndependentParameters/strategy=exhaustive
+--- PASS: TestDefaultAdaptiveWaitsForProofAndPreservesIndependentParameters (3.49s)
+    --- PASS: TestDefaultAdaptiveWaitsForProofAndPreservesIndependentParameters/strategy= (2.04s)
+    --- PASS: TestDefaultAdaptiveWaitsForProofAndPreservesIndependentParameters/strategy=exhaustive (1.45s)
+=== RUN   TestDefaultAdaptiveKeepsAmbiguousReflectionCandidates
+--- PASS: TestDefaultAdaptiveKeepsAmbiguousReflectionCandidates (1.91s)
+=== RUN   TestDefaultAdaptiveMixedFallbackDoesNotInheritProof
+--- PASS: TestDefaultAdaptiveMixedFallbackDoesNotInheritProof (1.55s)
+=== RUN   TestAdaptiveVerificationBoundedAndCancellationJoins
+--- PASS: TestAdaptiveVerificationBoundedAndCancellationJoins (0.00s)
+=== RUN   TestAdaptiveVerificationSetupPanicAndNilAreIncomplete
+=== RUN   TestAdaptiveVerificationSetupPanicAndNilAreIncomplete/false
+=== RUN   TestAdaptiveVerificationSetupPanicAndNilAreIncomplete/true
+--- PASS: TestAdaptiveVerificationSetupPanicAndNilAreIncomplete (0.01s)
+    --- PASS: TestAdaptiveVerificationSetupPanicAndNilAreIncomplete/false (0.00s)
+    --- PASS: TestAdaptiveVerificationSetupPanicAndNilAreIncomplete/true (0.00s)
+=== RUN   TestAdaptiveVerificationFailureSurvivesLaterProofAndCancellation
+--- PASS: TestAdaptiveVerificationFailureSurvivesLaterProofAndCancellation (0.00s)
+=== RUN   TestCleanupErrorPreservesObservedExecution
+--- PASS: TestCleanupErrorPreservesObservedExecution (0.00s)
+=== RUN   TestDispatcherCancellationWithMoreRelaysThanBuffer
+--- PASS: TestDispatcherCancellationWithMoreRelaysThanBuffer (0.00s)
+=== RUN   TestDispatcherDrainsProducerAfterPathProof
+--- PASS: TestDispatcherDrainsProducerAfterPathProof (0.05s)
+PASS
+ok  	github.com/xsscan/xsscan/pkg/scanner	8.479s

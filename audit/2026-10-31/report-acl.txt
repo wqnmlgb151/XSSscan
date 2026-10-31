@@ -1,0 +1,3 @@
+                                                                               BUILTIN\Administrators:(I)(F)
+                                                                               NT AUTHORITY\Authenticated Users:(I)(M)
+                                                                               BUILTIN\Users:(I)(RX)

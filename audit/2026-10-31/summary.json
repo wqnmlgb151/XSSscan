@@ -1,0 +1,270 @@
+{
+  "platform": "Windows-11-10.0.26300-SP0",
+  "python": "3.13.5",
+  "exe_sha256": "747719a2a08d31d1e6bc87751a088526e3cdcda639d73ef36ed20065296421ce",
+  "version": "xsscan version 1.1.0",
+  "fixture_origin": "http://127.0.0.1:24000",
+  "repeats": 3,
+  "summary": {
+    "safe/0/adaptive": {
+      "samples": 3,
+      "wall_median_s": 0.655714500000613,
+      "wall_min_s": 0.6418551000024308,
+      "wall_max_s": 0.6971860999983619,
+      "requests": [
+        3,
+        3,
+        3
+      ],
+      "payloads": [
+        0,
+        0,
+        0
+      ],
+      "verified": [
+        0,
+        0,
+        0
+      ],
+      "statuses": [
+        "completed",
+        "completed",
+        "completed"
+      ]
+    },
+    "safe/0/exhaustive": {
+      "samples": 3,
+      "wall_median_s": 0.6535908000005293,
+      "wall_min_s": 0.6364332999983162,
+      "wall_max_s": 0.6916970999991463,
+      "requests": [
+        3,
+        3,
+        3
+      ],
+      "payloads": [
+        0,
+        0,
+        0
+      ],
+      "verified": [
+        0,
+        0,
+        0
+      ],
+      "statuses": [
+        "completed",
+        "completed",
+        "completed"
+      ]
+    },
+    "vulnerable/0/adaptive": {
+      "samples": 3,
+      "wall_median_s": 1.8786952000009478,
+      "wall_min_s": 1.8689651999993657,
+      "wall_max_s": 1.9202273000009882,
+      "requests": [
+        4,
+        4,
+        4
+      ],
+      "payloads": [
+        1,
+        1,
+        1
+      ],
+      "verified": [
+        1,
+        1,
+        1
+      ],
+      "statuses": [
+        "completed",
+        "completed",
+        "completed"
+      ]
+    },
+    "vulnerable/0/exhaustive": {
+      "samples": 3,
+      "wall_median_s": 1.7736292000008689,
+      "wall_min_s": 1.6079640000025393,
+      "wall_max_s": 1.812040500000876,
+      "requests": [
+        7,
+        7,
+        7
+      ],
+      "payloads": [
+        4,
+        4,
+        4
+      ],
+      "verified": [
+        1,
+        1,
+        1
+      ],
+      "statuses": [
+        "completed",
+        "completed",
+        "completed"
+      ]
+    },
+    "vulnerable/50.0/adaptive": {
+      "samples": 3,
+      "wall_median_s": 2.1176515000006475,
+      "wall_min_s": 2.0955665999972553,
+      "wall_max_s": 2.368026700001792,
+      "requests": [
+        4,
+        4,
+        4
+      ],
+      "payloads": [
+        1,
+        1,
+        1
+      ],
+      "verified": [
+        1,
+        1,
+        1
+      ],
+      "statuses": [
+        "completed",
+        "completed",
+        "completed"
+      ]
+    },
+    "vulnerable/50.0/exhaustive": {
+      "samples": 3,
+      "wall_median_s": 2.1257710000027146,
+      "wall_min_s": 2.0714241999994556,
+      "wall_max_s": 2.217485500001203,
+      "requests": [
+        7,
+        7,
+        7
+      ],
+      "payloads": [
+        4,
+        4,
+        4
+      ],
+      "verified": [
+        1,
+        1,
+        1
+      ],
+      "statuses": [
+        "completed",
+        "completed",
+        "completed"
+      ]
+    },
+    "ambiguous/0/adaptive": {
+      "samples": 3,
+      "wall_median_s": 2.440046899999288,
+      "wall_min_s": 2.4345219999995606,
+      "wall_max_s": 2.5709424999986368,
+      "requests": [
+        7,
+        7,
+        7
+      ],
+      "payloads": [
+        4,
+        4,
+        4
+      ],
+      "verified": [
+        1,
+        1,
+        1
+      ],
+      "statuses": [
+        "completed",
+        "completed",
+        "completed"
+      ]
+    },
+    "ambiguous/0/exhaustive": {
+      "samples": 3,
+      "wall_median_s": 1.8206118000016431,
+      "wall_min_s": 1.8028338000003714,
+      "wall_max_s": 1.8630569000015385,
+      "requests": [
+        7,
+        7,
+        7
+      ],
+      "payloads": [
+        4,
+        4,
+        4
+      ],
+      "verified": [
+        1,
+        1,
+        1
+      ],
+      "statuses": [
+        "completed",
+        "completed",
+        "completed"
+      ]
+    },
+    "independent/0/adaptive": {
+      "samples": 3,
+      "wall_median_s": 2.0051808999996865,
+      "wall_min_s": 1.9689292000002752,
+      "wall_max_s": 2.0297198000007484,
+      "requests": [
+        6,
+        6,
+        6
+      ],
+      "payloads": [
+        2,
+        2,
+        2
+      ],
+      "verified": [
+        2,
+        2,
+        2
+      ],
+      "statuses": [
+        "completed",
+        "completed",
+        "completed"
+      ]
+    },
+    "independent/0/exhaustive": {
+      "samples": 3,
+      "wall_median_s": 2.0129135999995924,
+      "wall_min_s": 1.9693862999993144,
+      "wall_max_s": 2.0971010999965074,
+      "requests": [
+        12,
+        12,
+        12
+      ],
+      "payloads": [
+        8,
+        8,
+        8
+      ],
+      "verified": [
+        2,
+        2,
+        2
+      ],
+      "statuses": [
+        "completed",
+        "completed",
+        "completed"
+      ]
+    }
+  }
+}

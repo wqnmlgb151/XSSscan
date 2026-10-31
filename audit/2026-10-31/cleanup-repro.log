@@ -1,0 +1,6 @@
+=== RUN   TestAuditCleanupExternallyClosedTarget
+    audit_cleanup_test.go:37: underlying chromedp.Cancel=No session with given id (-32602); helper protocol=<nil>; helper cleanup=<nil>
+    audit_cleanup_test.go:39: remaining private contexts=0 err=<nil>
+--- PASS: TestAuditCleanupExternallyClosedTarget (1.79s)
+PASS
+ok  	github.com/xsscan/xsscan/pkg/internal/chromedp	4.452s

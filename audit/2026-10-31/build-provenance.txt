@@ -1,0 +1,37 @@
+./xsscan.exe: go1.26.9
+	path	github.com/xsscan/xsscan/cmd
+	mod	github.com/xsscan/xsscan	v0.9.11-0.20261010095321-ad26c2cf7dc7+dirty
+	dep	github.com/chromedp/cdproto	v0.0.0-20260714215040-dc233986426f	h1:0Z1zcSLEmnj2c2CmJYBqewtS6pxhB39bNWUSEUAWjgk=
+	dep	github.com/chromedp/chromedp	v0.16.0	h1:rOO4deOm4CbZgBCa8mD9g2rDyIoNs0BkgvNrlbp5ouk=
+	dep	github.com/chromedp/sysutil	v1.1.0	h1:PUFNv5EcprjqXZD9nJb9b/c9ibAbxiYo4exNWZyipwM=
+	dep	github.com/evanw/esbuild	v0.25.12	h1:7kIg7aG2++vhheW5YCzut1q1AjehYVQU752NcMuGVsw=
+	dep	github.com/fatih/color	v1.16.0	h1:zmkK9Ngbjj+K0yRhTVONQh1p/HknKYSlNT+vZCzyokM=
+	dep	github.com/go-json-experiment/json	v0.0.0-20260623181947-01eb4420fa68	h1:KZaTBSyshWX3MP5jukJcNSuXDQTO+rNpt0J564dX/eg=
+	dep	github.com/go-sourcemap/sourcemap	v2.1.4+incompatible	h1:a+iTbH5auLKxaNwQFg0B+TCYl6lbukKPc7b5x0n1s6Q=
+	dep	github.com/gobwas/httphead	v0.1.0	h1:exrUm0f4YX0L7EBwZHuCF4GDp8aJfVeBrlLQrs6NqWU=
+	dep	github.com/gobwas/pool	v0.2.1	h1:xfeeEhW7pwmX8nuLVlqbzVc7udMDrwetjEv+TZIz1og=
+	dep	github.com/gobwas/ws	v1.4.0	h1:CTaoG1tojrh4ucGPcoJFiAQUAsEWekEWvLy7GsVNqGs=
+	dep	github.com/grafana/sobek	v0.0.0-20261005111419-f56574604191	h1:mTgzsiI76vVdANF/nhiQIQecxO2x3B9KKkkZ3aJdaVo=
+	dep	github.com/inconshreveable/mousetrap	v1.1.0	h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=
+	dep	github.com/mattn/go-colorable	v0.1.13	h1:fFA4WZxdEF4tXPZVKMLwD8oUnCTTo08duU7wxecdEvA=
+	dep	github.com/mattn/go-isatty	v0.0.20	h1:xfD0iDuEKnDkl03q4limB+vH+GxLEtL/jb4xVJSWWEY=
+	dep	github.com/spf13/cobra	v1.8.0	h1:7aJaZx1B85qltLMc546zn58BxxfZdR/W22ej9CFoEf0=
+	dep	github.com/spf13/pflag	v1.0.5	h1:iy+VFUOCP1a+8yFto/drg2CJ5u0yRoB7fZw3DKv/JXA=
+	dep	go.uber.org/multierr	v1.10.0	h1:S0h4aNzvfcFsC3dRF1jLoaov7oRaKqRGC/pUEJ2yvPQ=
+	dep	go.uber.org/zap	v1.26.0	h1:sI7k6L95XOKS281NhVKOFCUNIvv9e0w4BF8N3u+tCRo=
+	dep	golang.org/x/net	v0.61.0	h1:RR+6j/BTBCrggOLugxa+66R8FvoN6MHlzDlZIbN9YFw=
+	dep	golang.org/x/sys	v0.49.0	h1:XbzkgYJHdqh/8m2Uu0W/dQv8nktxx4BFHp1M0gROTXA=
+	dep	golang.org/x/text	v0.43.0	h1:1QivrlhwAsnMOcqgOdl9my7s9OyZl8O5/UGUTJVXoWc=
+	dep	golang.org/x/time	v0.5.0	h1:o7cqy6amK/52YcAKIPlM3a+Fpj35zvRj2TP+e1xFSfk=
+	dep	gopkg.in/yaml.v3	v3.0.1	h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
+	build	-buildmode=exe
+	build	-compiler=gc
+	build	-trimpath=true
+	build	CGO_ENABLED=0
+	build	GOARCH=amd64
+	build	GOOS=windows
+	build	GOAMD64=v1
+	build	vcs=git
+	build	vcs.revision=ad26c2cf7dc7af95271cec323bd010eb2a65a76a
+	build	vcs.time=2026-10-10T09:53:21Z
+	build	vcs.modified=true

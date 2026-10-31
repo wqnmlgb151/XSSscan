@@ -1,0 +1,28 @@
+ok  	github.com/xsscan/xsscan/cmd	11.053s
+ok  	github.com/xsscan/xsscan/pkg/analyze	10.775s
+ok  	github.com/xsscan/xsscan/pkg/auth	8.490s
+ok  	github.com/xsscan/xsscan/pkg/auth/oauth	8.489s
+ok  	github.com/xsscan/xsscan/pkg/blind	29.549s
+?   	github.com/xsscan/xsscan/pkg/browser	[no test files]
+ok  	github.com/xsscan/xsscan/pkg/callback	20.400s
+ok  	github.com/xsscan/xsscan/pkg/context	29.463s
+ok  	github.com/xsscan/xsscan/pkg/crawler	23.190s
+ok  	github.com/xsscan/xsscan/pkg/csrf	21.188s
+ok  	github.com/xsscan/xsscan/pkg/dom	27.919s
+ok  	github.com/xsscan/xsscan/pkg/execverify	31.836s
+ok  	github.com/xsscan/xsscan/pkg/httpclient	31.737s
+ok  	github.com/xsscan/xsscan/pkg/internal/chromedp	29.899s
+ok  	github.com/xsscan/xsscan/pkg/internal/request	31.131s
+?   	github.com/xsscan/xsscan/pkg/internal/text	[no test files]
+?   	github.com/xsscan/xsscan/pkg/internal/urlutil	[no test files]
+?   	github.com/xsscan/xsscan/pkg/internal/xsspatterns	[no test files]
+ok  	github.com/xsscan/xsscan/pkg/jsanalysis	31.941s
+ok  	github.com/xsscan/xsscan/pkg/model	29.321s
+ok  	github.com/xsscan/xsscan/pkg/orchestrator	31.131s
+ok  	github.com/xsscan/xsscan/pkg/payload	31.178s
+ok  	github.com/xsscan/xsscan/pkg/report	31.223s
+ok  	github.com/xsscan/xsscan/pkg/scanner	45.836s
+ok  	github.com/xsscan/xsscan/pkg/ssrfguard	31.440s
+ok  	github.com/xsscan/xsscan/pkg/stored	32.173s
+ok  	github.com/xsscan/xsscan/pkg/verify	27.880s
+ok  	github.com/xsscan/xsscan/test/integration	31.303s

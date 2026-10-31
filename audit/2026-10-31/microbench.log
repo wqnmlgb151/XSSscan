@@ -1,0 +1,54 @@
+goos: windows
+goarch: amd64
+pkg: github.com/xsscan/xsscan/pkg/jsanalysis
+cpu: AMD Ryzen 9 7940HX with Radeon Graphics
+BenchmarkConcurrentColdScript-32    	      68	   3453660 ns/op	 1797338 B/op	    7619 allocs/op
+BenchmarkConcurrentColdScript-32    	      76	   3385430 ns/op	 1786375 B/op	    7523 allocs/op
+BenchmarkConcurrentColdScript-32    	      76	   3345101 ns/op	 1785189 B/op	    7521 allocs/op
+BenchmarkRepeatedScript-32          	    1426	    163653 ns/op	   55217 B/op	       8 allocs/op
+BenchmarkRepeatedScript-32          	    1513	    165482 ns/op	   54576 B/op	       3 allocs/op
+BenchmarkRepeatedScript-32          	    7183	    152255 ns/op	   54576 B/op	       3 allocs/op
+BenchmarkUncachedScript-32          	      73	   3293062 ns/op	  907360 B/op	    7441 allocs/op
+BenchmarkUncachedScript-32          	      98	   3330672 ns/op	  907123 B/op	    7441 allocs/op
+BenchmarkUncachedScript-32          	      81	   3578751 ns/op	  907413 B/op	    7441 allocs/op
+BenchmarkIndexedCallLookup-32       	 8687782	        23.83 ns/op	       0 B/op	       0 allocs/op
+BenchmarkIndexedCallLookup-32       	 9395479	        22.50 ns/op	       0 B/op	       0 allocs/op
+BenchmarkIndexedCallLookup-32       	10497184	        22.72 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/xsscan/xsscan/pkg/jsanalysis	4.027s
+goos: windows
+goarch: amd64
+pkg: github.com/xsscan/xsscan/pkg/verify
+cpu: AMD Ryzen 9 7940HX with Radeon Graphics
+BenchmarkVerify_RepeatedInertReflections-32    	      27	   8009800 ns/op	 1253469 B/op	   70039 allocs/op
+BenchmarkVerify_RepeatedInertReflections-32    	      30	   7953277 ns/op	 1253091 B/op	   70039 allocs/op
+BenchmarkVerify_RepeatedInertReflections-32    	      31	   7943529 ns/op	 1253095 B/op	   70039 allocs/op
+BenchmarkResponseEvidenceRepeated/separate-32  	      24	   9484825 ns/op	 1199845 B/op	  108325 allocs/op
+BenchmarkResponseEvidenceRepeated/separate-32  	      26	   9459865 ns/op	 1165440 B/op	  108030 allocs/op
+BenchmarkResponseEvidenceRepeated/separate-32  	      26	   9474408 ns/op	 1165444 B/op	  108030 allocs/op
+BenchmarkResponseEvidenceRepeated/local_reuse-32         	      80	   3107096 ns/op	  388480 B/op	   36010 allocs/op
+BenchmarkResponseEvidenceRepeated/local_reuse-32         	      79	   3149352 ns/op	  388480 B/op	   36010 allocs/op
+BenchmarkResponseEvidenceRepeated/local_reuse-32         	      80	   3171304 ns/op	  388480 B/op	   36010 allocs/op
+PASS
+ok  	github.com/xsscan/xsscan/pkg/verify	2.340s
+goos: windows
+goarch: amd64
+pkg: github.com/xsscan/xsscan/pkg/httpclient
+cpu: AMD Ryzen 9 7940HX with Radeon Graphics
+BenchmarkCaptureSummaryLargeResponse/full_snapshot-32         	     206	   1170604 ns/op	 1056821 B/op	       2 allocs/op
+BenchmarkCaptureSummaryLargeResponse/full_snapshot-32         	     201	   1190304 ns/op	 1056773 B/op	       2 allocs/op
+BenchmarkCaptureSummaryLargeResponse/full_snapshot-32         	     205	   1165873 ns/op	 1056769 B/op	       2 allocs/op
+BenchmarkCaptureSummaryLargeResponse/summary-32               	  658471	       363.4 ns/op	     208 B/op	       4 allocs/op
+BenchmarkCaptureSummaryLargeResponse/summary-32               	  706796	       368.7 ns/op	     208 B/op	       4 allocs/op
+BenchmarkCaptureSummaryLargeResponse/summary-32               	  748082	       367.6 ns/op	     208 B/op	       4 allocs/op
+PASS
+ok  	github.com/xsscan/xsscan/pkg/httpclient	1.609s
+goos: windows
+goarch: amd64
+pkg: github.com/xsscan/xsscan/pkg/analyze
+cpu: AMD Ryzen 9 7940HX with Radeon Graphics
+BenchmarkFilterReflectionLimit-32    	 4051863	        60.25 ns/op	      48 B/op	       1 allocs/op
+BenchmarkFilterReflectionLimit-32    	 3561681	        59.28 ns/op	      48 B/op	       1 allocs/op
+BenchmarkFilterReflectionLimit-32    	 7703355	        26.42 ns/op	      48 B/op	       1 allocs/op
+PASS
+ok  	github.com/xsscan/xsscan/pkg/analyze	1.121s

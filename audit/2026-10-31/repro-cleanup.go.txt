@@ -1,0 +1,49 @@
+package chromedp
+
+import (
+	"context"
+	"github.com/chromedp/cdproto/cdp"
+	"github.com/chromedp/cdproto/target"
+	ext "github.com/chromedp/chromedp"
+	"testing"
+	"time"
+)
+
+// Local audit only: inject a target disappearance before helper cleanup.
+func TestAuditCleanupExternallyClosedTarget(t *testing.T) {
+	alloc, stopAlloc := NewExecAllocator(context.Background(), StandardHeadlessOptions...)
+	defer stopAlloc()
+	parent, stopParent, _ := NewTabContext(alloc)
+	defer stopParent()
+	if err := ext.Run(parent); err != nil {
+		t.Fatal(err)
+	}
+	tab, closeTab, diagnostics, err := NewIsolatedTabContext(context.Background(), parent, 5*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeTab()
+	if err := ext.Run(tab); err != nil {
+		t.Fatal(err)
+	}
+	owner := ext.FromContext(tab)
+	executor := cdp.WithExecutor(parent, ext.FromContext(parent).Browser)
+	if err := target.CloseTarget(owner.Target.TargetID).Do(executor); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(100 * time.Millisecond)
+	closeTab()
+	originalErr := ext.Cancel(tab)
+	t.Logf("underlying chromedp.Cancel=%v; helper protocol=%v; helper cleanup=%v", originalErr, diagnostics.Err(), diagnostics.CleanupErr())
+	before, _, err := target.GetBrowserContexts().Do(executor)
+	t.Logf("remaining private contexts=%d err=%v", len(before), err)
+	if originalErr == nil {
+		t.Fatal("fault injection did not reproduce cancellation error")
+	}
+	if diagnostics.Err() != nil || diagnostics.CleanupErr() != nil {
+		t.Fatal("helper now reports the fault; re-evaluate finding")
+	}
+	if err != nil || len(before) != 0 {
+		t.Fatal("context disposal did not recover; investigate separately")
+	}
+}

@@ -23,7 +23,7 @@ xsscan --url "http://127.0.0.1:8080/?q=test" --allow-private --output safe.json 
 xsscan --url "http://127.0.0.1:8080/?q=test" --allow-private --include-raw-evidence --output private.json
 ```
 
-上述仅演示 CLI，不要求靶场实际监听；自动化验证使用 `httptest` 和合成凭据。新增开关默认 false，YAML 同名；CLI 显式 false 优先。缺少 `--output` 时拒绝 raw 配置。全部旧参数保留，新增这一项后共有 64 个不同 flag。
+上述仅演示 CLI，不要求靶场实际监听；自动化验证使用 `httptest` 和合成凭据。新增开关默认 false，YAML 同名；CLI 显式 false 优先。缺少 `--output` 时拒绝 raw 配置。全部旧参数保留，`cmd/main.go` 实际注册 65 个不同 flag（基线已有 64 个；不含 Cobra 自动 help）。
 
 默认保留报表字段和计数、状态、执行证明及覆盖含义；HTTP 正文与响应内容片段用明确 REDACTED 标记代替，Base64/截图路径置空。凭据识别包含认证/Cookie、Token/password/API key/CSRF/session 等常见命名，URL userinfo 和敏感参数、HTML 密码/隐藏 token 输入，以及已识别值的常见编码副本。会保守地隐藏未知头和与凭据相同的非敏感文本。脱敏报告不能直接作为字节保真重放证据。
 
@@ -54,7 +54,29 @@ defer v.Close() // 生产调用方应检查 Close 的清理错误
 - `test/legacy-v1.1.2-tests.txt`：从已验收 CI 41312184259 的原始事件生成 1771 个唯一 `package<TAB>Test` 身份，含子测试与 fuzz seed。CI 普通/race 必须逐项仍 pass，新增数量不能掩盖缺失/skip。
 - 第二轮 Windows CI 暴露既有 `TestEngine_Run_StatsPopulated` 的毫秒取整时序失败（Duration 为 0）。仅为该合成靶场增加 2ms 响应等待，原有正耗时及其他断言不变；本机连续 100 次 race 已通过。生产计时与扫描逻辑未修改。
 
-本机专项 race（含真实 Chrome）、全项目短 race 和 vet 已通过。完整本地与 Windows/Linux CI 运行结果待更新，不能将短测试的浏览器 skip 当作全量通过。
+## 实际验收结果
+
+[最终 CI 41321455856](https://github.com/wqnmlgb151/XSSscan/actions/runs/41321455856) 为 **success**，对应源码和测试提交 `33bbafde23beb54fd867ed05ff0f4b13d5e6dde0`。两个平台均完成依赖验证、vet、Python 门禁、真实 Chrome 普通全量与完整 race、三轮合成基线、微基准及原生构建（version/help）。两份 artifact 已下载并从原始日志重新汇总，结果与 CI 摘要一致。
+
+| 平台 | 普通 / race pass 事件 | 两轮各自保留的原有身份 | 三轮标签结果 |
+| --- | --- | --- | --- |
+| Ubuntu 24.04 | 1837 / 1837 | 1771 / 1771 | 12 TP / 12 TN，0 FP / 0 FN |
+| Windows Server 2022 | 1837 / 1837 | 1771 / 1771 | 12 TP / 12 TN，0 FP / 0 FN |
+
+每轮有 25 个含测试包通过；5 个 `skip` 包均为没有测试文件的包，没有测试用例 skip。1837 是包含子测试和 fuzz seed 的 pass 事件数，不是独立测试函数数；新增 66 个事件全部通过。环境、请求数、耗时和 Go 内存区间见 [CI JSON 摘录](ci-v1.1.3.json)，完整日志与微基准位于该运行的 `regression-ubuntu-24.04` / `regression-windows-2022` artifacts。三轮八标签语料不代表真实世界准确率，Go 堆采样不包含 Chrome RSS/CPU。
+
+本机首轮完整普通/race 各 1827 pass，原有身份均为 1771/1771；随后两项边界修复的报告包 race、统计测试连续 100 次 race、独立 vet 审查也通过。最终 1837 事件结果以上述双平台 CI 为准。全项目短 race 和真实 Chrome 截图专项也通过；短测试不替代完整验收。Windows EXE 和 Linux amd64 本机交叉构建通过，未创建正式 release。
+
+本次保留了失败记录：第一轮 `b1731f8` 的 CI 41318471987 成功；边界修复后的 CI 41320394942 因上述 Windows 旧时序测试失败，修复后重新运行最终 CI 成功。此后的收尾提交只包含文档和结果数据，使用 `[skip ci]`，源码和测试保持与已验收提交一致。
+
+## 修改文件
+
+- 报告边界：`pkg/httpclient/evidence.go`、`pkg/report/reporter.go`、`pkg/report/redact.go`、`pkg/report/raw_contract_test.go`、`pkg/report/security_test.go`。
+- 文件保护：`pkg/internal/privatefs/files.go`、`files_test.go`、`permissions_unix.go`、`permissions_unix_test.go`、`permissions_windows.go`、`permissions_windows_test.go`。
+- 截图：`pkg/execverify/verifier.go`、`verifier_test.go`、`screenshot_security_test.go`。
+- CLI：`cmd/main.go`、`cmd/config.go`、`cmd/auth_failure_test.go`、`cmd/report_security_test.go`。
+- 回归：`.github/workflows/build.yml`、`pkg/scanner/engine_coverage_test.go`、`test/summarize.py`、`test/test_summarize.py`、`test/legacy-v1.1.2-tests.txt`。
+- 版本与文档：`go.mod`（已锁定的 x/sys 改为直接依赖）、`Makefile`、`Dockerfile`、`README.md`、`CHANGELOG.md`、`test/README.md`、本文件及 `test/ci-v1.1.3.json`。
 
 ## 遗留边界
 

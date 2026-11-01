@@ -22,7 +22,7 @@ func TestAuthenticationFailureStillWritesReproducibleReport(t *testing.T) {
 	}))
 	defer server.Close()
 	output := filepath.Join(t.TempDir(), "failed.json")
-	cfg = ScanConfig{Types: "reflected", URL: server.URL + "?q=x", AllowPrivate: true, Workers: 1, RateLimit: 100, Timeout: 2, MaxPayload: 1, LoginURL: server.URL + "/login", Username: "worker", Password: "original-secret", Output: output, Format: "json", Silent: true}
+	cfg = ScanConfig{Types: "reflected", URL: server.URL + "?q=x", AllowPrivate: true, Workers: 1, RateLimit: 100, Timeout: 2, MaxPayload: 1, LoginURL: server.URL + "/login", Username: "worker", Password: "original-secret", Output: output, Format: "json", Silent: true, IncludeRawEvidence: true}
 	if err := runScan(nil, nil); err == nil {
 		t.Fatal("login form accepted as authenticated")
 	}

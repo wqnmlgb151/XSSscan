@@ -69,6 +69,25 @@ class SummaryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.check_records(events, repeats=0)
 
+    def test_required_scope_cannot_be_replaced_by_extra_tests(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            events, required = root / "events.json", root / "required.txt"
+            events.write_text(json.dumps({"Action": "pass", "Package": "fixture", "Test": "Extra"}) + "\n" +
+                              json.dumps({"Action": "pass", "Package": "fixture"}), encoding="utf-8")
+            required.write_text("fixture\tOriginal\n", encoding="utf-8")
+            with self.assertRaises(ValueError):
+                summarize(events, required_tests=required)
+
+    def test_required_scope_passes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            events, required = root / "events.json", root / "required.txt"
+            events.write_text(json.dumps({"Action": "pass", "Package": "fixture", "Test": "Original"}) + "\n" +
+                              json.dumps({"Action": "pass", "Package": "fixture"}), encoding="utf-8")
+            required.write_text("# original scope\nfixture\tOriginal\n", encoding="utf-8")
+            self.assertEqual(summarize(events, required_tests=required)["required_tests"], {"total": 1, "passed": 1})
+
 
 if __name__ == "__main__":
     unittest.main()

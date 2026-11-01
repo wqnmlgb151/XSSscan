@@ -26,6 +26,7 @@ type FileConfig struct {
 	Cookies                []string `yaml:"cookies"`
 	Output                 string   `yaml:"output"`
 	Format                 string   `yaml:"format"`
+	IncludeRawEvidence     bool     `yaml:"include-raw-evidence"`
 	Workers                int      `yaml:"workers"`
 	RateLimit              int      `yaml:"rate-limit"`
 	Timeout                int      `yaml:"timeout"`
@@ -152,6 +153,7 @@ var configFlags = map[string]string{
 	"Cookies":                "cookie",
 	"Output":                 "output",
 	"Format":                 "format",
+	"IncludeRawEvidence":     "include-raw-evidence",
 	"Workers":                "workers",
 	"RateLimit":              "rate-limit",
 	"Timeout":                "timeout",

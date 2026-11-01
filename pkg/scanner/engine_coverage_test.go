@@ -280,7 +280,13 @@ func TestEngine_Run_MaxPayloadsCap(t *testing.T) {
 // --- Test 1.6: Result stats populated ---
 
 func TestEngine_Run_StatsPopulated(t *testing.T) {
-	server := vulnerableTarget()
+	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Duration is reported in whole milliseconds; ensure this timing fixture
+		// spans a millisecond even on fast Windows loopback transports.
+		time.Sleep(2 * time.Millisecond)
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte("<html><body>" + r.URL.Query().Get("q") + "</body></html>"))
+	}))
 	defer server.Close()
 
 	engine := newTestEngine(server.URL)

@@ -7,12 +7,13 @@ import statistics
 from pathlib import Path
 
 
-def summarize(path, repeats=0):
+def summarize(path, repeats=0, required_tests=None):
     counts = collections.Counter()
     packages = {}
     active = set()
     failed_packages = set()
     records = []
+    passed = set()
     for line in Path(path).read_text(encoding="utf-8-sig").splitlines():
         event = json.loads(line)
         action = event.get("Action")
@@ -24,6 +25,8 @@ def summarize(path, repeats=0):
             active.discard(identity)
         if event.get("Test") and action in ("pass", "fail", "skip"):
             counts[action] += 1
+            if action == "pass":
+                passed.add(package + "\t" + event["Test"])
         if not event.get("Test") and action in ("pass", "fail", "skip"):
             packages[event["Package"]] = action
             if action == "fail":
@@ -34,6 +37,12 @@ def summarize(path, repeats=0):
     if not packages or active or failed_packages or counts["fail"]:
         raise ValueError("missing terminal results or failed tests")
     result = {"test_events": dict(counts), "packages": packages}
+    if required_tests:
+        required = {line for line in Path(required_tests).read_text(encoding="utf-8").splitlines()
+                    if line and not line.startswith("#")}
+        if not required or required - passed:
+            raise ValueError("required regression tests missing or not passed")
+        result["required_tests"] = {"total": len(required), "passed": len(required & passed)}
     if repeats:
         expected = {(module, safe) for module in ("reflected", "dom", "stored", "blind") for safe in (False, True)}
         grouped = collections.defaultdict(list)
@@ -60,7 +69,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input")
     parser.add_argument("--baseline-repeats", type=int, default=0)
+    parser.add_argument("--required-tests")
     args = parser.parse_args()
     if args.baseline_repeats < 0:
         parser.error("--baseline-repeats must be nonnegative")
-    print(json.dumps(summarize(args.input, args.baseline_repeats), indent=2))
+    print(json.dumps(summarize(args.input, args.baseline_repeats, args.required_tests), indent=2))

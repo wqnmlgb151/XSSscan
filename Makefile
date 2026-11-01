@@ -7,7 +7,7 @@ GOTEST=$(GO) test
 GOCLEAN=$(GO) clean
 GOMOD=$(GO) mod
 
-VERSION ?= 1.1.2
+VERSION ?= 1.1.3
 LDFLAGS = -X main.Version=$(VERSION)
 
 build:

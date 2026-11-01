@@ -8,7 +8,7 @@
 <p align="center">
 <img src="https://img.shields.io/badge/go-1.26+-00ADD8?logo=go" alt="Go">
 <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
-<img src="https://img.shields.io/badge/source-1.1.2-orange" alt="Source version">
+<img src="https://img.shields.io/badge/source-1.1.3-orange" alt="Source version">
 <img src="https://img.shields.io/badge/repo-github.com%2Fwqnmlgb151%2FXSSscan-lightgrey" alt="Repo">
 </p>
 
@@ -18,7 +18,7 @@
 
 当前版本为 **[v1.1.1](https://github.com/wqnmlgb151/XSSscan/releases/tag/v1.1.1)**（2026-10-31）。[下载 Windows EXE](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.1/xsscan_1.1.1_windows_amd64.exe)，其他平台见[安装](#安装)。默认使用 `adaptive` 策略，调度反射型、DOM、存储型和盲 XSS 四类检测，可用 `--types` 选择检测类型。
 
-当前开发源码为 **v1.1.2**，重点完善公开测试和 Windows/Linux CI。复现步骤、覆盖映射及验证边界见 [自动化回归说明](test/README.md)，本轮变更见 [CHANGELOG](CHANGELOG.md)。上方链接仍指向已经发布的 v1.1.1 附件。
+当前开发源码为 **v1.1.3**，重点完善默认报告脱敏、私有文件权限和截图清理。安全说明与验证见 [v1.1.3 记录](test/security-v1.1.3.md)，复现步骤见 [自动化回归说明](test/README.md)，本轮变更见 [CHANGELOG](CHANGELOG.md)。上方链接仍指向已经发布的 v1.1.1 附件。
 
 发布页的 **Assets** 提供六个预编译附件：Windows EXE/ZIP，以及 Linux、macOS 的 amd64/arm64 TAR.GZ。GitHub 自动提供的 Source code ZIP/TAR.GZ 为源码；直接运行请下载带 `xsscan_1.1.1_` 前缀的附件。压缩包包含程序、说明和许可证。
 
@@ -119,7 +119,7 @@ Windows amd64 已实际运行；其他平台产物由交叉编译生成，需在
 
 ### 从源码构建
 
-源码版本为 `1.1.2`。以下命令在当前源码目录中运行；版本参数只设置程序版本显示，不会下载或升级源码。签出 `v1.1.1` 的示例用于重建已发布版本。
+源码版本为 `1.1.3`。以下命令在当前源码目录中运行；版本参数只设置程序版本显示，不会下载或升级源码。签出 `v1.1.1` 的示例用于重建已发布版本。
 
 ```bash
 # 需要 Go 1.26+（推荐 Go 1.26.9）
@@ -139,7 +139,7 @@ make build VERSION=1.1.1
 Windows 没有 make 时，在当前源码目录直接构建 EXE：
 
 ```powershell
-go build -trimpath -ldflags "-s -w -X main.Version=1.1.2" -o xsscan.exe ./cmd
+go build -trimpath -ldflags "-s -w -X main.Version=1.1.3" -o xsscan.exe ./cmd
 .\xsscan.exe --version
 ```
 
@@ -531,11 +531,13 @@ OIDC 保留 issuer 租户路径和尾斜杠，发现文档的 issuer 必须精�
 
 ### 原始 HTTP 证据
 
-报告保留实际请求中的 Authorization、Cookie、刷新后的 CSRF、请求体，以及响应 Set-Cookie 和响应体。HTML 的 Copy for Burp、Markdown HTTP 代码块、JSON/SARIF 原始字段保留这些内容；浏览器复核使用捕获请求中的认证状态。存储型证据同时保存提交和展示页面的 HTTP 交换。
+从 v1.1.3 起，五种格式默认导出安全脱敏报告：Authorization、Cookie、Set-Cookie、Token 等凭据、敏感 URL 参数以及已识别的凭据副本会被隐藏；完整 HTTP 正文、响应片段、原始 Base64 与临时截图路径不导出，未知 HTTP 头也默认隐藏。HTML 复制按钮和 curl 使用脱敏后的内容，需补齐认证/正文才能重放。浏览器复核仍使用内存中保真的认证状态；存储型内存证据仍区分提交和展示 HTTP 交换。
 
-这是 `net/http` 层的逻辑 HTTP 重放快照：方法、编码路径、头和值及读取的 Body，不是 TLS/HTTP2 线上的帧。传输层自动添加的部分头不一定出现，失败请求也不能证明对端已完整接收。每个请求/响应 Body 最多记录 512 KiB，`request_truncated`、`response_truncated`、`response_incomplete` 明确标记限制；截断请求不生成完整 curl，也不用于浏览器重放。无效 UTF-8 或 XML 非法控制字节另保留 Base64 字段，JUnit 使用 Base64 表示无法容纳的文本；人类报告也展示对应字段，解码后可恢复记录的原字节。
+确需字节保真证据时显式使用 `--include-raw-evidence --output private-report.json`（YAML：`include-raw-evidence: true`），该开关不允许省略输出文件。详见 [安全边界与 SDK 用法](test/security-v1.1.3.md)。
 
-JSON 增加 `SchemaVersion: "1.1"`，原有字段名称继续保留。文件先在同目录以 0600 写入临时文件、同步并原子替换；Windows 的权限由 ACL 管理，0600 的 Unix 权限尚需 Linux 运行验证。
+内存证据是 `net/http` 层的逻辑 HTTP 重放快照：方法、编码路径、头和值及读取的 Body，不是 TLS/HTTP2 线上的帧。传输层自动添加的部分头不一定出现，失败请求也不能证明对端已完整接收。每个请求/响应 Body 最多记录 512 KiB，`request_truncated`、`response_truncated`、`response_incomplete` 明确标记限制；截断请求不生成完整 curl，也不用于浏览器重放。显式 raw 报告才包含这些正文和 Base64 原字节副本；默认安全报告保留限制标记。
+
+JSON 保持 `SchemaVersion: "1.1"` 和原有字段名称。所有报告先创建私有同目录临时文件，写入、同步后替换：Unix 使用 0600；Windows 在创建时设置当前用户专属受保护 DACL，写入前检查，失败则拒绝保存。Unix 同目录 rename 为原子替换，Go 不保证 Windows rename 的原子性。默认不将验证截图落盘；SDK 显式截图只在验证器生命周期内保留。
 
 ## 输出格式
 
@@ -925,6 +927,12 @@ v1.0.0-rc.1 的发布前检查（2026-10-10）：
 
 ## 更新日志
 
+### v1.1.3 — 开发中
+
+- 默认五格式报告脱敏；原始证据需显式开关并写入私有文件，截图默认关闭、显式采集自动清理。
+- Windows 创建时 ACL 与 Linux 权限检查；新增安全回归并对原有 1771 个通过事件做身份门禁。
+- 审计与实际结果见 [安全验证记录](test/security-v1.1.3.md)。
+
 ### v1.1.2 — 开发中
 
 - 公开既有 Go 测试与本地合成靶场，补强四类检测正负例、Blind 关联、超时/取消及 adaptive 对照断言。
@@ -1002,7 +1010,7 @@ v1.0.0-rc.1 的发布前检查（2026-10-10）：
 
 版本号遵循 `x.y.z` 格式：
 
-当前发布版本为 `1.1.1`，开发源码与默认构建标识为 `1.1.2`。发布附件链接以对应 tag 为准。
+当前发布版本为 `1.1.1`，开发源码与默认构建标识为 `1.1.3`。发布附件链接以对应 tag 为准。
 
 | 位 | 含义 |
 |----|------|
@@ -1013,7 +1021,7 @@ v1.0.0-rc.1 的发布前检查（2026-10-10）：
 构建时通过 ldflags 注入版本：
 
 ```bash
-make build VERSION=1.1.2
+make build VERSION=1.1.3
 ```
 
 `--version` 输出当前构建版本。

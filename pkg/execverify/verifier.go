@@ -4,6 +4,7 @@ package execverify
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,6 +23,7 @@ import (
 	"github.com/chromedp/chromedp"
 
 	allocopts "github.com/xsscan/xsscan/pkg/internal/chromedp"
+	"github.com/xsscan/xsscan/pkg/internal/privatefs"
 	"github.com/xsscan/xsscan/pkg/internal/request"
 	"github.com/xsscan/xsscan/pkg/model"
 	"github.com/xsscan/xsscan/pkg/ssrfguard"
@@ -43,17 +45,22 @@ type ExecutionResult struct {
 
 // Verifier manages a headless Chrome instance for XSS execution verification.
 type Verifier struct {
-	allocCtx      context.Context
-	allocCancel   context.CancelFunc
-	timeout       time.Duration
-	auth          *AuthState
-	screenshotDir string
-	screenshotErr error
-	consoleMu     sync.Mutex
-	browserOnce   sync.Once
-	browserCtx    context.Context
-	browserCancel context.CancelFunc
-	browserErr    error
+	allocCtx           context.Context
+	allocCancel        context.CancelFunc
+	timeout            time.Duration
+	auth               *AuthState
+	screenshotDir      string
+	screenshotErr      error
+	captureScreenshots bool
+	screenshotMu       sync.Mutex
+	screenshotClosed   bool
+	screenshotCloseErr error
+	screenshotStop     func() bool
+	consoleMu          sync.Mutex
+	browserOnce        sync.Once
+	browserCtx         context.Context
+	browserCancel      context.CancelFunc
+	browserErr         error
 }
 
 // AuthState carries authentication context for verification.
@@ -63,22 +70,40 @@ type AuthState struct {
 
 // NewVerifier creates a new browser verifier.
 func NewVerifier(ctx context.Context, timeout time.Duration) (*Verifier, error) {
+	return NewVerifierWithOptions(ctx, timeout, VerifierOptions{})
+}
+
+type VerifierOptions struct {
+	// CaptureScreenshots is opt-in because images may contain credentials/PII.
+	// Returned paths are private temporary evidence, valid only until Close or cancellation.
+	CaptureScreenshots bool
+}
+
+func NewVerifierWithOptions(ctx context.Context, timeout time.Duration, options VerifierOptions) (*Verifier, error) {
 	if timeout <= 0 {
 		timeout = 15 * time.Second
 	}
 
 	allocCtx, allocCancel := allocopts.NewExecAllocator(ctx, allocopts.StandardHeadlessOptions...)
 
-	tmpDir := filepath.Join(os.TempDir(), "xsscan-screenshots")
-	screenshotErr := os.MkdirAll(tmpDir, 0755)
+	var tmpDir string
+	var screenshotErr error
+	if options.CaptureScreenshots {
+		tmpDir, screenshotErr = privatefs.TempDir("", "xsscan-screenshots-")
+	}
 
-	return &Verifier{
-		allocCtx:      allocCtx,
-		allocCancel:   allocCancel,
-		timeout:       timeout,
-		screenshotDir: tmpDir,
-		screenshotErr: screenshotErr,
-	}, nil
+	v := &Verifier{
+		allocCtx:           allocCtx,
+		allocCancel:        allocCancel,
+		timeout:            timeout,
+		screenshotDir:      tmpDir,
+		screenshotErr:      screenshotErr,
+		captureScreenshots: options.CaptureScreenshots,
+	}
+	if options.CaptureScreenshots {
+		v.screenshotStop = context.AfterFunc(ctx, func() { _ = v.cleanupScreenshots() })
+	}
+	return v, nil
 }
 
 // NewVerifierWithAuth creates a verifier with authentication state.
@@ -95,11 +120,48 @@ func NewVerifierWithAuth(ctx context.Context, timeout time.Duration, auth *AuthS
 
 // Close terminates the browser and releases resources.
 func (v *Verifier) Close() error {
+	if v.screenshotStop != nil {
+		v.screenshotStop()
+	}
+	err := v.cleanupScreenshots()
+	v.allocCancel()
+	// Join initialization before reading browserCancel, including concurrent Close.
+	v.browserOnce.Do(func() { v.browserErr = context.Canceled })
 	if v.browserCancel != nil {
 		v.browserCancel()
 	}
-	v.allocCancel()
-	return nil
+	return err
+}
+
+func (v *Verifier) cleanupScreenshots() error {
+	v.screenshotMu.Lock()
+	defer v.screenshotMu.Unlock()
+	if !v.screenshotClosed || v.screenshotCloseErr != nil {
+		v.screenshotClosed = true
+		if v.screenshotDir != "" {
+			v.screenshotCloseErr = os.RemoveAll(v.screenshotDir)
+		}
+	}
+	return v.screenshotCloseErr
+}
+
+func (v *Verifier) saveScreenshot(buf []byte) (string, error) {
+	v.screenshotMu.Lock()
+	defer v.screenshotMu.Unlock()
+	if v.screenshotClosed {
+		return "", fmt.Errorf("screenshot storage closed")
+	}
+	if v.screenshotErr != nil {
+		return "", v.screenshotErr
+	}
+	if !v.captureScreenshots || v.screenshotDir == "" {
+		return "", fmt.Errorf("screenshot capture disabled")
+	}
+	path := filepath.Join(v.screenshotDir, "proof-"+rand.Text()+".png")
+	if err := privatefs.WriteFile(path, buf); err != nil {
+		return "", err
+	}
+	return path, nil
 }
 
 // VerifyFinding verifies a reflected XSS finding by injecting its payload
@@ -317,15 +379,13 @@ func (v *Verifier) runBrowserCheckMatching(ctx context.Context, navURL string, r
 	result.ConsoleErrors = v.consoleLoad(&consoleErrors)
 
 	// Capture screenshot if execution was detected
-	if result.Executed && result.Confidence >= 0.9 {
+	if v.captureScreenshots && result.Executed && result.Confidence >= 0.9 {
 		if v.screenshotErr != nil {
 			result.ConsoleErrors = append(result.ConsoleErrors, "screenshot directory: "+v.screenshotErr.Error())
 		} else {
-			screenshotPath := filepath.Join(v.screenshotDir,
-				fmt.Sprintf("xsscan-proof-%d.png", time.Now().UnixNano()))
 			var buf []byte
 			if err := chromedp.Run(tctx, chromedp.CaptureScreenshot(&buf)); err == nil {
-				if err := os.WriteFile(screenshotPath, buf, 0600); err == nil {
+				if screenshotPath, err := v.saveScreenshot(buf); err == nil {
 					result.ScreenshotPath = screenshotPath
 				} else {
 					result.ConsoleErrors = append(result.ConsoleErrors, "save screenshot: "+err.Error())

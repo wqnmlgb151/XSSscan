@@ -5,10 +5,9 @@ import (
 	"fmt"
 	"html"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 
+	"github.com/xsscan/xsscan/pkg/internal/privatefs"
 	"github.com/xsscan/xsscan/pkg/internal/text"
 	"github.com/xsscan/xsscan/pkg/model"
 )
@@ -23,11 +22,18 @@ const (
 	FormatJUnit    OutputFormat = "junit"
 )
 
-type Reporter struct{}
+type Options struct {
+	// IncludeRawEvidence retains credentials and bodies; Write still enforces private access.
+	IncludeRawEvidence bool
+}
+
+type Reporter struct{ options Options }
 
 func NewReporter() *Reporter {
 	return &Reporter{}
 }
+
+func NewReporterWithOptions(options Options) *Reporter { return &Reporter{options: options} }
 
 func (r *Reporter) Generate(data *ScanData, format OutputFormat) ([]byte, error) {
 	if data == nil {
@@ -56,6 +62,13 @@ func (r *Reporter) Generate(data *ScanData, format OutputFormat) ([]byte, error)
 	}
 	copy.Status = model.ResolveStatus(data.Status, data.Modules, copy.Issues, copy.Errors)
 	data = &copy
+	if !r.options.IncludeRawEvidence {
+		var err error
+		data, err = redactedCopy(data)
+		if err != nil {
+			return nil, fmt.Errorf("redact report: %w", err)
+		}
+	}
 	switch format {
 	case FormatJSON:
 		return json.MarshalIndent(data, "", "  ")
@@ -73,32 +86,7 @@ func (r *Reporter) Generate(data *ScanData, format OutputFormat) ([]byte, error)
 }
 
 func (r *Reporter) Write(data []byte, path string) error {
-	abs, err := filepath.Abs(path)
-	if err != nil {
-		return fmt.Errorf("invalid output path: %w", err)
-	}
-	file, err := os.CreateTemp(filepath.Dir(abs), ".xsscan-report-*")
-	if err != nil {
-		return err
-	}
-	name := file.Name()
-	defer os.Remove(name)
-	if err := file.Chmod(0600); err != nil {
-		file.Close()
-		return err
-	}
-	if _, err := file.Write(data); err != nil {
-		file.Close()
-		return err
-	}
-	if err := file.Sync(); err != nil {
-		file.Close()
-		return err
-	}
-	if err := file.Close(); err != nil {
-		return err
-	}
-	return os.Rename(name, abs)
+	return privatefs.WriteFile(path, data)
 }
 
 func (r *Reporter) generateMarkdown(data *ScanData) string {

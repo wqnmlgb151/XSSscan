@@ -1,0 +1,87 @@
+# v1.1.3 报告安全审计与验证
+
+基线：v1.1.2 分支提交 `22993bd`。本轮仅处理导出、文件保护和临时截图；Go 分层、四类检测、原有 CLI 参数和报告 Schema 1.1 保留。仅在 `codex/v1.1.3-report-security` 提交推送，不发布正式版本。
+
+## 已确认的问题与修复
+
+| 问题 | 严重程度 | 原位置 / 本轮入口 | 复现与修复 |
+| --- | --- | --- | --- |
+| 五格式导出真实凭据与正文 | 高 | `pkg/httpclient/evidence.go: WithCapture/Snapshot`；`pkg/report/reporter.go: Generate` | 原始捕获故意保真，旧 Reporter 未建立安全边界。用合成 Authorization/Cookie/Set-Cookie/URL/body 密码生成五格式，初始泄露测试五项均失败；现在在共用入口深拷贝并脱敏，扫描与重放内存不变 |
+| 嵌套证据、Base64、curl、诊断中的副本绕过 | 高 | `pkg/report/redact.go`；`pkg/report/sarif.go` | 覆盖 InitialRequest、SubmissionHTTP、模块 Issues、Coverage/CrossModule 文本、Basic 解码、form/JSON/multipart、相对 Location code。默认移除正文/响应片段/Base64，未知头隐藏，curl 从安全字段重建 |
+| Windows 0600 未限制继承 ACL | 高 | 原 `Reporter.Write`；`pkg/internal/privatefs/` | 在 Everyone 可继承的测试目录创建/替换文件，检查实际 DACL。现用创建时当前用户独占、禁止继承的 DACL，校验后才写字节；不支持权限保护的文件系统拒绝保存 |
+| 共享截图目录、文件长期残留 | 中 | `pkg/execverify/verifier.go` | 原共享 `xsscan-screenshots` 目录未清理。现在默认不采集；显式采集随机私有目录和私有文件，Close/父 context 取消清理自身目录，写入与关闭互斥 |
+| 脱敏误改状态/Schema 或静态 Key | 中 | `pkg/report/redact.go` | 新测试检查 Cookie 值等于 `1`、`completed`、枚举值及大整数。保留结构枚举、Schema 与计数；静态数据流 Key 不被误判为凭据值 |
+
+Windows 在文件创建时指定安全描述符，避免先创建再收紧 ACL 的句柄窗口；原理参见 [Microsoft 文件访问控制](https://learn.microsoft.com/en-us/windows/win32/fileio/file-security-and-access-rights)。本轮实现使用已锁定的 `golang.org/x/sys/windows`，没有升级依赖版本。
+
+## 默认安全报告与显式原始证据
+
+```bash
+# 默认：五种格式均脱敏，文件访问受限
+xsscan --url "http://127.0.0.1:8080/?q=test" --allow-private --output safe.json --format json
+# 显式 raw：包含凭据、正文和原始 Base64，仅写受保护文件
+xsscan --url "http://127.0.0.1:8080/?q=test" --allow-private --include-raw-evidence --output private.json
+```
+
+上述仅演示 CLI，不要求靶场实际监听；自动化验证使用 `httptest` 和合成凭据。新增开关默认 false，YAML 同名；CLI 显式 false 优先。缺少 `--output` 时拒绝 raw 配置。全部旧参数保留，`cmd/main.go` 实际注册 65 个不同 flag（基线已有 64 个；不含 Cobra 自动 help）。
+
+默认保留报表字段和计数、状态、执行证明及覆盖含义；HTTP 正文与响应内容片段用明确 REDACTED 标记代替，Base64/截图路径置空。凭据识别包含认证/Cookie、Token/password/API key/CSRF/session 等常见命名，URL userinfo 和敏感参数、HTML 密码/隐藏 token 输入，以及已识别值的常见编码副本。会保守地隐藏未知头和与凭据相同的非敏感文本。脱敏报告不能直接作为字节保真重放证据。
+
+SDK 保持 `report.NewReporter()` 默认安全。需要原始输出时使用 `report.NewReporterWithOptions(report.Options{IncludeRawEvidence: true})`，再调用 `Write` 保存。`Generate` 返回给调用方的 raw 字节不受库外文件操作控制，调用方必须同样保护其存储。
+
+## 权限与截图生命周期
+
+所有报告（含 safe/raw）和显式截图使用同一私有写入组件。Unix 创建文件 0600、目录 0700；Windows 创建时 DACL 只允许当前进程用户，并要求 protected 且没有继承 ACE。替换已有宽松文件不修改其硬链接目标的权限，而是创建新私有文件后同目录 rename；拒绝符号链接/目录输出。创建/权限/写入错误直接返回，不降级成普通写入，失败临时文件回收。
+
+CLI 的执行验证默认不落盘截图。SDK 如需临时图像，可使用：
+
+```go
+v, err := execverify.NewVerifierWithOptions(ctx, timeout,
+    execverify.VerifierOptions{CaptureScreenshots: true})
+if err != nil { return err }
+defer v.Close() // 生产调用方应检查 Close 的清理错误
+```
+
+`ExecutionResult.ScreenshotPath` 只在该验证器未关闭且父 context 未取消时有效，不承诺长期附件。存储失败保留执行观察但记录截图诊断。Close 可并发/重复调用，清理失败可再次 Close 重试；取消回调的清理错误可由 Close 读取。不会删除旧版本共享目录或其他验证器的目录。
+
+## 自动化验证
+
+- `pkg/report/security_test.go`：五格式默认无合成凭据、嵌套/编码/预制 curl 副本、重定向、大写 URL scheme/编码参数名、LF 自定义头副本、Schema/计数、输入不变。
+- 原二进制和 HTTP 保真用例仅改为显式 raw；认证失败原报文用例保留原断言并显式 raw；其他原有测试继续使用默认安全模式。
+- `cmd/report_security_test.go`：五格式 safe/raw、输出要求、YAML/CLI 优先级。
+- `pkg/internal/privatefs/*_test.go`：替换与失败回收、独立目录、Unix 模式/符号链接、Windows 实际 DACL 与宽松父目录。
+- `pkg/execverify/screenshot_security_test.go`：默认不落盘、私有临时文件、并发写入/关闭、取消隔离及真实 Chrome PNG 清理。
+- `test/legacy-v1.1.2-tests.txt`：从已验收 CI 41312184259 的原始事件生成 1771 个唯一 `package<TAB>Test` 身份，含子测试与 fuzz seed。CI 普通/race 必须逐项仍 pass，新增数量不能掩盖缺失/skip。
+- 第二轮 Windows CI 暴露既有 `TestEngine_Run_StatsPopulated` 的毫秒取整时序失败（Duration 为 0）。仅为该合成靶场增加 2ms 响应等待，原有正耗时及其他断言不变；本机连续 100 次 race 已通过。生产计时与扫描逻辑未修改。
+
+## 实际验收结果
+
+[最终 CI 41321455856](https://github.com/wqnmlgb151/XSSscan/actions/runs/41321455856) 为 **success**，对应源码和测试提交 `33bbafde23beb54fd867ed05ff0f4b13d5e6dde0`。两个平台均完成依赖验证、vet、Python 门禁、真实 Chrome 普通全量与完整 race、三轮合成基线、微基准及原生构建（version/help）。两份 artifact 已下载并从原始日志重新汇总，结果与 CI 摘要一致。
+
+| 平台 | 普通 / race pass 事件 | 两轮各自保留的原有身份 | 三轮标签结果 |
+| --- | --- | --- | --- |
+| Ubuntu 24.04 | 1837 / 1837 | 1771 / 1771 | 12 TP / 12 TN，0 FP / 0 FN |
+| Windows Server 2022 | 1837 / 1837 | 1771 / 1771 | 12 TP / 12 TN，0 FP / 0 FN |
+
+每轮有 25 个含测试包通过；5 个 `skip` 包均为没有测试文件的包，没有测试用例 skip。1837 是包含子测试和 fuzz seed 的 pass 事件数，不是独立测试函数数；新增 66 个事件全部通过。环境、请求数、耗时和 Go 内存区间见 [CI JSON 摘录](ci-v1.1.3.json)，完整日志与微基准位于该运行的 `regression-ubuntu-24.04` / `regression-windows-2022` artifacts。三轮八标签语料不代表真实世界准确率，Go 堆采样不包含 Chrome RSS/CPU。
+
+本机首轮完整普通/race 各 1827 pass，原有身份均为 1771/1771；随后两项边界修复的报告包 race、统计测试连续 100 次 race、独立 vet 审查也通过。最终 1837 事件结果以上述双平台 CI 为准。全项目短 race 和真实 Chrome 截图专项也通过；短测试不替代完整验收。Windows EXE 和 Linux amd64 本机交叉构建通过，未创建正式 release。
+
+本次保留了失败记录：第一轮 `b1731f8` 的 CI 41318471987 成功；边界修复后的 CI 41320394942 因上述 Windows 旧时序测试失败，修复后重新运行最终 CI 成功。此后的收尾提交只包含文档和结果数据，使用 `[skip ci]`，源码和测试保持与已验收提交一致。
+
+## 修改文件
+
+- 报告边界：`pkg/httpclient/evidence.go`、`pkg/report/reporter.go`、`pkg/report/redact.go`、`pkg/report/raw_contract_test.go`、`pkg/report/security_test.go`。
+- 文件保护：`pkg/internal/privatefs/files.go`、`files_test.go`、`permissions_unix.go`、`permissions_unix_test.go`、`permissions_windows.go`、`permissions_windows_test.go`。
+- 截图：`pkg/execverify/verifier.go`、`verifier_test.go`、`screenshot_security_test.go`。
+- CLI：`cmd/main.go`、`cmd/config.go`、`cmd/auth_failure_test.go`、`cmd/report_security_test.go`。
+- 回归：`.github/workflows/build.yml`、`pkg/scanner/engine_coverage_test.go`、`test/summarize.py`、`test/test_summarize.py`、`test/legacy-v1.1.2-tests.txt`。
+- 版本与文档：`go.mod`（已锁定的 x/sys 改为直接依赖）、`Makefile`、`Dockerfile`、`README.md`、`CHANGELOG.md`、`test/README.md`、本文件及 `test/ci-v1.1.3.json`。
+
+## 遗留边界
+
+- 脱敏不是任意业务秘密或 PII 的通用识别器；未标注且不属于已识别凭据的自由文本、目标主机/路径仍可能敏感。终端进度/错误日志不属于五格式文件导出边界，分享前需要检查。
+- 内存中的原始证据仍存在，以保持认证和浏览器重放；SDK 直接序列化 model/Capture 可绕过报告安全入口。显式 raw 文件含真实凭据，权限不等于可以公开分享。
+- 本地管理员/root、同一用户的其他进程、备份/已泄露副本不受当前文件 ACL 防护；输出父目录应由使用者信任。Windows rename 原子性由 Go/文件系统限制，不作跨平台原子承诺。
+- 强制终止/断电可能留下私有截图目录，旧版共享目录和旧报告不会自动追溯清理或修复权限。正常 Close/取消及本轮创建文件已测试；无法自动保证所有崩溃场景。
+- 下一版本可扩展业务自定义敏感字段配置和受控的证据保留策略；本轮不增加新的扫描业务模块。

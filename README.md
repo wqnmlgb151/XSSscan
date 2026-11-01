@@ -127,7 +127,7 @@ make build
 ./xsscan --version
 ```
 
-从 GitHub 构建该版本：
+从 GitHub 重建已发布的 v1.1.1：
 
 ```bash
 git clone https://github.com/wqnmlgb151/XSSscan.git
@@ -139,7 +139,7 @@ make build VERSION=1.1.1
 Windows 没有 make 时，在当前源码目录直接构建 EXE：
 
 ```powershell
-go build -trimpath -ldflags "-s -w -X main.Version=1.1.1" -o xsscan.exe ./cmd
+go build -trimpath -ldflags "-s -w -X main.Version=1.1.2" -o xsscan.exe ./cmd
 .\xsscan.exe --version
 ```
 
@@ -925,6 +925,12 @@ v1.0.0-rc.1 的发布前检查（2026-10-10）：
 
 ## 更新日志
 
+### v1.1.2 — 开发中
+
+- 公开既有 Go 测试与本地合成靶场，补强四类检测正负例、Blind 关联、超时/取消及 adaptive 对照断言。
+- Windows/Linux CI 执行完整普通/race 测试、vet、构建及重复性能基线，并保存结果记录。
+- 详见 [CHANGELOG](CHANGELOG.md) 和 [本轮验证记录](test/baseline-v1.1.2.md)。
+
 ### v1.1.1 — 2026-10-31
 
 - 维护发布：统一 CLI、Makefile、Dockerfile、构建示例及下载链接的版本号为 1.1.1。
@@ -1007,7 +1013,7 @@ v1.0.0-rc.1 的发布前检查（2026-10-10）：
 构建时通过 ldflags 注入版本：
 
 ```bash
-make build VERSION=1.1.1
+make build VERSION=1.1.2
 ```
 
 `--version` 输出当前构建版本。

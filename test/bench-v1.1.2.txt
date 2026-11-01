@@ -1,0 +1,22 @@
+goos: windows
+goarch: amd64
+pkg: github.com/xsscan/xsscan/pkg/jsanalysis
+cpu: AMD Ryzen 9 7940HX with Radeon Graphics
+BenchmarkConcurrentColdScript-32    	     338	   3564918 ns/op	 1787868 B/op	    7541 allocs/op
+BenchmarkConcurrentColdScript-32    	     344	   3650528 ns/op	 1784465 B/op	    7520 allocs/op
+BenchmarkConcurrentColdScript-32    	     328	   4212135 ns/op	 1784366 B/op	    7520 allocs/op
+BenchmarkRepeatedScript-32          	   10000	    136718 ns/op	   54667 B/op	       3 allocs/op
+BenchmarkRepeatedScript-32          	    9432	    113091 ns/op	   54576 B/op	       3 allocs/op
+BenchmarkRepeatedScript-32          	    8787	    130390 ns/op	   54576 B/op	       3 allocs/op
+BenchmarkUncachedScript-32          	     356	   3586289 ns/op	  907199 B/op	    7441 allocs/op
+BenchmarkUncachedScript-32          	     366	   3412381 ns/op	  907144 B/op	    7441 allocs/op
+BenchmarkUncachedScript-32          	     327	   3660865 ns/op	  907232 B/op	    7441 allocs/op
+BenchmarkIndexedCallLookup-32       	46897716	        22.51 ns/op	       0 B/op	       0 allocs/op
+BenchmarkIndexedCallLookup-32       	52522846	        22.90 ns/op	       0 B/op	       0 allocs/op
+BenchmarkIndexedCallLookup-32       	54130861	        22.93 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/xsscan/xsscan/pkg/jsanalysis	14.778s
+PASS
+ok  	github.com/xsscan/xsscan/pkg/context	0.122s
+PASS
+ok  	github.com/xsscan/xsscan/pkg/scanner	0.157s

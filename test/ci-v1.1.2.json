@@ -1,0 +1,591 @@
+{
+  "source_commit": "654e016120b348ef8635307534826b5cb53d3bf3",
+  "run_url": "https://github.com/wqnmlgb151/XSSscan/actions/runs/41312184259",
+  "conclusion": "success",
+  "platforms": {
+    "ubuntu-24.04": {
+      "environment": [
+        "go version go1.26.9 linux/amd64",
+        "linux",
+        "amd64",
+        "go1.26.9",
+        "1",
+        "gcc",
+        "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+        "Copyright (C) 2023 Free Software Foundation, Inc.",
+        "This is free software; see the source for copying conditions.  There is NO",
+        "warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.",
+        "",
+        "Python 3.12.3",
+        "Google Chrome 156.0.8078.47 "
+      ],
+      "tests": {
+        "full": {
+          "test_events": {
+            "pass": 1771
+          },
+          "packages": {
+            "pass": 24,
+            "skip": 5
+          }
+        },
+        "race": {
+          "test_events": {
+            "pass": 1771
+          },
+          "packages": {
+            "pass": 24,
+            "skip": 5
+          }
+        }
+      },
+      "baseline": {
+        "test_events": {
+          "pass": 27
+        },
+        "packages": {
+          "github.com/xsscan/xsscan/test/integration": "pass"
+        },
+        "baseline": [
+          {
+            "module": "blind",
+            "safe": false,
+            "runs": 3,
+            "target_requests": {
+              "median": 3,
+              "min": 3,
+              "max": 3
+            },
+            "callback_requests": {
+              "median": 3,
+              "min": 3,
+              "max": 3
+            },
+            "wall_ms": {
+              "median": 1.978082,
+              "min": 1.659148,
+              "max": 2.163127
+            },
+            "go_total_alloc_bytes": {
+              "median": 381152,
+              "min": 360264,
+              "max": 442384
+            },
+            "go_heap_inuse_after_bytes": {
+              "median": 4415488,
+              "min": 3710976,
+              "max": 4440064
+            }
+          },
+          {
+            "module": "blind",
+            "safe": true,
+            "runs": 3,
+            "target_requests": {
+              "median": 3,
+              "min": 3,
+              "max": 3
+            },
+            "callback_requests": {
+              "median": 3,
+              "min": 3,
+              "max": 3
+            },
+            "wall_ms": {
+              "median": 1.512517,
+              "min": 1.491707,
+              "max": 2.380611
+            },
+            "go_total_alloc_bytes": {
+              "median": 310328,
+              "min": 292656,
+              "max": 339072
+            },
+            "go_heap_inuse_after_bytes": {
+              "median": 4104192,
+              "min": 3776512,
+              "max": 4538368
+            }
+          },
+          {
+            "module": "dom",
+            "safe": false,
+            "runs": 3,
+            "target_requests": {
+              "median": 25,
+              "min": 25,
+              "max": 25
+            },
+            "callback_requests": {
+              "median": 0,
+              "min": 0,
+              "max": 0
+            },
+            "wall_ms": {
+              "median": 10864.30404,
+              "min": 10648.510971,
+              "max": 10899.17545
+            },
+            "go_total_alloc_bytes": {
+              "median": 6760344,
+              "min": 6598936,
+              "max": 7178920
+            },
+            "go_heap_inuse_after_bytes": {
+              "median": 4816896,
+              "min": 4546560,
+              "max": 5095424
+            }
+          },
+          {
+            "module": "dom",
+            "safe": true,
+            "runs": 3,
+            "target_requests": {
+              "median": 24,
+              "min": 24,
+              "max": 24
+            },
+            "callback_requests": {
+              "median": 0,
+              "min": 0,
+              "max": 0
+            },
+            "wall_ms": {
+              "median": 10922.878541,
+              "min": 10808.453011,
+              "max": 10981.254091
+            },
+            "go_total_alloc_bytes": {
+              "median": 6575256,
+              "min": 6542008,
+              "max": 6764536
+            },
+            "go_heap_inuse_after_bytes": {
+              "median": 5210112,
+              "min": 5021696,
+              "max": 5242880
+            }
+          },
+          {
+            "module": "reflected",
+            "safe": false,
+            "runs": 3,
+            "target_requests": {
+              "median": 7,
+              "min": 7,
+              "max": 7
+            },
+            "callback_requests": {
+              "median": 0,
+              "min": 0,
+              "max": 0
+            },
+            "wall_ms": {
+              "median": 2.260273,
+              "min": 2.05384,
+              "max": 7.300222
+            },
+            "go_total_alloc_bytes": {
+              "median": 442456,
+              "min": 405512,
+              "max": 1693312
+            },
+            "go_heap_inuse_after_bytes": {
+              "median": 4005888,
+              "min": 3563520,
+              "max": 4399104
+            }
+          },
+          {
+            "module": "reflected",
+            "safe": true,
+            "runs": 3,
+            "target_requests": {
+              "median": 3,
+              "min": 3,
+              "max": 3
+            },
+            "callback_requests": {
+              "median": 0,
+              "min": 0,
+              "max": 0
+            },
+            "wall_ms": {
+              "median": 1.06271,
+              "min": 0.953382,
+              "max": 1.197911
+            },
+            "go_total_alloc_bytes": {
+              "median": 368616,
+              "min": 331480,
+              "max": 432768
+            },
+            "go_heap_inuse_after_bytes": {
+              "median": 3956736,
+              "min": 3940352,
+              "max": 4227072
+            }
+          },
+          {
+            "module": "stored",
+            "safe": false,
+            "runs": 3,
+            "target_requests": {
+              "median": 6,
+              "min": 6,
+              "max": 6
+            },
+            "callback_requests": {
+              "median": 0,
+              "min": 0,
+              "max": 0
+            },
+            "wall_ms": {
+              "median": 3.203657,
+              "min": 2.811305,
+              "max": 4.399472
+            },
+            "go_total_alloc_bytes": {
+              "median": 773368,
+              "min": 766256,
+              "max": 774248
+            },
+            "go_heap_inuse_after_bytes": {
+              "median": 3997696,
+              "min": 3866624,
+              "max": 5824512
+            }
+          },
+          {
+            "module": "stored",
+            "safe": true,
+            "runs": 3,
+            "target_requests": {
+              "median": 6,
+              "min": 6,
+              "max": 6
+            },
+            "callback_requests": {
+              "median": 0,
+              "min": 0,
+              "max": 0
+            },
+            "wall_ms": {
+              "median": 1.551721,
+              "min": 1.398886,
+              "max": 2.210735
+            },
+            "go_total_alloc_bytes": {
+              "median": 253744,
+              "min": 228672,
+              "max": 302400
+            },
+            "go_heap_inuse_after_bytes": {
+              "median": 4268032,
+              "min": 4063232,
+              "max": 4997120
+            }
+          }
+        ],
+        "fixture_outcomes": {
+          "TP": 12,
+          "TN": 12
+        },
+        "scope": "Synthetic candidate verdicts only; Go heap samples exclude Chrome and are not peak RSS."
+      }
+    },
+    "windows-2022": {
+      "environment": [
+        "go version go1.26.9 windows/amd64",
+        "windows",
+        "amd64",
+        "go1.26.9",
+        "1",
+        "gcc",
+        "gcc.exe (x86_64-posix-seh-rev2, Built by MinGW-Builds project) 14.2.0",
+        "Copyright (C) 2024 Free Software Foundation, Inc.",
+        "This is free software; see the source for copying conditions.  There is NO",
+        "warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.",
+        "",
+        "Python 3.12.10",
+        "156.0.8078.48"
+      ],
+      "tests": {
+        "full": {
+          "test_events": {
+            "pass": 1771
+          },
+          "packages": {
+            "pass": 24,
+            "skip": 5
+          }
+        },
+        "race": {
+          "test_events": {
+            "pass": 1771
+          },
+          "packages": {
+            "pass": 24,
+            "skip": 5
+          }
+        }
+      },
+      "baseline": {
+        "test_events": {
+          "pass": 27
+        },
+        "packages": {
+          "github.com/xsscan/xsscan/test/integration": "pass"
+        },
+        "baseline": [
+          {
+            "module": "blind",
+            "safe": false,
+            "runs": 3,
+            "target_requests": {
+              "median": 3,
+              "min": 3,
+              "max": 3
+            },
+            "callback_requests": {
+              "median": 3,
+              "min": 3,
+              "max": 3
+            },
+            "wall_ms": {
+              "median": 3.8841,
+              "min": 2.8703,
+              "max": 4.4444
+            },
+            "go_total_alloc_bytes": {
+              "median": 384648,
+              "min": 336784,
+              "max": 445792
+            },
+            "go_heap_inuse_after_bytes": {
+              "median": 4161536,
+              "min": 3997696,
+              "max": 4702208
+            }
+          },
+          {
+            "module": "blind",
+            "safe": true,
+            "runs": 3,
+            "target_requests": {
+              "median": 3,
+              "min": 3,
+              "max": 3
+            },
+            "callback_requests": {
+              "median": 3,
+              "min": 3,
+              "max": 3
+            },
+            "wall_ms": {
+              "median": 2.885,
+              "min": 2.6812,
+              "max": 3.3283
+            },
+            "go_total_alloc_bytes": {
+              "median": 327152,
+              "min": 320880,
+              "max": 447048
+            },
+            "go_heap_inuse_after_bytes": {
+              "median": 4169728,
+              "min": 4046848,
+              "max": 4423680
+            }
+          },
+          {
+            "module": "dom",
+            "safe": false,
+            "runs": 3,
+            "target_requests": {
+              "median": 25,
+              "min": 25,
+              "max": 25
+            },
+            "callback_requests": {
+              "median": 0,
+              "min": 0,
+              "max": 0
+            },
+            "wall_ms": {
+              "median": 10876.1317,
+              "min": 10366.4378,
+              "max": 11041.4384
+            },
+            "go_total_alloc_bytes": {
+              "median": 6750832,
+              "min": 6737368,
+              "max": 8907968
+            },
+            "go_heap_inuse_after_bytes": {
+              "median": 4972544,
+              "min": 4718592,
+              "max": 5210112
+            }
+          },
+          {
+            "module": "dom",
+            "safe": true,
+            "runs": 3,
+            "target_requests": {
+              "median": 24,
+              "min": 24,
+              "max": 24
+            },
+            "callback_requests": {
+              "median": 0,
+              "min": 0,
+              "max": 0
+            },
+            "wall_ms": {
+              "median": 10543.3672,
+              "min": 10268.6409,
+              "max": 10786.8471
+            },
+            "go_total_alloc_bytes": {
+              "median": 6642672,
+              "min": 6637088,
+              "max": 6837072
+            },
+            "go_heap_inuse_after_bytes": {
+              "median": 4653056,
+              "min": 4489216,
+              "max": 4808704
+            }
+          },
+          {
+            "module": "reflected",
+            "safe": false,
+            "runs": 3,
+            "target_requests": {
+              "median": 7,
+              "min": 7,
+              "max": 7
+            },
+            "callback_requests": {
+              "median": 0,
+              "min": 0,
+              "max": 0
+            },
+            "wall_ms": {
+              "median": 4.1966,
+              "min": 3.2038,
+              "max": 12.7104
+            },
+            "go_total_alloc_bytes": {
+              "median": 527608,
+              "min": 405120,
+              "max": 1670080
+            },
+            "go_heap_inuse_after_bytes": {
+              "median": 3686400,
+              "min": 3342336,
+              "max": 4431872
+            }
+          },
+          {
+            "module": "reflected",
+            "safe": true,
+            "runs": 3,
+            "target_requests": {
+              "median": 3,
+              "min": 3,
+              "max": 3
+            },
+            "callback_requests": {
+              "median": 0,
+              "min": 0,
+              "max": 0
+            },
+            "wall_ms": {
+              "median": 1.4654,
+              "min": 1.2478,
+              "max": 1.6482
+            },
+            "go_total_alloc_bytes": {
+              "median": 370240,
+              "min": 331512,
+              "max": 385000
+            },
+            "go_heap_inuse_after_bytes": {
+              "median": 3964928,
+              "min": 3604480,
+              "max": 4784128
+            }
+          },
+          {
+            "module": "stored",
+            "safe": false,
+            "runs": 3,
+            "target_requests": {
+              "median": 6,
+              "min": 6,
+              "max": 6
+            },
+            "callback_requests": {
+              "median": 0,
+              "min": 0,
+              "max": 0
+            },
+            "wall_ms": {
+              "median": 4.3569,
+              "min": 3.9443,
+              "max": 5.0057
+            },
+            "go_total_alloc_bytes": {
+              "median": 776520,
+              "min": 747512,
+              "max": 820976
+            },
+            "go_heap_inuse_after_bytes": {
+              "median": 5283840,
+              "min": 4014080,
+              "max": 5799936
+            }
+          },
+          {
+            "module": "stored",
+            "safe": true,
+            "runs": 3,
+            "target_requests": {
+              "median": 6,
+              "min": 6,
+              "max": 6
+            },
+            "callback_requests": {
+              "median": 0,
+              "min": 0,
+              "max": 0
+            },
+            "wall_ms": {
+              "median": 1.4521,
+              "min": 1.4066,
+              "max": 2.0157
+            },
+            "go_total_alloc_bytes": {
+              "median": 216520,
+              "min": 210424,
+              "max": 219352
+            },
+            "go_heap_inuse_after_bytes": {
+              "median": 5423104,
+              "min": 4153344,
+              "max": 5980160
+            }
+          }
+        ],
+        "fixture_outcomes": {
+          "TP": 12,
+          "TN": 12
+        },
+        "scope": "Synthetic candidate verdicts only; Go heap samples exclude Chrome and are not peak RSS."
+      }
+    }
+  }
+}

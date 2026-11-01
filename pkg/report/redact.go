@@ -21,7 +21,7 @@ const redacted = "[REDACTED]"
 
 var credentialPair = regexp.MustCompile(`(?i)["']?([a-z0-9_.-]*(?:token|secret|password|passwd|apikey|api_key|api-key|credential|csrf|session)[a-z0-9_.-]*|authorization|cookie|auth|sid|jwt|code|key)["']?\s*[:=]\s*(?:"([^"\r\n]*)"|'([^'\r\n]*)'|([^\s&;,"'<>{}]+))`)
 var authValue = regexp.MustCompile(`(?i)\b(Bearer|Basic)\s+([a-z0-9._~+/=-]+)`)
-var reportURL = regexp.MustCompile(`https?://[^\s<>"']+`)
+var reportURL = regexp.MustCompile(`(?i)https?://[^\s<>"']+`)
 
 func sensitiveName(name string) bool {
 	name = strings.Map(func(r rune) rune {
@@ -88,6 +88,11 @@ func (r *redactor) collect(value any) {
 func (r *redactor) collectString(value string) {
 	body := value
 	head, tail, isHTTP := strings.Cut(value, "\r\n\r\n")
+	headerSep := "\r\n"
+	if !isHTTP {
+		head, tail, isHTTP = strings.Cut(value, "\n\n")
+		headerSep = "\n"
+	}
 	if isHTTP {
 		body = tail
 	}
@@ -98,7 +103,7 @@ func (r *redactor) collectString(value string) {
 		r.collectJSONCredentials(document, false)
 	}
 	if isHTTP {
-		for _, line := range strings.Split(head, "\r\n")[1:] {
+		for _, line := range strings.Split(head, headerSep)[1:] {
 			name, contentType, ok := strings.Cut(line, ":")
 			if !ok || !strings.EqualFold(name, "Content-Type") {
 				continue
@@ -154,7 +159,7 @@ func (r *redactor) collectString(value string) {
 	}
 	lines := strings.Split(value, "\n")
 	if isHTTP {
-		lines = strings.Split(head, "\r\n")[1:]
+		lines = strings.Split(head, headerSep)[1:]
 	}
 	previousSecret := false
 	for _, line := range lines {

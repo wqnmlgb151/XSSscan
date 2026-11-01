@@ -46,7 +46,7 @@ defer v.Close() // 生产调用方应检查 Close 的清理错误
 
 ## 自动化验证
 
-- `pkg/report/security_test.go`：五格式默认无合成凭据、嵌套/编码/预制 curl 副本、重定向、Schema/计数、输入不变。
+- `pkg/report/security_test.go`：五格式默认无合成凭据、嵌套/编码/预制 curl 副本、重定向、大写 URL scheme/编码参数名、LF 自定义头副本、Schema/计数、输入不变。
 - 原二进制和 HTTP 保真用例仅改为显式 raw；认证失败原报文用例保留原断言并显式 raw；其他原有测试继续使用默认安全模式。
 - `cmd/report_security_test.go`：五格式 safe/raw、输出要求、YAML/CLI 优先级。
 - `pkg/internal/privatefs/*_test.go`：替换与失败回收、独立目录、Unix 模式/符号链接、Windows 实际 DACL 与宽松父目录。

@@ -82,6 +82,8 @@ func TestRedactionPreservesSchemaEnumsAndLargeCounters(t *testing.T) {
 func TestCredentialCopiesInEveryReport(t *testing.T) {
 	for _, tc := range []struct{ name, request, secret string }{
 		{"custom-auth-header", "GET / HTTP/1.1\r\nHost: local\r\nX-Auth-Key: header-opaque-canary\r\n\r\n", "header-opaque-canary"},
+		{"lf-custom-header", "GET / HTTP/1.1\nHost: local\nX-Opaque: lf-header-canary\n\n", "lf-header-canary"},
+		{"uppercase-url", "GET HTTP://local.test/?%74oken=scheme-canary HTTP/1.1\r\nHost: local\r\n\r\n", "scheme-canary"},
 		{"basic-auth", "GET / HTTP/1.1\r\nHost: local\r\nAuthorization: Basic " + base64.StdEncoding.EncodeToString([]byte("worker:basic-password-canary")) + "\r\n\r\n", "basic-password-canary"},
 		{"multipart", "POST / HTTP/1.1\r\nHost: local\r\nContent-Type: multipart/form-data; boundary=fixture\r\n\r\n--fixture\r\nContent-Disposition: form-data; name=\"password\"\r\n\r\nmultipart-canary\r\n--fixture--\r\n", "multipart-canary"},
 		{"escaped-json", "POST / HTTP/1.1\r\nHost: local\r\nContent-Type: application/json\r\n\r\n{\"password\":\"escaped-\\u0063anary\"}", "escaped-canary"},

@@ -8,7 +8,7 @@
 <p align="center">
 <img src="https://img.shields.io/badge/go-1.26+-00ADD8?logo=go" alt="Go">
 <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
-<img src="https://img.shields.io/badge/source-1.1.1-orange" alt="Source version">
+<img src="https://img.shields.io/badge/source-1.1.2-orange" alt="Source version">
 <img src="https://img.shields.io/badge/repo-github.com%2Fwqnmlgb151%2FXSSscan-lightgrey" alt="Repo">
 </p>
 
@@ -17,6 +17,8 @@
 ## [Releases](https://github.com/wqnmlgb151/XSSscan/releases)
 
 当前版本为 **[v1.1.1](https://github.com/wqnmlgb151/XSSscan/releases/tag/v1.1.1)**（2026-10-31）。[下载 Windows EXE](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.1/xsscan_1.1.1_windows_amd64.exe)，其他平台见[安装](#安装)。默认使用 `adaptive` 策略，调度反射型、DOM、存储型和盲 XSS 四类检测，可用 `--types` 选择检测类型。
+
+当前开发源码为 **v1.1.2**，重点完善公开测试和 Windows/Linux CI。复现步骤、覆盖映射及验证边界见 [自动化回归说明](test/README.md)，本轮变更见 [CHANGELOG](CHANGELOG.md)。上方链接仍指向已经发布的 v1.1.1 附件。
 
 发布页的 **Assets** 提供六个预编译附件：Windows EXE/ZIP，以及 Linux、macOS 的 amd64/arm64 TAR.GZ。GitHub 自动提供的 Source code ZIP/TAR.GZ 为源码；直接运行请下载带 `xsscan_1.1.1_` 前缀的附件。压缩包包含程序、说明和许可证。
 
@@ -117,7 +119,7 @@ Windows amd64 已实际运行；其他平台产物由交叉编译生成，需在
 
 ### 从源码构建
 
-源码版本为 `1.1.1`。以下命令在当前源码目录中运行；版本参数只设置程序版本显示，不会下载或升级源码。
+源码版本为 `1.1.2`。以下命令在当前源码目录中运行；版本参数只设置程序版本显示，不会下载或升级源码。签出 `v1.1.1` 的示例用于重建已发布版本。
 
 ```bash
 # 需要 Go 1.26+（推荐 Go 1.26.9）
@@ -125,7 +127,7 @@ make build
 ./xsscan --version
 ```
 
-从 GitHub 构建该版本：
+从 GitHub 重建已发布的 v1.1.1：
 
 ```bash
 git clone https://github.com/wqnmlgb151/XSSscan.git
@@ -137,7 +139,7 @@ make build VERSION=1.1.1
 Windows 没有 make 时，在当前源码目录直接构建 EXE：
 
 ```powershell
-go build -trimpath -ldflags "-s -w -X main.Version=1.1.1" -o xsscan.exe ./cmd
+go build -trimpath -ldflags "-s -w -X main.Version=1.1.2" -o xsscan.exe ./cmd
 .\xsscan.exe --version
 ```
 
@@ -823,7 +825,7 @@ AST 调用表示语法上的候选证据。分析会排除字面量布尔条件�
 
 ### 常用命令
 
-公开仓库和发布包按交付范围保留运行源码；测试与开发记录保存在维护者本地，不随本次分发。下面的测试命令适用于包含本地测试文件的开发目录。
+从 v1.1.2 开始，Go 单元、浏览器及集成测试包含在公开源码中。需要 Go 1.26.9、Chrome 和 race 所需的 C 编译器；完整命令、合成靶场及基线见 [test/README.md](test/README.md)。本地开发记录仍不分发。
 
 ```bash
 # 构建
@@ -864,6 +866,8 @@ make clean
 
 ## 发布验证
 
+v1.1.2 的实际运行状态及基线见 [验证记录](test/baseline-v1.1.2.md)，CI 在 Windows/Linux 执行完整普通/race 回归、vet 和构建。
+
 v1.1.1 为版本与审计材料整理发布；当前验证记录随 Release 提供。v1.1.0 的完整回归记录保留如下，不能当作 1.1.1 重新运行的完整回归。
 
 
@@ -879,7 +883,7 @@ v1.1.0 发布前检查（2026-10-30，Windows / Go 1.26.9）：
 | 跨平台附件 | Windows amd64、Linux/macOS amd64/arm64 构建；归档内容及 Unix 可执行权限检查 |
 | 验证边界 | Linux/macOS 未实机运行；Docker 未构建；本轮未新增漏洞数据库检查 |
 
-首轮普通完整回归有一项因随机测试端口 6667 被 Chrome 拒绝而失败；后续完整串行 race 回归通过全部用例。测试与开发记录按仓库策略保留在本地，不进入源码分发。远端 CI 状态以提交的 GitHub Actions 页面为准。
+首轮普通完整回归有一项因随机测试端口 6667 被 Chrome 拒绝而失败；后续完整串行 race 回归通过全部用例。上述是 v1.1.0 历史记录；v1.1.2 起测试进入源码分发并统一使用避开受限端口的本地 fixture。远端 CI 状态以提交的 GitHub Actions 页面为准。
 
 ### 历史 v1.0.0-rc.1
 
@@ -920,6 +924,12 @@ v1.0.0-rc.1 的发布前检查（2026-10-10）：
 - 本地程序为根目录 `xsscan.exe`。GitHub 下载仍是上方历史 `v1.0.0-rc.1`，本轮未推送、未发布；Docker 未构建，未新增依赖漏洞数据库检查。
 
 ## 更新日志
+
+### v1.1.2 — 开发中
+
+- 公开既有 Go 测试与本地合成靶场，补强四类检测正负例、Blind 关联、超时/取消及 adaptive 对照断言。
+- Windows/Linux CI 执行完整普通/race 测试、vet、构建及重复性能基线，并保存结果记录。
+- 详见 [CHANGELOG](CHANGELOG.md) 和 [本轮验证记录](test/baseline-v1.1.2.md)。
 
 ### v1.1.1 — 2026-10-31
 
@@ -992,7 +1002,7 @@ v1.0.0-rc.1 的发布前检查（2026-10-10）：
 
 版本号遵循 `x.y.z` 格式：
 
-当前发布版本为 `1.1.1`；源码、程序版本和上方下载链接保持一致。
+当前发布版本为 `1.1.1`，开发源码与默认构建标识为 `1.1.2`。发布附件链接以对应 tag 为准。
 
 | 位 | 含义 |
 |----|------|
@@ -1003,7 +1013,7 @@ v1.0.0-rc.1 的发布前检查（2026-10-10）：
 构建时通过 ldflags 注入版本：
 
 ```bash
-make build VERSION=1.1.1
+make build VERSION=1.1.2
 ```
 
 `--version` 输出当前构建版本。

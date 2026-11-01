@@ -1,8 +1,8 @@
-name: Build
+name: Regression
 
 on:
   push:
-    branches: [master]
+    branches: [master, 'codex/**']
   pull_request:
   workflow_dispatch:
 
@@ -10,12 +10,13 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  regression:
+    timeout-minutes: 45
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-24.04, windows-2022]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -24,8 +25,48 @@ jobs:
           cache: true
       - name: Verify dependencies
         run: go mod verify
+      - name: Record environment and require Chrome
+        shell: bash
+        run: |
+          mkdir -p ci-results
+          go version > ci-results/environment.txt
+          go env GOOS GOARCH GOVERSION CGO_ENABLED CC >> ci-results/environment.txt
+          gcc --version >> ci-results/environment.txt
+          python --version >> ci-results/environment.txt
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            chrome='/c/Program Files/Google/Chrome/Application/chrome.exe'
+            test -f "$chrome"
+            powershell -NoProfile -Command '(Get-Item "C:/Program Files/Google/Chrome/Application/chrome.exe").VersionInfo.ProductVersion' >> ci-results/environment.txt
+          else
+            google-chrome --version >> ci-results/environment.txt
+          fi
       - name: Static checks
         run: go vet ./...
+      - name: Validate result summarizer
+        run: python -m unittest discover -s test -p 'test_summarize.py'
+      - name: Full tests (real Chrome, serialized packages)
+        shell: bash
+        run: |
+          set -o pipefail
+          go test -p 1 -count=1 -timeout 15m -json ./... | tee ci-results/full.json
+      - name: Race tests (real Chrome, serialized packages)
+        shell: bash
+        env:
+          CGO_ENABLED: '1'
+        run: |
+          set -o pipefail
+          go test -race -p 1 -count=1 -timeout 15m -json ./... | tee ci-results/race.json
+      - name: Repeated labeled baseline
+        shell: bash
+        run: |
+          set -o pipefail
+          go test -p 1 -count=3 -run '^TestRegressionBaseline$' -json ./test/integration | tee ci-results/baseline.json
+          python test/summarize.py ci-results/baseline.json --baseline-repeats 3 > ci-results/baseline-summary.json
+      - name: Microbenchmarks
+        shell: bash
+        run: |
+          set -o pipefail
+          go test -run '^$' -bench . -benchmem -count=3 ./pkg/jsanalysis ./pkg/context ./pkg/scanner | tee ci-results/bench.txt
       - name: Build
         shell: bash
         env:
@@ -36,3 +77,10 @@ jobs:
           go build -trimpath -ldflags '-s -w' -o "$output" ./cmd
           "./$output" --version
           "./$output" --help
+      - name: Publish synthetic validation records
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: regression-${{ matrix.os }}
+          path: ci-results/
+          if-no-files-found: error

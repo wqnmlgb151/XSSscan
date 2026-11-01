@@ -5,6 +5,8 @@
 *.test
 *.prof
 coverage.html
+/ci-results/
+__pycache__/
 
 # Go workspace
 go.work
@@ -31,11 +33,8 @@ bounty_*
 level*_report
 *.bak
 
-# Local tests and development records (not distributed)
-*_test.go
-/test/
+# Local development records (not distributed)
 /AGENTS.md
 /ENGINEERING_PLAN.md
 /.agents/
 /.codex/
-/pkg/dom/sinks.js

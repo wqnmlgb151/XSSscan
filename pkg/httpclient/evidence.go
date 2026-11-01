@@ -97,6 +97,8 @@ func CapturedSummary(resp *http.Response) CaptureSummary {
 
 // WithCapture records after net/http adds cookie-jar values. Neither credentials
 // nor payloads are redacted. The original client and request are never mutated.
+// This is in-memory replay evidence; report.Reporter redacts the export projection
+// by default. Do not serialize captures directly to a shareable report.
 func WithCapture(client *http.Client) *http.Client {
 	copy := *client
 	if _, ok := copy.Transport.(captureTransport); !ok {

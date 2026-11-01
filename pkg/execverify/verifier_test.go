@@ -47,6 +47,9 @@ func TestVerifyFinding_QueryParam_Alert(t *testing.T) {
 	if !result.Executed {
 		t.Fatalf("Expected reflected event handler to execute: %+v", result)
 	}
+	if result.ScreenshotPath != "" {
+		t.Fatal("default verification persisted an image")
+	}
 }
 
 func TestVerifyFinding_QueryParam_ScriptInjection(t *testing.T) {

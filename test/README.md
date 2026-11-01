@@ -1,5 +1,7 @@
 # 自动化回归（v1.1.2）
 
+v1.1.3 安全改动及新测试见 [安全审计与验证](security-v1.1.3.md)。CI 在完整普通/race 后调用 `summarize.py --required-tests test/legacy-v1.1.2-tests.txt`，逐项保留原有 1771 个通过事件的身份范围。
+
 源码仓库包含 `cmd/`、`pkg/` 和 `test/integration/` 的 Go 测试以及 `pkg/dom/sinks.js` 测试资源。原有本地测试直接纳入版本控制，补充缺口；扫描架构、算法、CLI 和五类报告格式不变。
 
 ## 环境与命令

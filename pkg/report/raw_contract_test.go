@@ -17,7 +17,7 @@ func TestJUnitBinaryEvidenceRemainsParseable(t *testing.T) {
 	raw := "HTTP/1.1 200 OK\r\n\r\n" + string([]byte{0, 1, 255})
 	e := model.HTTPExchange{Response: raw, ResponseBase64: base64.StdEncoding.EncodeToString([]byte(raw))}
 	data := FromScanResult(&model.ScanResult{Findings: []model.Finding{{RawResponse: raw, Payload: "nul\x00", Evidence: model.Evidence{HTTP: &e}}}}, 0)
-	out, err := NewReporter().Generate(data, FormatJUnit)
+	out, err := NewReporterWithOptions(Options{IncludeRawEvidence: true}).Generate(data, FormatJUnit)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +40,7 @@ func TestOriginalHTTPAcrossFiveFormatsAndHTMLCopy(t *testing.T) {
 	response := "HTTP/1.1 200 OK\r\nSet-Cookie: session=response-secret\r\n\r\noriginal response"
 	data := FromScanResult(&model.ScanResult{Findings: []model.Finding{{URL: "http://local", ParamType: model.ParamBody, RawRequest: raw, RawResponse: response, Evidence: model.Evidence{HTTP: &model.HTTPExchange{Request: raw, Response: response}}}}}, 0)
 	for _, format := range []OutputFormat{FormatJSON, FormatHTML, FormatMarkdown, FormatSARIF, FormatJUnit} {
-		out, err := NewReporter().Generate(data, format)
+		out, err := NewReporterWithOptions(Options{IncludeRawEvidence: true}).Generate(data, format)
 		if err != nil {
 			t.Fatal(err)
 		}

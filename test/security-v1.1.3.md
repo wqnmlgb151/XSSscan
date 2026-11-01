@@ -52,6 +52,7 @@ defer v.Close() // 生产调用方应检查 Close 的清理错误
 - `pkg/internal/privatefs/*_test.go`：替换与失败回收、独立目录、Unix 模式/符号链接、Windows 实际 DACL 与宽松父目录。
 - `pkg/execverify/screenshot_security_test.go`：默认不落盘、私有临时文件、并发写入/关闭、取消隔离及真实 Chrome PNG 清理。
 - `test/legacy-v1.1.2-tests.txt`：从已验收 CI 41312184259 的原始事件生成 1771 个唯一 `package<TAB>Test` 身份，含子测试与 fuzz seed。CI 普通/race 必须逐项仍 pass，新增数量不能掩盖缺失/skip。
+- 第二轮 Windows CI 暴露既有 `TestEngine_Run_StatsPopulated` 的毫秒取整时序失败（Duration 为 0）。仅为该合成靶场增加 2ms 响应等待，原有正耗时及其他断言不变；本机连续 100 次 race 已通过。生产计时与扫描逻辑未修改。
 
 本机专项 race（含真实 Chrome）、全项目短 race 和 vet 已通过。完整本地与 Windows/Linux CI 运行结果待更新，不能将短测试的浏览器 skip 当作全量通过。
 

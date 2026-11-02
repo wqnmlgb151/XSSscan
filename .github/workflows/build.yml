@@ -29,6 +29,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p ci-results
+          cat test/legacy-v1.1.3-tests.txt "test/legacy-v1.1.3-${RUNNER_OS}-tests.txt" > ci-results/required-tests.txt
           go version > ci-results/environment.txt
           go env GOOS GOARCH GOVERSION CGO_ENABLED CC >> ci-results/environment.txt
           gcc --version >> ci-results/environment.txt
@@ -49,7 +50,7 @@ jobs:
         run: |
           set -o pipefail
           go test -p 1 -count=1 -timeout 15m -json ./... | tee ci-results/full.json
-          python test/summarize.py ci-results/full.json --required-tests test/legacy-v1.1.2-tests.txt > ci-results/full-summary.json
+          python test/summarize.py ci-results/full.json --required-tests ci-results/required-tests.txt > ci-results/full-summary.json
       - name: Race tests (real Chrome, serialized packages)
         shell: bash
         env:
@@ -57,7 +58,7 @@ jobs:
         run: |
           set -o pipefail
           go test -race -p 1 -count=1 -timeout 15m -json ./... | tee ci-results/race.json
-          python test/summarize.py ci-results/race.json --required-tests test/legacy-v1.1.2-tests.txt > ci-results/race-summary.json
+          python test/summarize.py ci-results/race.json --required-tests ci-results/required-tests.txt > ci-results/race-summary.json
       - name: Repeated labeled baseline
         shell: bash
         run: |
@@ -68,7 +69,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          go test -run '^$' -bench . -benchmem -count=3 ./pkg/jsanalysis ./pkg/context ./pkg/scanner | tee ci-results/bench.txt
+          go test -run '^$' -bench . -benchmem -count=3 ./pkg/jsanalysis ./pkg/context ./pkg/scanner ./pkg/requestbudget | tee ci-results/bench.txt
       - name: Build
         shell: bash
         env:

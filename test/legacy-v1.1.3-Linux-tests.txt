@@ -1,0 +1,2 @@
+# Platform-specific identity from master CI 41323926567
+github.com/xsscan/xsscan/pkg/internal/privatefs	TestRejectSymlinkWithoutChangingTarget

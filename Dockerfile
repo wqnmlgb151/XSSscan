@@ -1,6 +1,6 @@
 FROM golang:1.26.9-alpine AS builder
 WORKDIR /app
-ARG VERSION=1.1.3
+ARG VERSION=1.1.4
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .

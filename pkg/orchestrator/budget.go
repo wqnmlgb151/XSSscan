@@ -1,33 +1,30 @@
 package orchestrator
 
 import (
-	"errors"
 	"net/http"
-	"sync/atomic"
+	"sync"
+
+	"github.com/xsscan/xsscan/pkg/requestbudget"
 )
 
-var ErrRequestBudget = errors.New("HTTP request budget exhausted")
+var ErrRequestBudget = requestbudget.ErrHTTP
 
 // BudgetTransport limits actual Go HTTP attempts, including redirects and
-// retries. Browser network accounting remains a separate U5 concern.
+// retries. The optional shared meter preserves independent browser accounting.
 type BudgetTransport struct {
-	Base  http.RoundTripper
-	Max   int64
-	count atomic.Int64
+	Base    http.RoundTripper
+	Max     int64
+	Meter   *requestbudget.Meter
+	once    sync.Once
+	counter *requestbudget.Counter
 }
 
 func (b *BudgetTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if err := req.Context().Err(); err != nil {
 		return nil, err
 	}
-	for {
-		n := b.count.Load()
-		if b.Max > 0 && n >= b.Max {
-			return nil, ErrRequestBudget
-		}
-		if b.count.CompareAndSwap(n, n+1) {
-			break
-		}
+	if !b.getCounter().Take() {
+		return nil, ErrRequestBudget
 	}
 	base := b.Base
 	if base == nil {
@@ -36,4 +33,13 @@ func (b *BudgetTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return base.RoundTrip(req)
 }
 
-func (b *BudgetTransport) Count() int64 { return b.count.Load() }
+func (b *BudgetTransport) getCounter() *requestbudget.Counter {
+	b.once.Do(func() {
+		b.counter = requestbudget.NewCounter(b.Max)
+		if b.Meter != nil {
+			b.counter = b.Meter.HTTP
+		}
+	})
+	return b.counter
+}
+func (b *BudgetTransport) Count() int64 { return b.getCounter().Count() }

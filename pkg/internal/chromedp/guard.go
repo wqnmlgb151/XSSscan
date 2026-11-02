@@ -2,6 +2,7 @@ package chromedp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"sync"
@@ -10,6 +11,7 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	ext "github.com/chromedp/chromedp"
+	"github.com/xsscan/xsscan/pkg/requestbudget"
 	"github.com/xsscan/xsscan/pkg/ssrfguard"
 )
 
@@ -87,6 +89,10 @@ func (g *RequestGuard) record(err error) {
 func GuardRequests(origin string, cancel context.CancelFunc, rewrite RequestRewrite) (*RequestGuard, ext.Action) {
 	g := &RequestGuard{pending: make(chan *fetch.EventRequestPaused, 128)}
 	return g, ext.ActionFunc(func(ctx context.Context) error {
+		if meter := requestbudget.FromContext(ctx); meter != nil && meter.Browser.Denied() > 0 {
+			g.record(requestbudget.ErrBrowser)
+			return requestbudget.ErrBrowser
+		}
 		if err := ssrfguard.IsURLTargetAllowedContext(ctx, origin); err != nil {
 			return err
 		}
@@ -110,6 +116,9 @@ func GuardRequests(origin string, cancel context.CancelFunc, rewrite RequestRewr
 					case <-ctx.Done():
 						return
 					case e := <-g.pending:
+						if ctx.Err() != nil {
+							return
+						}
 						var err error
 						if !ssrfguard.SameOrigin(origin, e.Request.URL) {
 							mainNavigation := e.ResourceType == network.ResourceTypeDocument && e.FrameID == mainFrame
@@ -124,6 +133,21 @@ func GuardRequests(origin string, cancel context.CancelFunc, rewrite RequestRewr
 								return
 							}
 						} else if err = ssrfguard.IsURLTargetAllowedContext(ctx, e.Request.URL); err == nil {
+							if meter := requestbudget.FromContext(ctx); meter != nil && !meter.Browser.Take() {
+								// Record before cancellation so navigation cannot hide the cause.
+								g.record(requestbudget.ErrBrowser)
+								// Fail while the session is still attached: detaching a Fetch
+								// session can resume paused requests instead of rejecting them.
+								failErr := fetch.FailRequest(e.RequestID, network.ErrorReasonBlockedByClient).Do(ctx)
+								stopErr := page.StopLoading().Do(ctx)
+								if failErr != nil || stopErr != nil {
+									g.mu.Lock()
+									g.err = errors.Join(g.err, fmt.Errorf("stop exhausted browser request: %w", errors.Join(failErr, stopErr)))
+									g.mu.Unlock()
+								}
+								cancel()
+								return
+							}
 							continuation := fetch.ContinueRequest(e.RequestID)
 							if rewrite != nil {
 								continuation = rewrite(e)
@@ -149,6 +173,8 @@ func GuardRequests(origin string, cancel context.CancelFunc, rewrite RequestRewr
 			}
 			g.enqueue(e, cancel)
 		})
-		return fetch.Enable().Do(ctx)
+		// Only request-stage Fetch events reserve slots. Network events are not
+		// counted again; redirect hops receive distinct Fetch request IDs.
+		return fetch.Enable().WithPatterns([]*fetch.RequestPattern{{URLPattern: "*", RequestStage: fetch.RequestStageRequest}}).Do(ctx)
 	})
 }

@@ -16,11 +16,11 @@
 
 ## [Releases](https://github.com/wqnmlgb151/XSSscan/releases)
 
-当前版本为 **[v1.1.1](https://github.com/wqnmlgb151/XSSscan/releases/tag/v1.1.1)**（2026-10-31）。[下载 Windows EXE](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.1/xsscan_1.1.1_windows_amd64.exe)，其他平台见[安装](#安装)。默认使用 `adaptive` 策略，调度反射型、DOM、存储型和盲 XSS 四类检测，可用 `--types` 选择检测类型。
+本版本为 **[v1.1.4](https://github.com/wqnmlgb151/XSSscan/releases/tag/v1.1.4)**（2026-11-02），汇总 v1.1.2～v1.1.4 的测试体系、报告脱敏和 Chrome 页面请求预算改进。[下载 Windows EXE](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.4/xsscan_1.1.4_windows_amd64.exe)，其他平台见 Release 的 Assets。发布门禁、原生运行范围和限制见 [发布说明](docs/releases/v1.1.4.md)。
 
-当前开发源码为 **v1.1.4**，新增独立的 Chrome 页面请求预算与共享计量，保留默认报告脱敏、私有文件权限和截图清理。浏览器支持范围见 [v1.1.4 记录](test/browser-budget-v1.1.4.md)。安全说明与验证见 [v1.1.3 记录](test/security-v1.1.3.md)，复现步骤见 [自动化回归说明](test/README.md)，本轮变更见 [CHANGELOG](CHANGELOG.md)。上方链接仍指向已经发布的 v1.1.1 附件。
+`--request-budget` 保持 Go HTTP 语义；`--browser-request-budget` **默认 0、不限**，仅限制被守卫页面的请求尝试，**不是完整网络防火墙**，不保证覆盖独立 worker、新窗口及 Chrome 自主流量。详见 [预算范围](test/browser-budget-v1.1.4.md)。默认报告脱敏和原始证据显式开关见 [安全说明](test/security-v1.1.3.md)。
 
-发布页的 **Assets** 提供六个预编译附件：Windows EXE/ZIP，以及 Linux、macOS 的 amd64/arm64 TAR.GZ。GitHub 自动提供的 Source code ZIP/TAR.GZ 为源码；直接运行请下载带 `xsscan_1.1.1_` 前缀的附件。压缩包包含程序、说明和许可证。
+Assets 包含 Windows EXE/ZIP、Linux 与 macOS 的 amd64/arm64 TAR.GZ，以及 `SHA256SUMS`、`release-validation.json`。压缩包带程序、许可证、README 和源码/二进制校验信息。GitHub 自动生成的 Source code ZIP/TAR.GZ 是源码，不是独立可执行程序。正式附件仅在全部发布验收通过后公开。
 
 ## 目录
 

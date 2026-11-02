@@ -1,6 +1,8 @@
 # Changelog
 
-## 1.1.4（待发布）
+## 1.1.4 — 2026-11-02
+
+- 正式发布汇总 v1.1.2～v1.1.4；发布前通过 PR 审查、双平台完整回归和五架构原生产物验收，发布包带 SHA256 与源码/运行记录。流程和已知限制见 `docs/releases/v1.1.4.md`。
 
 - 引入批次级共享请求计量器，Go HTTP 与浏览器各自使用并发安全的独立预算；`--request-budget` 保持原有 Go RoundTrip 语义，新增 `--browser-request-budget`（默认 0、不限；支持 YAML）。
 - 在共享 CDP Fetch request-stage 守卫计量同源导航、重定向、子资源及页面异步 HTTP(S) 请求；不重复计入 Network 事件或 Go 请求。统计预留的尝试次数，不宣称是所有 Chrome 进程流量。
@@ -8,7 +10,7 @@
 - 传递调用期 Meter 到隔离 BrowserContext，修复 DOM Close 与浏览器初始化竞争，回收守卫 worker 并保留迟到的预算错误；未减少检测或验证范围。
 - 增加本地 Chrome 并发、精确请求计量、重定向、子资源、后台 fetch、超时与上下文清理、执行验证及 CLI 回归。CI 逐项保留 v1.1.3 的全部 1837 个测试事件身份。限制和实际结果见 `test/browser-budget-v1.1.4.md`。
 
-## 1.1.3（待发布）
+## 1.1.3（随 v1.1.4 汇总发布）
 
 - JSON、HTML、Markdown、SARIF、JUnit 共用默认安全导出：隐藏 HTTP 正文、响应片段、Base64 原始副本及截图路径，脱敏认证/Cookie/Token、敏感 URL 参数和已识别凭据的诊断副本；未知 HTTP 头默认隐藏，curl 从脱敏证据重新生成。
 - 新增显式 `--include-raw-evidence` / YAML 同名配置，要求 `--output`；保留全部旧参数和 Schema 1.1。内存中的认证、CSRF 与浏览器重放证据仍保真，不改变扫描算法。
@@ -18,7 +20,7 @@
 - 修复 CI 暴露的既有统计测试时序不稳定：仅为合成响应增加毫秒级等待，保留正耗时断言和生产计时逻辑。
 - 实际验证、审计位置与风险边界见 `test/security-v1.1.3.md`；仅提交独立分支，不自动发布正式版本。
 
-## 1.1.2（待发布）
+## 1.1.2（随 v1.1.4 汇总发布）
 
 - 将现有 Go 单元、浏览器及集成测试纳入公开仓库，包含 DOM 测试嵌入资源；新增 loopback 合成靶场基线，覆盖四类检测正负例。
 - 补充 Blind 无关回调、跨主机 Referer 降分、超时与取消回归；加强既有预期漏洞、取消、adaptive 和 stdin 断言，移除公网 DNS 测试依赖。

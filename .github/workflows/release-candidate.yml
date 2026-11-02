@@ -1,0 +1,47 @@
+name: Release candidates
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: ['scripts/release_candidate.py', '.github/workflows/release-candidate.yml', 'docs/releases/**']
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {runner: windows-2022, goos: windows, goarch: amd64}
+          - {runner: ubuntu-24.04, goos: linux, goarch: amd64}
+          - {runner: ubuntu-24.04-arm, goos: linux, goarch: arm64}
+          - {runner: macos-15-intel, goos: darwin, goarch: amd64}
+          - {runner: macos-15, goos: darwin, goarch: arm64}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.26.9'
+          cache: true
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Build, unpack and execute native candidate
+        shell: bash
+        run: python3 scripts/release_candidate.py --version 1.1.4 --goos '${{ matrix.goos }}' --goarch '${{ matrix.goarch }}'
+      - name: Upload verified candidates
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: release-candidate-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            dist/release-candidates/*/*.zip
+            dist/release-candidates/*/*.tar.gz
+            dist/release-candidates/*/*.exe
+            dist/release-candidates/*/validation.json
+          if-no-files-found: error

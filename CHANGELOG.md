@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.4（待发布）
+
+- 引入批次级共享请求计量器，Go HTTP 与浏览器各自使用并发安全的独立预算；`--request-budget` 保持原有 Go RoundTrip 语义，新增 `--browser-request-budget`（默认 0、不限；支持 YAML）。
+- 在共享 CDP Fetch request-stage 守卫计量同源导航、重定向、子资源及页面异步 HTTP(S) 请求；不重复计入 Network 事件或 Go 请求。统计预留的尝试次数，不宣称是所有 Chrome 进程流量。
+- 超限时先拒绝暂停请求、停止页面加载，再取消检查；报告记录浏览器预算原因、请求计量和不完整状态，保留现有 Schema 与五格式脱敏。
+- 传递调用期 Meter 到隔离 BrowserContext，修复 DOM Close 与浏览器初始化竞争，回收守卫 worker 并保留迟到的预算错误；未减少检测或验证范围。
+- 增加本地 Chrome 并发、精确请求计量、重定向、子资源、后台 fetch、超时与上下文清理、执行验证及 CLI 回归。CI 逐项保留 v1.1.3 的全部 1837 个测试事件身份。限制和实际结果见 `test/browser-budget-v1.1.4.md`。
+
 ## 1.1.3（待发布）
 
 - JSON、HTML、Markdown、SARIF、JUnit 共用默认安全导出：隐藏 HTTP 正文、响应片段、Base64 原始副本及截图路径，脱敏认证/Cookie/Token、敏感 URL 参数和已识别凭据的诊断副本；未知 HTTP 头默认隐藏，curl 从脱敏证据重新生成。

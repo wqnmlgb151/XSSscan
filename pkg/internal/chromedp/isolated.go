@@ -10,6 +10,7 @@ import (
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/target"
 	ext "github.com/chromedp/chromedp"
+	"github.com/xsscan/xsscan/pkg/requestbudget"
 )
 
 // NewIsolatedTabContext shares an initialized browser process, but creates a
@@ -48,6 +49,9 @@ func NewIsolatedTabContext(ctx, parent context.Context, timeout time.Duration) (
 		return nil, nil, nil, errors.Join(err, diagnostics.Err(), diagnostics.CleanupErr())
 	}
 	lifetime, endLifetime := context.WithCancel(parent)
+	if meter := requestbudget.FromContext(ctx); meter != nil {
+		lifetime = requestbudget.WithMeter(lifetime, meter)
+	}
 	tab, closeTab, _ := NewTabContext(lifetime, ext.WithTargetID(tabID))
 	stopCaller := context.AfterFunc(ctx, endLifetime)
 	var once sync.Once

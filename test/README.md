@@ -1,3 +1,5 @@
+v1.1.4 浏览器预算与支持范围见 [验证记录](browser-budget-v1.1.4.md)。当前 CI 使用 `legacy-v1.1.3-tests.txt`，逐项保留 1837 个旧测试身份。
+
 # 自动化回归（v1.1.2）
 
 v1.1.3 安全改动及新测试见 [安全审计与验证](security-v1.1.3.md)。CI 在完整普通/race 后调用 `summarize.py --required-tests test/legacy-v1.1.2-tests.txt`，逐项保留原有 1771 个通过事件的身份范围。

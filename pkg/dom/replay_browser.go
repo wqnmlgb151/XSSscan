@@ -100,7 +100,7 @@ func (s *Scanner) replayDOMCandidate(ctx context.Context, target model.Target, f
 	defer func() {
 		cancelReplay()
 		if err := diagnostics.Err(); err != nil {
-			out = replayResult{Outcome: replayError, Detail: err.Error()}
+			out = replayResult{Outcome: replayError, Detail: err.Error(), Err: errors.Join(out.Err, err)}
 		}
 		if err := diagnostics.CleanupErr(); err != nil {
 			out.Detail += "; " + err.Error()
@@ -112,7 +112,14 @@ func (s *Scanner) replayDOMCandidate(ctx context.Context, target model.Target, f
 	stopDialogs := allocopts.ListenDialogs(replayCtx, cancelTimeout, false, nil)
 	defer stopDialogs()
 	guard, policy := allocopts.GuardRequests(target.URL, cancelTimeout, nil)
-	defer guard.Close()
+	defer func() {
+		guard.Close()
+		if err := guard.Err(); err != nil {
+			out.Outcome = replayError
+			out.Detail = err.Error()
+			out.Err = err
+		}
+	}()
 	if err := chromedp.Run(replayCtx, policy); err != nil {
 		return replayResult{Outcome: replayError, Detail: "replay request policy: " + err.Error()}
 	}

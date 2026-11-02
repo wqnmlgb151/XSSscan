@@ -35,6 +35,7 @@ import (
 	"github.com/xsscan/xsscan/pkg/orchestrator"
 	"github.com/xsscan/xsscan/pkg/payload"
 	"github.com/xsscan/xsscan/pkg/report"
+	"github.com/xsscan/xsscan/pkg/requestbudget"
 	"github.com/xsscan/xsscan/pkg/scanner"
 	"github.com/xsscan/xsscan/pkg/ssrfguard"
 	"github.com/xsscan/xsscan/pkg/stored"
@@ -57,6 +58,7 @@ type ScanConfig struct {
 	ExcludeTypes           string
 	ModuleTimeout          int
 	RequestBudget          int
+	BrowserRequestBudget   int
 	URL                    string
 	Method                 string
 	Headers                []string
@@ -128,10 +130,10 @@ const (
 
 // Version is the current xsscan version. Set via ldflags at build time:
 //
-//	make build VERSION=1.1.3
+//	make build VERSION=1.1.4
 //
 // x.y.z: x = major (architectural redesign), y = feature, z = bug fix.
-var Version = "1.1.3"
+var Version = "1.1.4"
 
 var cfg ScanConfig
 
@@ -188,6 +190,7 @@ func init() {
 	rootCmd.Flags().StringVar(&cfg.ExcludeTypes, "exclude-types", "", "Comma-separated scan types to exclude")
 	rootCmd.Flags().IntVar(&cfg.ModuleTimeout, "module-timeout", 300, "Per-target per-module time budget in seconds (0: unlimited)")
 	rootCmd.Flags().IntVar(&cfg.RequestBudget, "request-budget", 10000, "Batch Go HTTP request budget (0: unlimited; Chrome requests counted separately)")
+	rootCmd.Flags().IntVar(&cfg.BrowserRequestBudget, "browser-request-budget", 0, "Batch browser HTTP(S) attempt budget across tabs (0: unlimited; independent of --request-budget)")
 	rootCmd.Flags().StringVarP(&cfg.URL, "url", "u", "", "Target URL (required)")
 	rootCmd.Flags().StringVarP(&cfg.Method, "method", "X", "GET", "HTTP method")
 	rootCmd.Flags().StringArrayVarP(&cfg.Headers, "header", "H", nil, "Custom headers (Key:Value)")
@@ -337,7 +340,9 @@ func runScan(cmd *cobra.Command, args []string) error {
 	if baseTransport == nil {
 		baseTransport = http.DefaultTransport
 	}
-	budget := &orchestrator.BudgetTransport{Base: batchTransport{base: baseTransport, count: &requestCount}, Max: int64(cfg.RequestBudget)}
+	meter := requestbudget.New(int64(cfg.RequestBudget), int64(cfg.BrowserRequestBudget))
+	ctx = requestbudget.WithMeter(ctx, meter)
+	budget := &orchestrator.BudgetTransport{Base: batchTransport{base: baseTransport, count: &requestCount}, Max: int64(cfg.RequestBudget), Meter: meter}
 	client = &http.Client{Transport: budget, Jar: client.Jar, Timeout: client.Timeout, CheckRedirect: client.CheckRedirect}
 	authCtx, authCapture := httpclient.RecordContext(ctx)
 	if err := setupAuthenticationContext(authCtx, client, headers, target); err != nil {
@@ -405,6 +410,12 @@ func runScan(cmd *cobra.Command, args []string) error {
 		scanErr = errors.Join(scanErr, ctx.Err())
 	}
 	totalStats.RequestsSent = int(requestCount.Load())
+	totalStats.CrossModule.Add(model.CrossModuleObservation{Module: "run", Kind: "request_accounting", Detail: fmt.Sprintf("admitted attempts: go_http=%d browser_http=%d total=%d; denied: go_http=%d browser_http=%d; browser count covers guarded page HTTP(S), not all Chrome process traffic", meter.HTTP.Count(), meter.Browser.Count(), meter.HTTP.Count()+meter.Browser.Count(), meter.HTTP.Denied(), meter.Browser.Denied())})
+	if meter.Browser.Denied() > 0 {
+		recordScanIssue(&totalStats, target.URL, "browser-budget", requestbudget.ErrBrowser)
+		totalStats.Status = model.MergeStatus(totalStats.Status, model.ScanPartial)
+		scanErr = errors.Join(scanErr, requestbudget.ErrBrowser)
+	}
 
 	stopProgress()
 	return errors.Join(browserErr, scanErr, reportScanResults(allFindings, totalStats, urls, startTime))

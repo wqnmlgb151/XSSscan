@@ -28,6 +28,7 @@ import (
 	allocopts "github.com/xsscan/xsscan/pkg/internal/chromedp"
 	"github.com/xsscan/xsscan/pkg/internal/request"
 	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/xsscan/xsscan/pkg/requestbudget"
 )
 
 //go:embed hooks.js
@@ -285,10 +286,15 @@ func (s *Scanner) ApplyAuthState(ctx context.Context, targetURL string) (resultE
 	defer func() { resultErr = errors.Join(resultErr, diagnostics.Err()) }()
 	withTimeout, cancel := context.WithTimeout(tabCtx, s.timeout)
 	defer cancel()
+	if meter := requestbudget.FromContext(ctx); meter != nil {
+		withTimeout = requestbudget.WithMeter(withTimeout, meter)
+	}
+	stopCaller := context.AfterFunc(ctx, cancel)
+	defer stopCaller()
 
 	// Apply the same request scope policy before authenticated navigation.
 	guard, policy := allocopts.GuardRequests(targetURL, cancel, nil)
-	defer guard.Close()
+	defer func() { guard.Close(); resultErr = errors.Join(resultErr, guard.Err()) }()
 	if err := chromedp.Run(withTimeout, policy, chromedp.Navigate(targetURL)); err != nil {
 		if policyErr := guard.Err(); policyErr != nil {
 			return policyErr
@@ -319,10 +325,12 @@ func (s *Scanner) ApplyAuthState(ctx context.Context, targetURL string) (resultE
 
 // Close terminates the browser and releases resources.
 func (s *Scanner) Close() error {
+	s.allocCancel()
+	// Join initialization before reading browserCancel, including concurrent Close.
+	s.browserOnce.Do(func() { s.browserErr = context.Canceled })
 	if s.browserCancel != nil {
 		s.browserCancel()
 	}
-	s.allocCancel()
 	return nil
 }
 
@@ -636,7 +644,7 @@ func (s *Scanner) runSingleDOMTest(ctx context.Context, target model.Target, tes
 		return continuation
 	}
 	guard, policy := allocopts.GuardRequests(target.URL, cancel, rewrite)
-	defer guard.Close()
+	defer func() { guard.Close(); resultErr = errors.Join(resultErr, guard.Err()) }()
 	if err := chromedp.Run(ctx, policy); err != nil {
 		return nil, err
 	}

@@ -8,7 +8,7 @@
 <p align="center">
 <img src="https://img.shields.io/badge/go-1.26+-00ADD8?logo=go" alt="Go">
 <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
-<img src="https://img.shields.io/badge/source-1.1.3-orange" alt="Source version">
+<img src="https://img.shields.io/badge/source-1.1.4-orange" alt="Source version">
 <img src="https://img.shields.io/badge/repo-github.com%2Fwqnmlgb151%2FXSSscan-lightgrey" alt="Repo">
 </p>
 
@@ -18,7 +18,7 @@
 
 当前版本为 **[v1.1.1](https://github.com/wqnmlgb151/XSSscan/releases/tag/v1.1.1)**（2026-10-31）。[下载 Windows EXE](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.1/xsscan_1.1.1_windows_amd64.exe)，其他平台见[安装](#安装)。默认使用 `adaptive` 策略，调度反射型、DOM、存储型和盲 XSS 四类检测，可用 `--types` 选择检测类型。
 
-当前开发源码为 **v1.1.3**，重点完善默认报告脱敏、私有文件权限和截图清理。安全说明与验证见 [v1.1.3 记录](test/security-v1.1.3.md)，复现步骤见 [自动化回归说明](test/README.md)，本轮变更见 [CHANGELOG](CHANGELOG.md)。上方链接仍指向已经发布的 v1.1.1 附件。
+当前开发源码为 **v1.1.4**，新增独立的 Chrome 页面请求预算与共享计量，保留默认报告脱敏、私有文件权限和截图清理。浏览器支持范围见 [v1.1.4 记录](test/browser-budget-v1.1.4.md)。安全说明与验证见 [v1.1.3 记录](test/security-v1.1.3.md)，复现步骤见 [自动化回归说明](test/README.md)，本轮变更见 [CHANGELOG](CHANGELOG.md)。上方链接仍指向已经发布的 v1.1.1 附件。
 
 发布页的 **Assets** 提供六个预编译附件：Windows EXE/ZIP，以及 Linux、macOS 的 amd64/arm64 TAR.GZ。GitHub 自动提供的 Source code ZIP/TAR.GZ 为源码；直接运行请下载带 `xsscan_1.1.1_` 前缀的附件。压缩包包含程序、说明和许可证。
 
@@ -119,7 +119,7 @@ Windows amd64 已实际运行；其他平台产物由交叉编译生成，需在
 
 ### 从源码构建
 
-源码版本为 `1.1.3`。以下命令在当前源码目录中运行；版本参数只设置程序版本显示，不会下载或升级源码。签出 `v1.1.1` 的示例用于重建已发布版本。
+源码版本为 `1.1.4`。以下命令在当前源码目录中运行；版本参数只设置程序版本显示，不会下载或升级源码。签出 `v1.1.1` 的示例用于重建已发布版本。
 
 ```bash
 # 需要 Go 1.26+（推荐 Go 1.26.9）
@@ -139,7 +139,7 @@ make build VERSION=1.1.1
 Windows 没有 make 时，在当前源码目录直接构建 EXE：
 
 ```powershell
-go build -trimpath -ldflags "-s -w -X main.Version=1.1.3" -o xsscan.exe ./cmd
+go build -trimpath -ldflags "-s -w -X main.Version=1.1.4" -o xsscan.exe ./cmd
 .\xsscan.exe --version
 ```
 
@@ -204,7 +204,7 @@ xsscan --url "https://authorized.example/page?q=test" --exclude-types blind,dom
 
 `--headless` / `--stored` 保留兼容；显式 `--headless=false` / `--stored=false` 排除对应类型。显式类型与开启的旧开关相冲突时报配置错误。盲检测独立提交，即使没有即时回显也能检查；每个候选使用独立关联 token。本地回调观察完整 30 秒，外部/DNS 回调没有结果收集器时明确标记未完成。
 
-`--module-timeout 300` 为每目标、每模块的时间预算（秒，0 无限制）；`--request-budget 10000` 为整批目标共享的 Go HTTP 请求预算，包括重试和重定向（0 无限制）。Chrome 网络请求暂单独处理，未计入该 HTTP 数值；模块 Candidates 表示提交/检测尝试，非独立漏洞数。默认 DOM 会测试完整源矩阵，耗时明显高于单反射扫描。
+`--module-timeout 300` 为每目标、每模块的时间预算（秒，0 无限制）；`--request-budget 10000` 为整批目标共享的 Go HTTP 请求预算，包括重试和重定向（0 无限制）。`--browser-request-budget 0` 独立限制整批被守卫页面的 HTTP(S) 尝试，默认不限；旧 Go HTTP 数值不变。导航、重定向、同 target 子资源与异步 fetch 在 Fetch 请求阶段计量，未覆盖的浏览器进程/worker 流量见 [限制说明](test/browser-budget-v1.1.4.md)；模块 Candidates 表示提交/检测尝试，非独立漏洞数。默认 DOM 会测试完整源矩阵，耗时明显高于单反射扫描。
 
 页面发现先执行一次，发现的 GET/POST 表单交给同一组检测模块；链接跟随仍需 `--crawl`。DOM 使用原认证头、HttpOnly Cookie 和首文档 POST 请求体，存储源在目标站点初始化；referrer 来源为显式模拟输入，sink 命中仍是候选。
 
@@ -273,7 +273,7 @@ Hook 不可用或读取失败会记录检测错误；不会用 URL、控制台�
 
 Cookie 与 History 写入属于输入/导航状态，不作为 XSS sink 证据；测试源初始化先于 hook 安装。同一目标、输入源和 sink 的候选合并，保留 payload 变体与流转片段；只有流转证据时按 65% 的中等级候选展示，不能据此认定执行成功。
 
-DOM 保留 10 种基础 source 和已有 query 参数的 5 payload 检查，最多 4 项并发；一次 DOM 模块内复用 Chrome 进程，每项使用独立 BrowserContext 隔离 Cookie 和存储。调度先安排带额外观察阶段的 postMessage 和已有 query 检查，最终结果仍按原矩阵顺序输出。Cookie 批量设置保留认证到目标值的覆盖顺序；空请求头不重复设置，hook 状态和证据一次读取。原始页面加载失败仍立即结束。仅从导航开始没有出现脚本、事件属性或 frame 等可执行内容、且没有待完成网络请求的静态页面允许提前结束；脚本自删除也会保留执行内容记录。含执行内容的页面继续保留 2 秒观察窗口，postMessage 再观察 1 秒，不以 timer 暂时空闲判断检查完成。跨模块进程复用与浏览器请求共享预算尚未实现。
+DOM 保留 10 种基础 source 和已有 query 参数的 5 payload 检查，最多 4 项并发；一次 DOM 模块内复用 Chrome 进程，每项使用独立 BrowserContext 隔离 Cookie 和存储。调度先安排带额外观察阶段的 postMessage 和已有 query 检查，最终结果仍按原矩阵顺序输出。Cookie 批量设置保留认证到目标值的覆盖顺序；空请求头不重复设置，hook 状态和证据一次读取。原始页面加载失败仍立即结束。仅从导航开始没有出现脚本、事件属性或 frame 等可执行内容、且没有待完成网络请求的静态页面允许提前结束；脚本自删除也会保留执行内容记录。含执行内容的页面继续保留 2 秒观察窗口，postMessage 再观察 1 秒，不以 timer 暂时空闲判断检查完成。跨模块进程复用尚未实现；浏览器请求预算现跨目标、模块和并发检查共享，默认不限。
 
 原始页面的同一次加载还会采集内联脚本，用 Sobek AST 生成有界 source→sink 线索。例如 URL 没有 `view` 参数，但脚本读取 `new URLSearchParams(location.search).get('view')` 再传给 `innerHTML`，现在会补测该固定键；`location.hash` 参数及 `localStorage/sessionStorage.getItem('固定键')` 同理。支持局部别名、字符串组合、局部函数/箭头函数参数与返回值、分支合并和全局对象遮蔽识别；优先安排有线索的检查，但完整基础矩阵保持。每个 payload 最多额外补 24 个固定键，已有 query 检查复用而不重复发送。覆盖面扩大可能增加浏览器耗时，不能把解析优化等同于整次扫描加速。
 
@@ -634,7 +634,7 @@ DOM 和执行验证器在构造时复制认证 Cookie，调用方后续修改不
 
 1.1.0 报告增加 `coverage`（报告 `SchemaVersion=1.1`），按目标与阶段记录 `planned_known`、`planned`、`started`、`completed`、`failed`、`canceled`、`not_started`。目前记录反射候选、最终执行验证组和 DOM source 检查；基线加载、DOM 独立重放的额外加载、stored/blind 的全部子步骤尚未逐项纳入。没有统计项表示尚未计量，不能当作零工作或完整覆盖。计划已知时，`planned = started + not_started`；收尾后 `started = completed + failed + canceled`。未开始可能来自取消、预算或已证明路径收敛，不等于全部已验证。不同阶段单位分别显示，不生成混合总百分比。
 
-`RequestsSent` 仍只统计 Go HTTP 传输，包括重试与跳转；Chrome 网络不计入该字段或请求预算。DOM 的载荷模板数与实际 source 检查数分别保留，不能拿模板数代替检查次数。JSON、Markdown、HTML、SARIF、JUnit 使用相同完成状态与诊断，包含检查统计和跨模块观察；JUnit 时间按秒输出。协议错误可能影响证据完整性；单纯资源释放失败会保留已取得的证据，同时记录收尾失败，扫描可保持未完成。截图失败只作为附加诊断。
+`RequestsSent` 仍只统计 Go HTTP 传输，包括重试与跳转；Chrome 网络不计入该字段或旧 Go HTTP 预算；被守卫页面请求单独计量并受 `--browser-request-budget` 限制，cross_module 的 request_accounting 保存两类计数和拒绝数。DOM 的载荷模板数与实际 source 检查数分别保留，不能拿模板数代替检查次数。JSON、Markdown、HTML、SARIF、JUnit 使用相同完成状态与诊断，包含检查统计和跨模块观察；JUnit 时间按秒输出。协议错误可能影响证据完整性；单纯资源释放失败会保留已取得的证据，同时记录收尾失败，扫描可保持未完成。截图失败只作为附加诊断。
 
 反射结果交接队列改为随 worker 数量有界，并在扫描期间持续收集。浏览器请求与弹窗处理均使用有界工作队列，饱和时明确中止当前检查；退出时等待处理线程。候选列表、保留发现和报告仍随工作量增长，这些队列边界不代表进程总内存固定。
 

@@ -294,7 +294,14 @@ func (v *Verifier) runBrowserCheckMatching(ctx context.Context, navURL string, r
 		rewrite = rewrites[0]
 	}
 	guard, policy := allocopts.GuardRequests(navURL, cancel, rewrite)
-	defer guard.Close()
+	defer func() {
+		guard.Close()
+		if err := guard.Err(); err != nil {
+			resultErr = errors.Join(resultErr, err)
+			result.LoadError = err.Error()
+			out = result
+		}
+	}()
 	if err := chromedp.Run(tctx, policy, emulation.SetFocusEmulationEnabled(true)); err != nil {
 		return result, fmt.Errorf("browser setup: %w", err)
 	}

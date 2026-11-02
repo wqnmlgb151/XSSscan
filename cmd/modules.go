@@ -64,7 +64,7 @@ func configureTypes(cmd *cobra.Command) error {
 	cfg.ExcludeTypes = ""
 	cfg.Headless = selected[orchestrator.DOM]
 	cfg.EnableStored = selected[orchestrator.Stored]
-	if cfg.ModuleTimeout < 0 || cfg.RequestBudget < 0 {
+	if cfg.ModuleTimeout < 0 || cfg.RequestBudget < 0 || cfg.BrowserRequestBudget < 0 {
 		return fmt.Errorf("scan budgets must not be negative")
 	}
 	return nil

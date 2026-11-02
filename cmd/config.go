@@ -19,6 +19,7 @@ type FileConfig struct {
 	ExcludeTypes           string   `yaml:"exclude-types"`
 	ModuleTimeout          int      `yaml:"module-timeout"`
 	RequestBudget          int      `yaml:"request-budget"`
+	BrowserRequestBudget   int      `yaml:"browser-request-budget"`
 	URL                    string   `yaml:"url"`
 	Method                 string   `yaml:"method"`
 	Headers                []string `yaml:"headers"`
@@ -146,6 +147,7 @@ var configFlags = map[string]string{
 	"ExcludeTypes":           "exclude-types",
 	"ModuleTimeout":          "module-timeout",
 	"RequestBudget":          "request-budget",
+	"BrowserRequestBudget":   "browser-request-budget",
 	"URL":                    "url",
 	"Method":                 "method",
 	"Headers":                "header",

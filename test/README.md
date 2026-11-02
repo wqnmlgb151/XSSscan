@@ -61,4 +61,4 @@ go test -run '^$' -bench . -benchmem -count=3 ./pkg/jsanalysis ./pkg/context ./p
 
 `.github/workflows/build.yml` 在 Windows Server 2022 / Ubuntu 24.04 执行依赖验证、vet、完整测试、完整 race、三轮基线、微基准和原生构建，启动前强制检查 Chrome、GCC，记录版本。日志以 `regression-<os>` artifact 保存；失败时也上传已产生的日志。`master`、`codex/**` 分支及 PR 触发，workflow 仅有 contents:read 权限。
 
-结果记录见 [v1.1.2 基线](baseline-v1.1.2.md)和 [v1.1.3 安全验证](security-v1.1.3.md)。Docker 运行镜像不包含开发测试与 Chrome，本轮不声称完成 Docker 浏览器回归。后续建议扩展有标签语料、Chrome RSS/CPU 采样与容器测试；浏览器预算统一继续单独审计、测试后提交。
+结果记录见 [v1.1.2 基线](baseline-v1.1.2.md)和 [v1.1.3 安全验证](security-v1.1.3.md)。Docker 运行镜像不包含开发测试与 Chrome，本轮不声称完成 Docker 浏览器回归。后续建议扩展有标签语料、Chrome RSS/CPU 采样与容器测试；worker/独立 target 网络覆盖仍需后续单独审计与测试。

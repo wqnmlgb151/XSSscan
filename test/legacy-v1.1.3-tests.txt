@@ -1,4 +1,4 @@
-# Source: master 1717580, CI 41323926567; 1837 unique pass event identities
+# Common identities: master 1717580, CI 41323926567; append the platform-specific identity
 github.com/xsscan/xsscan/cmd	TestApplyTo_AllFlagsSet
 github.com/xsscan/xsscan/cmd	TestApplyTo_CLIOverridesFile
 github.com/xsscan/xsscan/cmd	TestApplyTo_CLIOverridesFile/allow-private
@@ -771,7 +771,6 @@ github.com/xsscan/xsscan/pkg/internal/chromedp	TestStandardHeadlessOptions_Inclu
 github.com/xsscan/xsscan/pkg/internal/privatefs	TestPrivateAtomicReplacementAndFailureCleanup
 github.com/xsscan/xsscan/pkg/internal/privatefs	TestPrivateDirectoryIsolation
 github.com/xsscan/xsscan/pkg/internal/privatefs	TestReplacementDoesNotModifyHardlinkTarget
-github.com/xsscan/xsscan/pkg/internal/privatefs	TestWindowsProtectedACLUnderPublicParent
 github.com/xsscan/xsscan/pkg/internal/request	TestApplyHeadersContentTypeWhenBodyPresent
 github.com/xsscan/xsscan/pkg/internal/request	TestApplyHeadersContentTypeWhenNoBody
 github.com/xsscan/xsscan/pkg/internal/request	TestApplyHeadersCookies

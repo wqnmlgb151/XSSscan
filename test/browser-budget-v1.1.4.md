@@ -28,9 +28,16 @@
 - Chrome：单个页面 `/start` → `/page` 重定向、脚本、CSS、异步 fetch 精确 5 次，计数与靶场一致；额度 2 拒绝后续子资源。8 并发标签共享 2 次额度，不以 Network 事件重复计数；比较 BrowserContext 列表确认无残留。
 - 超时与取消：慢响应等待连接关闭、超时后活跃 handler 归零；取消调用不创建新上下文；既有 lifecycle 测试继续覆盖用户取消、重复 dispose 与父 browser 存活。
 - 执行验证：构造器无 Meter、调用时才绑定 Meter，额度仍生效；CLI DOM 超限报告和 errors.Is 原因可追踪，配置 YAML/CLI 0 覆盖及负数校验。
-- CI：普通与 race 使用 `test/legacy-v1.1.3-tests.txt` 逐项核对基线 1837 身份；本轮没有删除或放宽旧测试。所有网络测试为 loopback 合成数据。
+- CI：普通与 race 将 `test/legacy-v1.1.3-tests.txt` 的 1836 个公共身份与 `legacy-v1.1.3-Linux-tests.txt` / `legacy-v1.1.3-Windows-tests.txt` 的 1 个平台专属身份合并，每个平台仍逐项核对基线 1837 身份；本轮没有删除或放宽旧测试。所有网络测试为 loopback 合成数据。
 
 实际全量结果、性能观测和 CI 链接待本轮运行完成后填写，不将短测/沙箱失败当作通过。
+
+## 修改文件
+
+- 计量器与 Go transport：`pkg/requestbudget/budget.go`、`budget_test.go`，`pkg/orchestrator/budget.go`、`meter_test.go`。
+- CDP 与资源：`pkg/internal/chromedp/guard.go`、`isolated.go`、`budget_test.go`，`pkg/dom/scanner.go`、`replay_browser.go`，`pkg/execverify/verifier.go`、`budget_test.go`，`pkg/crawler/render.go`。
+- CLI 配置和不完整结果：`cmd/main.go`、`config.go`、`modules.go`、`browser_budget_test.go`。
+- CI 与文档：`.github/workflows/build.yml`、`test/legacy-v1.1.3-tests.txt`、本文件、`test/README.md`、`README.md`、`CHANGELOG.md`、`Makefile`、`Dockerfile`。
 
 ## 未覆盖与风险
 

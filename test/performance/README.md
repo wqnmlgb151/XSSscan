@@ -9,7 +9,7 @@
 | DOM | 44.134 | 44.145 |
 | Stored | 24.528 | 24.527 |
 
-每轮均完成 65 项 DOM 检查、24 次 Go HTTP、9 次 payload/marker 提交；Stored 为 3 个注入参数、20 次 Go HTTP，保留全部轮询。每轮保留 id 参数浏览器执行验证发现，Blind 因未配置回调明确 skipped。靶场实际请求数 158～159，包含不纳入页面守卫的自主 favicon；早期样本的连接中止可能影响这个辅助计数，不能把它视为精确预算计数。
+每轮均完成 65 项 DOM 检查、24 次 Go HTTP，payload/marker 逻辑计数为 9（DOM 的五种 payload 另展开成 65 项检查）；Stored 为 3 个注入参数、20 次 Go HTTP，保留全部轮询。每轮保留 id 参数浏览器执行验证发现，Blind 因未配置回调明确 skipped。靶场实际请求数 158～159，包含不纳入页面守卫的自主 favicon；早期样本的连接中止可能影响这个辅助计数，不能把它视为精确预算计数。
 
 **本语料未复现版本退化，不声称已经消除用户公网实测的 20 秒差异。** 靶场仅 id 参数反射，Go 请求少于用户实测的 155 次；页面结构、子资源、DNS 和远端响应延迟均不同，不能外推为该目标已恢复。Stored、DNS/SSRF 生产代码在两 Tag 之间相同。没有证据支持回退安全检查或缩短窗口，因此本分支目前只增加测量和回归门禁。
 
@@ -35,6 +35,10 @@
 DOM 保留 66 次两秒观察（含 baseline）及五次一秒 postMessage 观察；四 worker 并发。Stored 三个输入按目标串行，分别保留四次两秒间隔。阻塞 pprof 中 select/channel、WaitGroup、同目标互斥等待占主导。CPU 样本主要位于 runtime.cgocall / ExecAllocator 等待调用链，不能据此推算 Chrome 子进程的 CPU；本轮没有 Chrome RSS/CPU 结论。请求预算计量未成为可观察到的主要热点；单次诊断不能证明其开销为零。
 
 原始十轮数据、阶段数据和 pprof 文本见 [结果](results/windows-20261103.json)。完整本机采样文件在忽略的 `dist/performance/`。
+
+Stored 是未存储负例，不触发候选浏览器执行验证，其浏览器初始化/清理在本次负例中不适用；不能外推为 Stored 成功路径的性能。已有 Stored 正例、晚显示页和执行验证安全测试继续由完整 CI 执行。
+
+最终验证：[Regression 41581973128](https://github.com/wqnmlgb151/XSSscan/actions/runs/41581973128)，代码提交 `dd7d0b5`。Windows/Linux 普通/race 四份结果各 1847 个通过事件、全部 1837 个历史身份保留；vet、构建、12 个 Python 测试、三轮基线均通过。本机普通/race 同样各 1847 通过，历史身份完整；vet、构建通过。后续仅同步本说明，扫描及测试代码与该 CI 提交一致。
 
 ## 复现
 

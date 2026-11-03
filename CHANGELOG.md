@@ -39,4 +39,4 @@
 - 维护发布：版本一致性、构建与审计资料整理。保留 v1.1.0 扫描行为。
 - A 路线审计及基线公开于 `audit/2026-10-31/`。
 
-更早版本见 README 的历史更新日志。
+更早版本见 [历史 Release](https://github.com/wqnmlgb151/XSSscan/releases) 与 Git 提交记录。

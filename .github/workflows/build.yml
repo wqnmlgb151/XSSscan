@@ -44,7 +44,7 @@ jobs:
       - name: Static checks
         run: go vet ./...
       - name: Validate result summarizer
-        run: python -m unittest discover -s test -p 'test_summarize.py'
+        run: python -m unittest discover -s test -p 'test_*.py'
       - name: Full tests (real Chrome, serialized packages)
         shell: bash
         run: |

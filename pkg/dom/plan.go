@@ -24,11 +24,10 @@ type documentPlan struct {
 // never be reused across different authenticated requests, even on one URL.
 func (s *Scanner) requestPlanKey(target model.Target) ([sha256.Size]byte, error) {
 	data, err := json.Marshal(struct {
-		Target    model.Target
-		Cookies   []*http.Cookie
-		Auth      *AuthState
-		ProxyAuth string
-	}{target, target.Cookies, s.auth, target.ProxyAuth})
+		Target  model.Target
+		Cookies []*http.Cookie
+		Auth    *AuthState
+	}{target, target.Cookies, s.auth})
 	return sha256.Sum256(data), err
 }
 func (s *Scanner) checkTargetPlan(ctx context.Context, target model.Target) (*documentPlan, error) {

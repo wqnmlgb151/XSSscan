@@ -279,7 +279,6 @@ func authDigest(target model.Target) string {
 		sum.Write([]byte{1})
 	}
 	sum.Write([]byte{2})
-	sum.Write([]byte(target.ProxyAuth))
 	sum.Write([]byte{3})
 
 	cookies := make([]string, 0, len(target.Cookies))

@@ -174,7 +174,7 @@ func TestObservationGlobalBoundsAndRequestIdentity(t *testing.T) {
 		func(i *model.InjectionPoint) { i.Parameter.Type = model.ParamBody },
 		func(i *model.InjectionPoint) { i.Target.Headers = map[string]string{"Authorization": "Bearer second"} },
 		func(i *model.InjectionPoint) { i.Target.Cookies = []*http.Cookie{{Name: "session", Value: "other"}} },
-		func(i *model.InjectionPoint) { i.Target.ProxyAuth = "other" },
+		func(i *model.InjectionPoint) { i.Target.Headers = map[string]string{"X-Identity": "other"} },
 	} {
 		copy := inj
 		change(&copy)

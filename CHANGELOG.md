@@ -1,5 +1,17 @@
 # Changelog
 
+## 未发布 — 实战安全加固
+
+### P0-1 代理凭据隔离
+
+- HTTP/HTTPS 代理认证通过 transport 的代理 URL userinfo 处理，CONNECT 和普通代理请求携带认证；目标请求与原始证据不再携带代理认证头。
+- 移除 `model.Target.ProxyAuth` 及其重放/去重哈希输入；目标 Cookie、Authorization、请求体等身份信息继续参与隔离。保留代理 CLI 参数及 `ProxyAuthHeader` SDK 辅助函数。
+- 代理状态日志只显示 scheme/host；URL 解析错误不回显含凭据的原始地址。新增 loopback HTTP/CONNECT、五格式报告及日志安全回归，接入独立 required-tests 清单。
+
+### 行为变化
+
+- 代理凭据仅提供给代理；自定义目标头中的 `Proxy-Authorization` 也被忽略。这是代理认证泄露修复，不提供向目标泄露代理密码的恢复开关；原有代理用户名/密码参数继续使用。
+
 ## 未发布 — 性能排查
 
 - 增加 v1.1.1/v1.1.4 默认配置五轮本地 A/B、隔离检出分模块计时及 pprof 工具；公开实测结果与可比范围。本地语料尚未复现版本退化，未修改扫描算法或缩减检测/安全检查。

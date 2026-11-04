@@ -54,7 +54,7 @@ func TestPlanKeyIncludesAuthenticationAndBody(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, change := range []func(*model.Target){func(t *model.Target) { t.Body = "view=two" }, func(t *model.Target) { t.Headers = map[string]string{"Authorization": "two"} }, func(t *model.Target) { t.Cookies = []*http.Cookie{{Name: "session", Value: "two"}} }, func(t *model.Target) { t.ProxyAuth = "two" }} {
+	for _, change := range []func(*model.Target){func(t *model.Target) { t.Body = "view=two" }, func(t *model.Target) { t.Headers = map[string]string{"Authorization": "two"} }, func(t *model.Target) { t.Cookies = []*http.Cookie{{Name: "session", Value: "two"}} }, func(t *model.Target) { t.Method = "GET" }} {
 		modified := target
 		change(&modified)
 		key, err := s.requestPlanKey(modified)

@@ -27,7 +27,7 @@ func (p *ProxyConfig) Validate() error {
 
 	proxyURL, err := url.Parse(p.URL)
 	if err != nil {
-		return fmt.Errorf("invalid proxy URL: %w", err)
+		return fmt.Errorf("invalid proxy URL")
 	}
 
 	// Only allow http, https, and socks5 schemes for proxy
@@ -53,13 +53,19 @@ func (p *ProxyConfig) Validate() error {
 func (p *ProxyConfig) ApplyToTransport(transport *http.Transport) error {
 	proxyURL, err := url.Parse(p.URL)
 	if err != nil {
-		return fmt.Errorf("invalid proxy URL: %w", err)
+		return fmt.Errorf("invalid proxy URL")
 	}
 
+	// net/http applies URL credentials to the proxy request or CONNECT only.
+	// They must never be copied into the target request headers.
+	if p.Username != "" || p.Password != "" {
+		username := p.Username
+		if username == "" && proxyURL.User != nil {
+			username = proxyURL.User.Username()
+		}
+		proxyURL.User = url.UserPassword(username, p.Password)
+	}
 	transport.Proxy = http.ProxyURL(proxyURL)
-
-	// Note: ProxyAuth is set per-request via header, not on Transport.
-	// This is handled in ApplyHeaders if credentials are provided.
 
 	return nil
 }

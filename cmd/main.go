@@ -213,8 +213,8 @@ func init() {
 	rootCmd.Flags().Float64Var(&cfg.ConfidenceMin, "confidence", 0.60, "Minimum confidence threshold (0.0-1.0)")
 	rootCmd.Flags().BoolVar(&cfg.AllowPrivate, "allow-private", false, "Allow scanning private/internal networks (SSRF protection bypass)")
 	rootCmd.Flags().StringVar(&cfg.Proxy, "proxy", "", "HTTP proxy URL (e.g., http://127.0.0.1:8080 for Burp Suite)")
-	rootCmd.Flags().StringVar(&cfg.ProxyUsername, "proxy-username", "", "Proxy basic auth username (optional)")
-	rootCmd.Flags().StringVar(&cfg.ProxyPassword, "proxy-password", "", "Proxy basic auth password (optional)")
+	rootCmd.Flags().StringVar(&cfg.ProxyUsername, "proxy-username", "", "Proxy basic auth username (proxy/CONNECT only, never sent to target)")
+	rootCmd.Flags().StringVar(&cfg.ProxyPassword, "proxy-password", "", "Proxy basic auth password (proxy/CONNECT only, never sent to target)")
 	rootCmd.Flags().BoolVar(&cfg.ProxyInsecure, "proxy-insecure", false, "Skip TLS verification for proxy (useful with Burp self-signed CA)")
 	rootCmd.Flags().BoolVar(&cfg.Crawl, "crawl", false, "Enable link discovery crawling before scanning")
 	rootCmd.Flags().IntVar(&cfg.CrawlDepth, "crawl-depth", 2, "Maximum crawl depth (0 = start URL only)")
@@ -329,11 +329,10 @@ func runScan(cmd *cobra.Command, args []string) error {
 		Cookies: parseCookies(cfg.Cookies),
 	}
 
-	client, proxyConfig, err := setupHTTPClient(target)
+	client, _, err := setupHTTPClient(target)
 	if err != nil {
 		return err
 	}
-	target = applyProxyAuth(target, proxyConfig)
 
 	var requestCount atomic.Int64
 	baseTransport := client.Transport
@@ -459,19 +458,10 @@ func setupHTTPClient(target model.Target) (*http.Client, *httpclient.ProxyConfig
 		if err := proxyConfig.Validate(); err != nil {
 			return nil, nil, fmt.Errorf("proxy validation failed: %w", err)
 		}
-		statusCyan("[*] Using proxy: %s\n", cfg.Proxy)
+		logProxyEndpoint(cfg.Proxy)
 	}
 	client := httpclient.NewClient(engineCfg.RequestTimeout, proxyConfig)
 	return client, proxyConfig, nil
-}
-
-func applyProxyAuth(target model.Target, proxyConfig *httpclient.ProxyConfig) model.Target {
-	if proxyConfig != nil {
-		if authHeader, ok := proxyConfig.ProxyAuthHeader(); ok {
-			target.ProxyAuth = authHeader
-		}
-	}
-	return target
 }
 
 func setupAuthentication(client *http.Client, headers map[string]string, target model.Target) error {
@@ -684,12 +674,11 @@ func resolveTargets(primaryURL string) ([]string, error) {
 
 func deriveTarget(base model.Target, urlStr string) model.Target {
 	return model.Target{
-		URL:       urlStr,
-		Method:    base.Method,
-		Headers:   cloneHeaders(base.Headers),
-		Cookies:   cloneCookies(base.Cookies),
-		Body:      base.Body,
-		ProxyAuth: base.ProxyAuth,
+		URL:     urlStr,
+		Method:  base.Method,
+		Headers: cloneHeaders(base.Headers),
+		Cookies: cloneCookies(base.Cookies),
+		Body:    base.Body,
 	}
 }
 

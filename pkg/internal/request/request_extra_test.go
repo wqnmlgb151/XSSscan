@@ -153,9 +153,9 @@ func TestApplyHeadersProxyAuth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ApplyHeaders(req, model.Target{ProxyAuth: "Basic dXNlcjpwYXNz"}, false)
-	if got := req.Header.Get("Proxy-Authorization"); got != "Basic dXNlcjpwYXNz" {
-		t.Errorf("Expected Proxy-Authorization header, got %q", got)
+	ApplyHeaders(req, model.Target{Headers: map[string]string{"Proxy-Authorization": "Basic dXNlcjpwYXNz"}}, false)
+	if got := req.Header.Get("Proxy-Authorization"); got != "" {
+		t.Errorf("Proxy credentials leaked into target headers: %q", got)
 	}
 }
 

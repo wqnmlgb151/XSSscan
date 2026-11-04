@@ -1,0 +1,5 @@
+# New security hardening identities; append only, retain the v1.1.3 manifests.
+github.com/xsscan/xsscan/pkg/httpclient	TestProxyCredentialsStayAtProxy
+github.com/xsscan/xsscan/pkg/httpclient	TestProxyCredentialsStayAtProxy/HTTP
+github.com/xsscan/xsscan/pkg/httpclient	TestProxyCredentialsStayAtProxy/HTTPS
+github.com/xsscan/xsscan/cmd	TestProxyStatusNeverPrintsPassword

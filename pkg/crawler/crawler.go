@@ -18,6 +18,7 @@ import (
 
 	"github.com/xsscan/xsscan/pkg/httpclient"
 	"github.com/xsscan/xsscan/pkg/internal/urlutil"
+	"github.com/xsscan/xsscan/pkg/model"
 	"github.com/xsscan/xsscan/pkg/ssrfguard"
 	"golang.org/x/net/html"
 )
@@ -32,6 +33,8 @@ const (
 
 // Crawler performs breadth-first same-host link discovery.
 type Crawler struct {
+	scope           *URLScope
+	noForms         bool
 	client          *http.Client
 	maxDepth        int
 	maxPages        int
@@ -49,19 +52,23 @@ type Crawler struct {
 // inputs, plus select and textarea fields. Hidden fields are included too
 // since they often carry CSRF tokens or preset values.
 type FormInfo struct {
-	Action string   `json:"action"`
-	Method string   `json:"method"`
-	Inputs []string `json:"inputs"`
+	Fields []FormField `json:"fields,omitempty"`
+	Action string      `json:"action"`
+	Method string      `json:"method"`
+	Inputs []string    `json:"inputs"`
 }
 
 // CrawlResult holds the discovered URLs and forms.
 type CrawlResult struct {
-	URLs  []string   `json:"urls"`
-	Forms []FormInfo `json:"forms,omitempty"`
+	Skipped []model.ScanIssue `json:"skipped,omitempty"`
+	URLs    []string          `json:"urls"`
+	Forms   []FormInfo        `json:"forms,omitempty"`
 }
 
 // CrawlerConfig holds configuration for the crawler.
 type CrawlerConfig struct {
+	NoForms         bool
+	Scope           *URLScope
 	MaxDepth        int
 	MaxPages        int
 	SameHostOnly    bool
@@ -93,6 +100,8 @@ func NewCrawlerWithConfig(client *http.Client, config CrawlerConfig) *Crawler {
 	}
 	return &Crawler{
 		client:          client,
+		scope:           config.Scope,
+		noForms:         config.NoForms,
 		maxDepth:        config.MaxDepth,
 		maxPages:        config.MaxPages,
 		sameHostOnly:    config.SameHostOnly,
@@ -121,6 +130,7 @@ func (c *Crawler) Crawl(ctx context.Context, startURL string) (*CrawlResult, err
 	discoveryURLs := c.discoverSeeds(ctx, startURL)
 
 	var problems []error
+	var skipped []model.ScanIssue
 	var resultURLs []string
 	var resultForms []FormInfo
 	pageCount := 0
@@ -132,13 +142,17 @@ func (c *Crawler) Crawl(ctx context.Context, startURL string) (*CrawlResult, err
 	for depth := 0; depth <= c.maxDepth && len(currentLevel) > 0; depth++ {
 		select {
 		case <-ctx.Done():
-			return &CrawlResult{URLs: resultURLs, Forms: resultForms}, ctx.Err()
+			return &CrawlResult{URLs: resultURLs, Forms: resultForms, Skipped: skipped}, ctx.Err()
 		default:
 		}
 
 		// Phase 1 — serial: filter visited, enforce maxPages, collect toProcess.
 		var toProcess []string
 		for _, u := range currentLevel {
+			if err := c.scope.Check(u); err != nil {
+				skipped = append(skipped, model.ScanIssue{Target: u, Stage: "discovery-skip", Message: err.Error()})
+				continue
+			}
 			if c.sameHostOnly && !ssrfguard.SameOrigin(startURL, u) {
 				continue
 			}
@@ -194,7 +208,15 @@ func (c *Crawler) Crawl(ctx context.Context, startURL string) (*CrawlResult, err
 		currentLevel = nextLevel
 	}
 
-	return &CrawlResult{URLs: resultURLs, Forms: resultForms}, errors.Join(problems...)
+	for _, form := range resultForms {
+		for _, field := range form.Fields {
+			if field.Type == "password" {
+				skipped = append(skipped, model.ScanIssue{Target: form.Action, Stage: "discovery-skip", Message: "password form skipped"})
+				break
+			}
+		}
+	}
+	return &CrawlResult{URLs: resultURLs, Forms: resultForms, Skipped: skipped}, errors.Join(problems...)
 }
 
 // fetchLevelParallel fetches and extracts links and forms from all URLs
@@ -324,12 +346,16 @@ func (c *Crawler) fetchAndExtract(ctx context.Context, pageURL, startHost string
 		return nil, nil, err
 	}
 
-	links, err := extractLinks(bodyStr, pageURL, startHost, c.sameHostOnly)
+	links, err := extractLinks(bodyStr, pageURL, startHost, c.sameHostOnly, c.noForms)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	forms, err := extractForms(bodyStr, pageURL)
+	var forms []FormInfo
+	if c.noForms {
+		return links, nil, nil
+	}
+	forms, err = extractForms(bodyStr, pageURL)
 	if err != nil {
 		// forms are best-effort; a parse error shouldn't block link extraction
 		forms = nil
@@ -353,7 +379,7 @@ func (c *Crawler) markVisited(u string) {
 // extractLinks parses HTML and extracts all navigable URLs.
 // Resolves relative URLs against baseURL and optionally filters to same-host only.
 // Extracts SPA attributes and JS route patterns.
-func extractLinks(body string, baseURL, startHost string, sameHostOnly bool) ([]string, error) {
+func extractLinks(body string, baseURL, startHost string, sameHostOnly bool, noForms ...bool) ([]string, error) {
 	base, err := url.Parse(baseURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid base URL: %w", err)
@@ -397,7 +423,18 @@ func extractLinks(body string, baseURL, startHost string, sameHostOnly bool) ([]
 			case "a", "area", "link":
 				rawURL = getAttr(n, "href")
 			case "form":
-				rawURL = getAttr(n, "action")
+				if len(noForms) > 0 && noForms[0] {
+					break
+				}
+				password := false
+				for _, field := range collectFormFields(n) {
+					if field.Type == "password" {
+						password = true
+					}
+				}
+				if !password && (len(noForms) == 0 || !noForms[0]) {
+					rawURL = getAttr(n, "action")
+				}
 			case "frame", "iframe":
 				rawURL = getAttr(n, "src")
 			}
@@ -580,6 +617,7 @@ func extractForms(body string, baseURL string) ([]FormInfo, error) {
 					Action: action,
 					Method: method,
 					Inputs: inputs,
+					Fields: collectFormFields(n),
 				})
 			}
 			// Don't recurse into nested forms (HTML forbids them, but guard anyway).

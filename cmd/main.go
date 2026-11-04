@@ -85,6 +85,10 @@ type ScanConfig struct {
 	ProxyPassword          string
 	ProxyInsecure          bool
 	Crawl                  bool
+	ExcludeURLs            []string
+	IncludeURLs            []string
+	NoForms                bool
+	AllowFormSubmit        bool
 	CrawlDepth             int
 	CrawlMaxPages          int
 	TargetsFile            string
@@ -146,6 +150,8 @@ var rootCmd = &cobra.Command{
 支持上下文感知 payload、JavaScript AST、CSP 分析和 WAF 绕过。
 浏览器执行验证默认启用；--verify-execution=false 可关闭。
 存储展示页可用 --trigger-url 指定；盲检测需要 --callback。
+自动发现跳过密码表单和危险动作路径；认证态自动 POST 默认不提交，--allow-form-submit 可显式启用。
+--no-forms 关闭表单发现；--include-url / --exclude-url 可重复设置扫描与发现的 URL 范围。
 
 支持 Query、POST Body (JSON/Form)、Header、Cookie 参数注入。
 支持管道输入：echo http://target | xsscan
@@ -182,6 +188,10 @@ func main() {
 }
 
 func init() {
+	rootCmd.Flags().StringArrayVar(&cfg.ExcludeURLs, "exclude-url", nil, "Exclude discovery URLs matching a regex (repeatable)")
+	rootCmd.Flags().StringArrayVar(&cfg.IncludeURLs, "include-url", nil, "Only include discovery URLs matching these regexes (repeatable)")
+	rootCmd.Flags().BoolVar(&cfg.NoForms, "no-forms", false, "Disable automatic form discovery")
+	rootCmd.Flags().BoolVar(&cfg.AllowFormSubmit, "allow-form-submit", false, "Allow automatically discovered POST forms with authentication (default: skipped)")
 	rootCmd.Flags().StringSliceVar(&cfg.OAuthAllowedOrigins, "oauth-allow-origin", nil, "Explicit additional OAuth endpoint origins")
 	rootCmd.Flags().StringVar(&cfg.LoginSuccessContains, "login-success-contains", "", "Required login response text")
 	rootCmd.Flags().StringVar(&cfg.LoginSuccessURL, "login-success-url", "", "Required final login URL")
@@ -304,6 +314,11 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	urlScope, scopeErr := crawler.NewURLScope(cfg.ExcludeURLs, cfg.IncludeURLs)
+	if scopeErr != nil {
+		return scopeErr
+	}
+	ctx = urlScope.Context(ctx)
 	stopProgress := func() {}
 	if !cfg.Silent && !cfg.Verbose {
 		terminal := isatty.IsTerminal(os.Stderr.Fd()) || isatty.IsCygwinTerminal(os.Stderr.Fd())

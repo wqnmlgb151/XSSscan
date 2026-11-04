@@ -11,6 +11,7 @@ import (
 	"github.com/chromedp/cdproto/target"
 	ext "github.com/chromedp/chromedp"
 	"github.com/xsscan/xsscan/pkg/requestbudget"
+	"github.com/xsscan/xsscan/pkg/ssrfguard"
 )
 
 // NewIsolatedTabContext shares an initialized browser process, but creates a
@@ -52,6 +53,7 @@ func NewIsolatedTabContext(ctx, parent context.Context, timeout time.Duration) (
 	if meter := requestbudget.FromContext(ctx); meter != nil {
 		lifetime = requestbudget.WithMeter(lifetime, meter)
 	}
+	lifetime = ssrfguard.InheritURLFilter(lifetime, ctx)
 	tab, closeTab, _ := NewTabContext(lifetime, ext.WithTargetID(tabID))
 	stopCaller := context.AfterFunc(ctx, endLifetime)
 	var once sync.Once

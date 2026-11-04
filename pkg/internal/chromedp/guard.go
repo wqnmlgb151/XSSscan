@@ -120,6 +120,20 @@ func GuardRequests(origin string, cancel context.CancelFunc, rewrite RequestRewr
 							return
 						}
 						var err error
+						if e.ResourceType == network.ResourceTypeDocument {
+							if scopeErr := ssrfguard.CheckNavigation(ctx, e.Request.URL); scopeErr != nil {
+								g.record(scopeErr)
+								failErr := fetch.FailRequest(e.RequestID, network.ErrorReasonBlockedByClient).Do(ctx)
+								stopErr := page.StopLoading().Do(ctx)
+								if failErr != nil || stopErr != nil {
+									g.mu.Lock()
+									g.err = errors.Join(g.err, fmt.Errorf("stop scope-denied browser navigation: %w", errors.Join(failErr, stopErr)))
+									g.mu.Unlock()
+								}
+								cancel()
+								return
+							}
+						}
 						if !ssrfguard.SameOrigin(origin, e.Request.URL) {
 							mainNavigation := e.ResourceType == network.ResourceTypeDocument && e.FrameID == mainFrame
 							if mainNavigation {

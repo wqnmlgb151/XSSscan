@@ -64,6 +64,9 @@ func NewClient(timeout time.Duration, proxy *ProxyConfig) *http.Client {
 // CheckRedirect confines automatic redirects to the original HTTP origin.
 // Explicit authentication endpoints are independent requests, not redirects.
 func CheckRedirect(req *http.Request, via []*http.Request) error {
+	if err := ssrfguard.CheckNavigation(req.Context(), req.URL.String()); err != nil {
+		return err
+	}
 	if len(via) >= 10 {
 		return http.ErrUseLastResponse
 	}

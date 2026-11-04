@@ -3,3 +3,12 @@ github.com/xsscan/xsscan/pkg/httpclient	TestProxyCredentialsStayAtProxy
 github.com/xsscan/xsscan/pkg/httpclient	TestProxyCredentialsStayAtProxy/HTTP
 github.com/xsscan/xsscan/pkg/httpclient	TestProxyCredentialsStayAtProxy/HTTPS
 github.com/xsscan/xsscan/cmd	TestProxyStatusNeverPrintsPassword
+github.com/xsscan/xsscan/cmd	TestSecurityCLIProcess
+github.com/xsscan/xsscan/cmd	TestAuthenticatedAutomaticFormsAreNotSubmitted
+github.com/xsscan/xsscan/cmd	TestDiscoveryScopeAndPasswordFormsDoNotReachTargets
+github.com/xsscan/xsscan/pkg/crawler	TestFormDefaultsPreserveSuccessfulControls
+github.com/xsscan/xsscan/pkg/crawler	TestURLScopeRejectsUnsafeAndExcludedPaths
+github.com/xsscan/xsscan/cmd	TestDiscoveryUnsafeRedirectIsNotFollowed
+github.com/xsscan/xsscan/cmd	TestBrowserDiscoveryUnsafeRedirectIsNotFollowed
+github.com/xsscan/xsscan/pkg/crawler	TestFormDefaultsKeepExplicitEmptyAndDisabledSelection
+github.com/xsscan/xsscan/cmd	TestStoredNoFormsDoesNotFollowFormActions

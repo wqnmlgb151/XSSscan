@@ -45,6 +45,10 @@ type FileConfig struct {
 	ProxyUsername          string   `yaml:"proxy-username"`
 	ProxyPassword          string   `yaml:"proxy-password"`
 	ProxyInsecure          bool     `yaml:"proxy-insecure"`
+	ExcludeURLs            []string `yaml:"exclude-url"`
+	IncludeURLs            []string `yaml:"include-url"`
+	NoForms                bool     `yaml:"no-forms"`
+	AllowFormSubmit        bool     `yaml:"allow-form-submit"`
 	Crawl                  bool     `yaml:"crawl"`
 	CrawlDepth             int      `yaml:"crawl-depth"`
 	CrawlMaxPages          int      `yaml:"crawl-max-pages"`
@@ -140,6 +144,10 @@ func (fc *FileConfig) ApplyTo(cfg *ScanConfig, flags map[string]bool) {
 }
 
 var configFlags = map[string]string{
+	"ExcludeURLs":            "exclude-url",
+	"IncludeURLs":            "include-url",
+	"NoForms":                "no-forms",
+	"AllowFormSubmit":        "allow-form-submit",
 	"OAuthAllowedOrigins":    "oauth-allow-origin",
 	"LoginSuccessContains":   "login-success-contains",
 	"LoginSuccessURL":        "login-success-url",

@@ -25,6 +25,11 @@ func IsURLTargetAllowed(rawURL string) error {
 
 // IsURLTargetAllowedContext validates an HTTP destination with cancellable DNS.
 func IsURLTargetAllowedContext(ctx context.Context, rawURL string) error {
+	if filter, ok := ctx.Value(urlFilterKey{}).(func(string) error); ok {
+		if err := filter(rawURL); err != nil {
+			return err
+		}
+	}
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return fmt.Errorf("invalid URL: %w", err)

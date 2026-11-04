@@ -34,6 +34,8 @@ import (
 
 // Config controls the stored XSS scanner behavior.
 type Config struct {
+	NoForms bool
+	Scope   *crawler.URLScope
 	// TriggerURLs are URLs where stored content may appear (e.g., comment listing,
 	// profile page, admin panel). At least one is required.
 	TriggerURLs []string
@@ -81,6 +83,8 @@ func (s *Scanner) discoverTriggerURLs(ctx context.Context, seedURL string, heade
 		return s.config.TriggerURLs, nil
 	}
 	c := crawler.NewCrawlerWithConfig(s.client, crawler.CrawlerConfig{
+		Scope:        s.config.Scope,
+		NoForms:      s.config.NoForms,
 		MaxDepth:     2,
 		MaxPages:     20,
 		SameHostOnly: true,
@@ -89,6 +93,15 @@ func (s *Scanner) discoverTriggerURLs(ctx context.Context, seedURL string, heade
 	result, err := c.Crawl(ctx, seedURL)
 	if err != nil && result == nil {
 		return nil, fmt.Errorf("crawl: %w", err)
+	}
+	for _, issue := range result.Skipped {
+		endpoint, _ := url.Parse(issue.Target)
+		if endpoint != nil {
+			endpoint.User = nil
+			endpoint.RawQuery = ""
+			endpoint.Fragment = ""
+			err = errors.Join(err, fmt.Errorf("stored discovery skipped %s: %s", endpoint.String(), issue.Message))
+		}
 	}
 	if len(result.URLs) == 0 {
 		result.URLs = []string{seedURL}
@@ -218,6 +231,10 @@ func (s *Scanner) DetectWithError(ctx context.Context, injections []Injection) (
 		// auto-discovered); their status doesn't change across polls.
 		var allowed []string
 		for _, u := range urls {
+			if err := s.config.Scope.Check(u); err != nil {
+				problems = append(problems, fmt.Errorf("stored trigger skipped: %w", err))
+				continue
+			}
 			if err := ssrfguard.IsURLTargetAllowedContext(ctx, u); err != nil {
 				s.logger.Warn("trigger URL failed SSRF check", zap.String("url", u), zap.Error(err))
 				problems = append(problems, err)

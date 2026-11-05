@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/xsscan/xsscan/pkg/analyze"
+	"github.com/wqnmlgb151/XSSscan/pkg/analyze"
 )
 
 var dialogCall = regexp.MustCompile(`\b(alert|confirm|prompt)\(\s*(?:1|'[^'\r\n]*'|"[^"\r\n]*")\s*\)`)

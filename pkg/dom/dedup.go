@@ -3,7 +3,7 @@ package dom
 import (
 	"slices"
 
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 // All findings come from one target's source matrix. Preserve source and sink

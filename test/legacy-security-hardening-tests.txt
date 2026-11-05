@@ -32,3 +32,4 @@ github.com/xsscan/xsscan/cmd	TestPasswordFileAndStdinSources
 github.com/xsscan/xsscan/cmd	TestYAMLCredentialPermissionWarning
 github.com/xsscan/xsscan/cmd	TestAllSensitiveArgvWarningsAreSilentAware
 github.com/xsscan/xsscan/test/integration	TestContainerRuntimeSecurityPolicy
+github.com/wqnmlgb151/XSSscan/test/integration	TestPublishedModulePathMatchesRepository

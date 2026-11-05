@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 func TestFlowPlanExtendsWithoutDroppingOriginalMatrix(t *testing.T) {

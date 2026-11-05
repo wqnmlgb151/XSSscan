@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/xsscan/xsscan/pkg/httpclient"
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/httpclient"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 // ─────────────────────────────────────────────────────────────────────

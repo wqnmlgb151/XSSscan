@@ -1,6 +1,6 @@
 package httpclient
 
-import "github.com/xsscan/xsscan/pkg/model"
+import "github.com/wqnmlgb151/XSSscan/pkg/model"
 
 // ExchangeError preserves the HTTP diagnostic without altering report evidence.
 type ExchangeError struct {

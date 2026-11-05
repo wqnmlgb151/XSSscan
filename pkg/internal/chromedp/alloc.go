@@ -14,7 +14,7 @@ import (
 
 	ext "github.com/chromedp/chromedp"
 
-	"github.com/xsscan/xsscan/pkg/browser"
+	"github.com/wqnmlgb151/XSSscan/pkg/browser"
 )
 
 // StandardHeadlessOptions are the hardening options shared by all call sites.

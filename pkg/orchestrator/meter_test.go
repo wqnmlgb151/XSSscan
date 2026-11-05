@@ -3,7 +3,7 @@ package orchestrator
 import (
 	"context"
 	"errors"
-	"github.com/xsscan/xsscan/pkg/requestbudget"
+	"github.com/wqnmlgb151/XSSscan/pkg/requestbudget"
 	"net/http"
 	"net/http/httptest"
 	"testing"

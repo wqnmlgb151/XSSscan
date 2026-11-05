@@ -10,7 +10,7 @@
 | P0-4 短凭据脱敏 | 已复现并修复；报告包 race、build/vet/全仓 short-race 通过，指定 Chrome 包与跨平台 CI 待完成 |
 | P0-5 凭据输入入口 | 已实现；本地 build/vet/short-race 与来源/警告回归通过，Chrome 串行与 Linux 权限验证待完成 |
 | P1-1 Docker | 配置、固定摘要、非 root Chromium 与 CI 已实现；本地静态策略 race/build/vet/short-race 通过；实际镜像验收待 CI |
-| P1-2 模块路径 | 未完成 |
+| P1-2 模块路径 | 已机械迁移；失败测试转绿，build/vet/short-race 通过，Chrome 串行与跨平台完整门禁待完成 |
 | P1-3 SSRF Policy | 未完成 |
 | P1-4 marker | 未完成 |
 | P1-5 Chrome 参数 | 待真实 Chrome 验证 |
@@ -80,3 +80,17 @@
 - 失败记录：`p1-1-before.log`，缺摘要、Chromium、非 root 三项配置契约失败；修复后目标 race 通过。build/vet 通过，全仓 short/race 1755 pass / 53 short skip。
 - 仅测试 fixture 与容器配置变化；生产扫描 Go 代码与 P0-5 相同，P0-5 五包串行 Chrome race 268 pass / 0 skip。没有把此结果当作容器运行通过。
 - 本机无 Docker，镜像构建/容器真实 Chrome/沙箱执行均未运行。CI 验收待提交触发；固定摘要不固定 apk 依赖快照。非 root 为容器默认行为变化，宿主 CLI 默认不变。CI 权限放宽仅适用于一次性隔离环境。
+
+## P0-3 / P1-1 远程验收补充
+
+- [P0-3 CI 41971526767](https://github.com/wqnmlgb151/XSSscan/actions/runs/41971526767) Windows/Linux 完整普通/race 均 1866 pass、0 test skip；required-tests 1856/1856，保留全部历史身份。
+- [P1-1 CI 41973531381](https://github.com/wqnmlgb151/XSSscan/actions/runs/41973531381) 的 container-smoke 作业已通过：runtime/smoke 镜像实际构建、non-root 检查、network none、Chrome 沙箱保留、退出码 2、Schema 1.1、1 个执行验证 finding（Go 请求 4）。本机 Docker 仍未运行；该提交 Windows/Linux 全量回归尚在运行。
+
+## P1-2 验证及边界
+
+- 208 个已跟踪源码/测试/文档文件仅替换模块名前缀为 `github.com/wqnmlgb151/XSSscan`。检测、CLI、Schema 与依赖版本不变。新 module_path_test 防止占位路径复发。
+- `p1-2-before.log`（go list 新 module 失败）、`p1-2-test-before.log`（自动化路径断言失败）已保存；新路径断言 race 转绿，build/vet 通过；全仓 short/race 1756 pass / 53 short skip。
+- 历史 audit/2026-10-31 与 legacy-v1.1.3 清单原文不动；CI 拼接清单时只映射旧模块前缀，函数/子测试名称逐项保留，不能靠改名逃避门禁。新安全清单混合历史和新命名空间，由同一显式映射处理。
+- 独立审查逐文件确认机械替换；跨平台完整身份门禁待提交后 CI。SDK 导入者需更新 module import，这是发布路径纠正，扫描运行行为不变。
+
+- P1-2 指定五包真实 Chrome 串行 race：268 pass / 0 skip；Python 门禁自身 12 个单元测试通过。模块迁移后的完整历史身份门禁由提交后的双平台 CI 验证。

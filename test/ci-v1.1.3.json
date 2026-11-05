@@ -52,7 +52,7 @@
           "pass": 27
         },
         "packages": {
-          "github.com/xsscan/xsscan/test/integration": "pass"
+          "github.com/wqnmlgb151/XSSscan/test/integration": "pass"
         },
         "baseline": [
           {
@@ -352,7 +352,7 @@
           "pass": 27
         },
         "packages": {
-          "github.com/xsscan/xsscan/test/integration": "pass"
+          "github.com/wqnmlgb151/XSSscan/test/integration": "pass"
         },
         "baseline": [
           {

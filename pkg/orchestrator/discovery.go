@@ -6,9 +6,9 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/xsscan/xsscan/pkg/crawler"
-	"github.com/xsscan/xsscan/pkg/internal/request"
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/crawler"
+	"github.com/wqnmlgb151/XSSscan/pkg/internal/request"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 type DiscoveryConfig struct {

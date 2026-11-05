@@ -1,4 +1,4 @@
-module github.com/xsscan/xsscan
+module github.com/wqnmlgb151/XSSscan
 
 go 1.26.0
 

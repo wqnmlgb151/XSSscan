@@ -10,8 +10,8 @@ import (
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/target"
 	ext "github.com/chromedp/chromedp"
-	"github.com/xsscan/xsscan/pkg/requestbudget"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/pkg/requestbudget"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 )
 
 // NewIsolatedTabContext shares an initialized browser process, but creates a

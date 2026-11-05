@@ -4,7 +4,7 @@ import (
 	"context"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 	"net/http"
 	"strings"
 )

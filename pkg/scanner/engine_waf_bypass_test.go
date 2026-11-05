@@ -3,8 +3,8 @@ package scanner
 import (
 	"testing"
 
-	ctx "github.com/xsscan/xsscan/pkg/context"
-	"github.com/xsscan/xsscan/pkg/payload"
+	ctx "github.com/wqnmlgb151/XSSscan/pkg/context"
+	"github.com/wqnmlgb151/XSSscan/pkg/payload"
 )
 
 func TestWAFBypass_DisabledByDefault(t *testing.T) {

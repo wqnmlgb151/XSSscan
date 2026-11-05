@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 )
 
 func TestCredentialSourcesAndArgvWarning(t *testing.T) {

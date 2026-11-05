@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 )
 
 // ProxyConfig configures an HTTP proxy for all requests (e.g., Burp Suite, ZAP).

@@ -3,7 +3,7 @@ package stored
 import (
 	"testing"
 
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 // The reported stored finding must be the strongest one, not the first one produced.

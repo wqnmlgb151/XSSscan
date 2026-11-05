@@ -3,7 +3,7 @@ package crawler
 import (
 	"context"
 	"fmt"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 	"net/url"
 	"regexp"
 )

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 // simulateDedup mimics the deduplication logic in Engine.Run()

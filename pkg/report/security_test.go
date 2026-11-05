@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 func securityFixture() (*ScanData, []string) {

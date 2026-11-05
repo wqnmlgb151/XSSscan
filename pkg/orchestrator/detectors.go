@@ -7,12 +7,12 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/xsscan/xsscan/pkg/analyze"
-	"github.com/xsscan/xsscan/pkg/browser"
-	"github.com/xsscan/xsscan/pkg/dom"
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
-	"github.com/xsscan/xsscan/pkg/stored"
+	"github.com/wqnmlgb151/XSSscan/pkg/analyze"
+	"github.com/wqnmlgb151/XSSscan/pkg/browser"
+	"github.com/wqnmlgb151/XSSscan/pkg/dom"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/pkg/stored"
 )
 
 // DOMModule keeps browser creation and detector lifecycle out of CLI parsing.

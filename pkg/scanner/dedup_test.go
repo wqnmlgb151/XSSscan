@@ -3,10 +3,10 @@ package scanner
 import (
 	"testing"
 
-	"github.com/xsscan/xsscan/pkg/internal/urlutil"
+	"github.com/wqnmlgb151/XSSscan/pkg/internal/urlutil"
 
-	ctx "github.com/xsscan/xsscan/pkg/context"
-	"github.com/xsscan/xsscan/pkg/model"
+	ctx "github.com/wqnmlgb151/XSSscan/pkg/context"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 func TestClassifyAttackVector(t *testing.T) {

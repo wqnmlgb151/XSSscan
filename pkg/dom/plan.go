@@ -10,9 +10,9 @@ import (
 	"strings"
 
 	"github.com/chromedp/chromedp"
-	"github.com/xsscan/xsscan/pkg/analyze"
-	"github.com/xsscan/xsscan/pkg/jsanalysis"
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/analyze"
+	"github.com/wqnmlgb151/XSSscan/pkg/jsanalysis"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 type documentPlan struct {

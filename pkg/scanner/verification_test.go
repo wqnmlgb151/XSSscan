@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/xsscan/xsscan/pkg/execverify"
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/execverify"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 	"go.uber.org/zap"
 )
 

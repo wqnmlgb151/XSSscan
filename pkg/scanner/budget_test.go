@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"testing"
 
-	xctx "github.com/xsscan/xsscan/pkg/context"
-	"github.com/xsscan/xsscan/pkg/payload"
+	xctx "github.com/wqnmlgb151/XSSscan/pkg/context"
+	"github.com/wqnmlgb151/XSSscan/pkg/payload"
 )
 
 func TestPayloadBudgetPreservesContextsAndQuotes(t *testing.T) {

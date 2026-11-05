@@ -5,13 +5,13 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/xsscan/xsscan/pkg/analyze"
-	"github.com/xsscan/xsscan/pkg/context"
-	"github.com/xsscan/xsscan/pkg/internal/text"
-	"github.com/xsscan/xsscan/pkg/internal/xsspatterns"
-	"github.com/xsscan/xsscan/pkg/jsanalysis"
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/pkg/payload"
+	"github.com/wqnmlgb151/XSSscan/pkg/analyze"
+	"github.com/wqnmlgb151/XSSscan/pkg/context"
+	"github.com/wqnmlgb151/XSSscan/pkg/internal/text"
+	"github.com/wqnmlgb151/XSSscan/pkg/internal/xsspatterns"
+	"github.com/wqnmlgb151/XSSscan/pkg/jsanalysis"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/payload"
 )
 
 type Verifier struct {

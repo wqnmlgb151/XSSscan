@@ -3,8 +3,8 @@ package payload
 import (
 	"strings"
 
-	"github.com/xsscan/xsscan/pkg/context"
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/context"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 // frameworkPayloadCache pre-builds framework template lists once at init to

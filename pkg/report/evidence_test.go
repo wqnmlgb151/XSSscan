@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/xsscan/xsscan/pkg/internal/text"
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/internal/text"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 func TestCandidateEvidenceSurvivesAllFormats(t *testing.T) {

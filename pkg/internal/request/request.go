@@ -13,8 +13,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/xsscan/xsscan/pkg/httpclient"
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/httpclient"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 // MaxBodyRead limits how much of a multipart part body we read into memory.

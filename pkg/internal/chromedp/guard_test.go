@@ -3,7 +3,7 @@ package chromedp
 import (
 	"context"
 	"errors"
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -12,7 +12,7 @@ import (
 
 	"github.com/chromedp/cdproto/browser"
 	ext "github.com/chromedp/chromedp"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 )
 
 func TestBrowserGuardNavigationDiagnostic(t *testing.T) {

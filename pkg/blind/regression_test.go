@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xsscan/xsscan/pkg/callback"
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/pkg/callback"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 )
 
 func TestBlindCorrelationControls(t *testing.T) {

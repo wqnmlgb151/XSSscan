@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 )
 
 // mockHTTPClient returns configurable responses for testing retry logic.

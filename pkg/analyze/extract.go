@@ -10,8 +10,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/xsscan/xsscan/pkg/internal/request"
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/internal/request"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 // ExtractParameters extracts all injectable parameters from a Target.

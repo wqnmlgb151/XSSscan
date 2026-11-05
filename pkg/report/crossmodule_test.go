@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 // The leads a module produced must reach the report, or nothing downstream can act on

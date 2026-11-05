@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 func TestBuildRawRequest_ContainsMethodAndURL(t *testing.T) {

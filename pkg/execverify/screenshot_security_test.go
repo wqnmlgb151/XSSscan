@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 )
 
 func TestScreenshotsDisabledByDefault(t *testing.T) {

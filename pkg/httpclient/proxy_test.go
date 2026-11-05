@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 )
 
 func TestProxyValidate_EmptyURL(t *testing.T) {

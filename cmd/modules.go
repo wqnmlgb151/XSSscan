@@ -9,13 +9,13 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/xsscan/xsscan/pkg/blind"
-	"github.com/xsscan/xsscan/pkg/callback"
-	"github.com/xsscan/xsscan/pkg/crawler"
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/pkg/orchestrator"
-	"github.com/xsscan/xsscan/pkg/scanner"
-	"github.com/xsscan/xsscan/pkg/stored"
+	"github.com/wqnmlgb151/XSSscan/pkg/blind"
+	"github.com/wqnmlgb151/XSSscan/pkg/callback"
+	"github.com/wqnmlgb151/XSSscan/pkg/crawler"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/orchestrator"
+	"github.com/wqnmlgb151/XSSscan/pkg/scanner"
+	"github.com/wqnmlgb151/XSSscan/pkg/stored"
 )
 
 func configureTypes(cmd *cobra.Command) error {

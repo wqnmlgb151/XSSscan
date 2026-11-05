@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"html"
 	"net/http"
 	"os"
@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/fatih/color"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 )
 
 func captureCLIStreams(t *testing.T, action func() error) (string, string, error) {

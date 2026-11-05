@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/xsscan/xsscan/pkg/payload"
+	"github.com/wqnmlgb151/XSSscan/pkg/payload"
 )
 
 // WAFResult contains WAF detection results

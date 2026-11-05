@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xsscan/xsscan/pkg/analyze"
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/analyze"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 func TestInstrumentDialogPayload(t *testing.T) {

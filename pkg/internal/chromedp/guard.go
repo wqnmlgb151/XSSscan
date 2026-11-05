@@ -11,9 +11,9 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	ext "github.com/chromedp/chromedp"
-	"github.com/xsscan/xsscan/pkg/browser"
-	"github.com/xsscan/xsscan/pkg/requestbudget"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/pkg/browser"
+	"github.com/wqnmlgb151/XSSscan/pkg/requestbudget"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 )
 
 // RequestRewrite can override a permitted request, for authenticated replay.

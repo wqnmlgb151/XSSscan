@@ -3,11 +3,11 @@ package scanner
 import (
 	"testing"
 
-	"github.com/xsscan/xsscan/pkg/analyze"
-	xctx "github.com/xsscan/xsscan/pkg/context"
+	"github.com/wqnmlgb151/XSSscan/pkg/analyze"
+	xctx "github.com/wqnmlgb151/XSSscan/pkg/context"
 
-	"github.com/xsscan/xsscan/pkg/payload"
-	"github.com/xsscan/xsscan/pkg/verify"
+	"github.com/wqnmlgb151/XSSscan/pkg/payload"
+	"github.com/wqnmlgb151/XSSscan/pkg/verify"
 )
 
 // The gate must spend the full derivation budget only when the attempt actually

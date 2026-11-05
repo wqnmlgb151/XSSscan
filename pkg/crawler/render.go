@@ -9,7 +9,7 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 
-	allocopts "github.com/xsscan/xsscan/pkg/internal/chromedp"
+	allocopts "github.com/wqnmlgb151/XSSscan/pkg/internal/chromedp"
 )
 
 // RenderedPage holds the forms extracted from a JS-rendered page.

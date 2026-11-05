@@ -3,15 +3,15 @@ package crawler
 import (
 	"context"
 	"fmt"
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"net/http"
 	"net/url"
 	"strings"
 	"testing"
 
-	"github.com/xsscan/xsscan/pkg/internal/urlutil"
+	"github.com/wqnmlgb151/XSSscan/pkg/internal/urlutil"
 
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 )
 
 func TestExtractLinks_BasicAnchor(t *testing.T) {

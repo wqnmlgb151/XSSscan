@@ -111,7 +111,7 @@ def instrument(root):
     main = read("cmd/main.go")
     paths["cmd/main.go"] = main.replace("func main() {", "func main() {\n defer perfstage.Close()", 1).replace("os.Exit(", "perfstage.Exit(")
     for name, text in paths.items():
-        text = text.replace("import (", 'import (\n "github.com/xsscan/xsscan/pkg/perfstage"', 1)
+        text = text.replace("import (", 'import (\n "github.com/wqnmlgb151/XSSscan/pkg/perfstage"', 1)
         (root / name).write_text(text, encoding="utf-8")
     helper = root / "pkg/perfstage"
     helper.mkdir(exist_ok=False)

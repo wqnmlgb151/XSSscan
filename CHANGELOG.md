@@ -23,6 +23,11 @@
 - 升级到受支持且固定摘要的 Alpine 3.23.7，内置 Chromium/CA，默认非 root，保留 Chrome 沙箱；builder 同样固定摘要。新增网络禁用的容器 loopback 执行验证 CI，测试专用 fixture 不进入 final 镜像。
 - 镜像只在构建时安装依赖；本机无 Docker，实际镜像构建/执行结果待 CI。Chrome 沙箱所需权限及 CI 权限放宽边界见 `docs/container.md`。
 
+### P1-2 模块路径（零扫描行为变化）
+
+- module/import 统一为实际仓库 `github.com/wqnmlgb151/XSSscan`，不新增依赖、不改变扫描、CLI、报告。SDK 导入者需要更新路径。
+- 历史审计和 legacy 测试清单原文保留；CI 只映射模块前缀，全部历史测试名称继续强制验证，新增路径合约回归。
+
 ### 行为变化
 
 - P0-5：已有敏感 argv 参数继续可用，非 silent 模式新增一次进程列表/历史风险提示；`--silent` 恢复无提示行为。环境变量现在覆盖 YAML；显式旧 CLI 参数可恢复指定值，未设置环境变量时 YAML 行为保持不变。

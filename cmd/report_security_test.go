@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 func TestCLIReportsSafeByDefaultAndRawIsExplicit(t *testing.T) {

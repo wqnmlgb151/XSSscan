@@ -1,12 +1,12 @@
 package verify
 
 import (
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"net/http"
 	"strings"
 	"testing"
 
-	"github.com/xsscan/xsscan/pkg/payload"
+	"github.com/wqnmlgb151/XSSscan/pkg/payload"
 )
 
 func TestDetectWAF_Cloudflare(t *testing.T) {

@@ -22,3 +22,12 @@ github.com/xsscan/xsscan/pkg/report	TestShortCookiesPreserveReportSemantics
 github.com/xsscan/xsscan/pkg/report	TestCredentialEchoReplacementUsesBoundaries
 github.com/xsscan/xsscan/pkg/report	TestShortCredentialsStillRedactAtPositions
 github.com/xsscan/xsscan/pkg/report	TestCredentialHeaderCopiesRedactWholeValues
+github.com/xsscan/xsscan/cmd	TestCredentialSourcesAndArgvWarning
+github.com/xsscan/xsscan/cmd	TestCredentialSourcesAndArgvWarning/env
+github.com/xsscan/xsscan/cmd	TestCredentialSourcesAndArgvWarning/cli
+github.com/xsscan/xsscan/cmd	TestCredentialSourcesAndArgvWarning/file
+github.com/xsscan/xsscan/cmd	TestCredentialSourcesAndArgvWarning/silent
+github.com/xsscan/xsscan/cmd	TestCredentialEnvironmentAndExplicitEmpty
+github.com/xsscan/xsscan/cmd	TestPasswordFileAndStdinSources
+github.com/xsscan/xsscan/cmd	TestYAMLCredentialPermissionWarning
+github.com/xsscan/xsscan/cmd	TestAllSensitiveArgvWarningsAreSilentAware

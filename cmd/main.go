@@ -49,6 +49,9 @@ const (
 
 // ScanConfig holds all CLI flags
 type ScanConfig struct {
+	PasswordFile           string
+	JWTFile                string
+	PasswordStdin          bool
 	legacyTypeFlags        map[string]bool
 	typesExplicit          bool
 	OAuthAllowedOrigins    []string
@@ -147,6 +150,10 @@ var rootCmd = &cobra.Command{
 	Short: "xsscan - 上下文感知 XSS 扫描器",
 	Long: `xsscan - 上下文感知 XSS 扫描器
 
+凭据优先级：显式 CLI（含文件/stdin）> 环境变量 > YAML。
+环境变量：XSSCAN_PASSWORD、XSSCAN_PROXY_PASSWORD、XSSCAN_OAUTH_CLIENT_SECRET、XSSCAN_OAUTH_PASSWORD、XSSCAN_JWT。
+敏感 argv 非 silent 模式提示暴露风险；--silent 关闭此提示。
+
 默认调度 reflected、dom、stored、blind 四类检测，使用 --types 选择类型。
 支持上下文感知 payload、JavaScript AST、CSP 分析和 WAF 绕过。
 浏览器执行验证默认启用；--verify-execution=false 可关闭。
@@ -221,7 +228,10 @@ func init() {
 	rootCmd.Flags().BoolVarP(&cfg.Verbose, "verbose", "v", false, "Verbose output")
 	rootCmd.Flags().StringVar(&cfg.LoginURL, "login-url", "", "Login URL for authenticated scanning")
 	rootCmd.Flags().StringVar(&cfg.Username, "username", "", "Username for login")
-	rootCmd.Flags().StringVar(&cfg.Password, "password", "", "Password for login")
+	rootCmd.Flags().StringVar(&cfg.Password, "password", "", "Password for login (argv exposure warning; prefer XSSCAN_PASSWORD/file/stdin)")
+	rootCmd.Flags().StringVar(&cfg.PasswordFile, "password-file", "", "Read login password from file (explicit CLI source; trims trailing newlines)")
+	rootCmd.Flags().BoolVar(&cfg.PasswordStdin, "password-stdin", false, "Read login password from stdin; cannot also read target URLs from stdin")
+	rootCmd.Flags().StringVar(&cfg.JWTFile, "jwt-file", "", "Read JWT from file (explicit CLI source; trims trailing newlines)")
 	rootCmd.Flags().BoolVar(&cfg.TestHPP, "hpp", false, "Enable HTTP Parameter Pollution testing")
 	rootCmd.Flags().BoolVar(&cfg.WAFBypass, "waf-bypass", false, "Enable WAF bypass via payload mutation")
 	rootCmd.Flags().Float64Var(&cfg.ConfidenceMin, "confidence", 0.60, "Minimum confidence threshold (0.0-1.0)")
@@ -245,7 +255,7 @@ func init() {
 	rootCmd.Flags().StringVar(&cfg.ChromePath, "chrome-path", "", "Path to Chrome/Chromium binary (auto-detected if empty)")
 	rootCmd.Flags().StringVar(&cfg.PayloadWordlist, "payload-wordlist", "", "Path to custom payload wordlist (one payload per line)")
 	rootCmd.Flags().StringVar(&cfg.ConfigFile, "config", "", "Path to YAML config file")
-	rootCmd.Flags().StringVar(&cfg.JWT, "jwt", "", "JWT token (sent as Bearer in Authorization header)")
+	rootCmd.Flags().StringVar(&cfg.JWT, "jwt", "", "JWT token (argv warning; prefer XSSCAN_JWT or --jwt-file)")
 	rootCmd.Flags().BoolVar(&cfg.Silent, "silent", false, "Suppress banner and status output (for pipelines)")
 	rootCmd.Flags().BoolVar(&cfg.NoColor, "no-color", false, "Disable ANSI color output")
 	rootCmd.Flags().BoolVar(&cfg.EnableProbe, "probe", false, "Run context probes before payload scanning (reduces false positives)")
@@ -458,6 +468,9 @@ func loadAndValidateConfig(cmd *cobra.Command) error {
 		}
 		flags := collectChangedFlags(cmd)
 		fc.ApplyTo(&cfg, flags)
+	}
+	if err := resolveCredentials(&cfg, collectChangedFlags(cmd), os.LookupEnv, os.Stdin, os.Stderr); err != nil {
+		return err
 	}
 	ssrfguard.AllowPrivate = cfg.AllowPrivate
 	return validateConfig(&cfg)

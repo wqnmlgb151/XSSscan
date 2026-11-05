@@ -8,7 +8,7 @@
 | P0-2 表单与爬取安全 | 已复现并实现；目标 HTTP/Chrome race 回归通过，构建/vet/short-race 通过；完整身份门禁及跨平台 CI 待验证 |
 | P0-3 Chrome 代理 | 已复现绕过代理并修复；普通/认证/直连/拒绝的真实 Chrome race 回归、build/vet/short-race 通过；本项跨平台 CI 待执行 |
 | P0-4 短凭据脱敏 | 已复现并修复；报告包 race、build/vet/全仓 short-race 通过，指定 Chrome 包与跨平台 CI 待完成 |
-| P0-5 凭据输入入口 | 未完成 |
+| P0-5 凭据输入入口 | 已实现；本地 build/vet/short-race 与来源/警告回归通过，Chrome 串行与 Linux 权限验证待完成 |
 | P1-1 Docker | 未完成，需核实基础镜像维护和摘要 |
 | P1-2 模块路径 | 未完成 |
 | P1-3 SSRF Policy | 未完成 |
@@ -63,3 +63,13 @@
 - 限制：短凭据在无标签的普通文本回显、嵌入其他 token 的副本、语义字段中的任意秘密副本不再全局清除；未知编码/应用自定义载体仍可能无法识别。默认报告继续隐藏原始 HTTP 正文，不能将启发式脱敏视为完整 DLP。原始证据显式导出仍含凭据且受文件权限保护。
 
 - P0-4 指定五包真实 Chrome 串行 race：268 pass / 0 skip。跨平台完整门禁待本项提交后的 CI；此时 P0-3 CI 41971526767 仍在运行。
+
+## P0-5 验证及边界
+
+- 文件：`cmd/{main,credentials,credentials_test,credential_inputs_security_test}.go`、新清单、README、CHANGELOG 与 `docs/credentials.md`。
+- 失败记录：`p0-5-before.log`；环境未覆盖 YAML、文件 flag 不存在、argv 警告缺失。修复后 CLI 子进程 loopback 来源与提示回归 race 通过；cmd short/race 通过。
+- `go build ./...`、`go vet ./...`、全仓 short/race 通过；最终数量见本条后续记录。独立 Go 审查无 CRITICAL/HIGH。
+- 恢复无提示用 `--silent`；CLI 原参数保持可用。显式值 > 环境 > YAML，环境未设置保持旧 YAML 行为。详见凭据文档。
+- 未验证：本机未运行 Unix 权限语义（Windows 提前返回）；需 Linux CI 通过后方可声明。环境变量仍可能被同用户诊断工具读取，文件入口不自动修改用户提供文件的权限。
+
+- P0-5 最终本地结果：short/race 1754 pass / 53 short skip；指定五包真实 Chrome 串行 race 268 pass / 0 skip。CI 待推送后运行；Unix 权限分支尚未验证。

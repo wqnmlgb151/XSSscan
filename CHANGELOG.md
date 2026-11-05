@@ -13,7 +13,14 @@
 - 复现并修复短 Cookie 值全局替换破坏 Payload、Parameter、Context 和 HTTP 语法的问题。所有敏感位置继续脱敏（完整认证/Cookie 头、URL userinfo、敏感参数、正文隐藏）。
 - 全局凭据副本替换仅用于至少 8 字节的完整 token 边界；Payload、Parameter 等语义字段只按敏感位置处理。五格式、Schema 1.1、显式 raw opt-in 不变，既有 canary/raw 合约保留。
 
+### P0-5 凭据输入入口
+
+- 新增 `XSSCAN_PASSWORD`、`XSSCAN_PROXY_PASSWORD`、`XSSCAN_OAUTH_CLIENT_SECRET`、`XSSCAN_OAUTH_PASSWORD`、`XSSCAN_JWT`；优先级为显式 CLI > 环境变量（含显式空值）> YAML。新增 `--password-file`、`--jwt-file`、`--password-stdin`；只删除末尾换行，保留空格。
+- 同一凭据的多个显式来源互斥；密码 stdin 不得同时作为 URL 列表，输入上限 1 MiB。Unix 含凭据 YAML 对组/其他用户可读时警告；日志不回显凭据。
+
 ### 行为变化
+
+- P0-5：已有敏感 argv 参数继续可用，非 silent 模式新增一次进程列表/历史风险提示；`--silent` 恢复无提示行为。环境变量现在覆盖 YAML；显式旧 CLI 参数可恢复指定值，未设置环境变量时 YAML 行为保持不变。
 
 - 代理凭据仅提供给代理；自定义目标头中的 `Proxy-Authorization` 也被忽略。这是代理认证泄露修复，不提供向目标泄露代理密码的恢复开关；原有代理用户名/密码参数继续使用。
 - P0-2：认证态自动发现的 POST 表单默认跳过；使用 `--allow-form-submit` 恢复提交。密码表单和危险动作路径始终跳过并报告原因；不提供绕过该保护的开关。未认证的普通表单保留自动提交行为。

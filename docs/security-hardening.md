@@ -7,7 +7,7 @@
 | P0-1 代理凭据隔离 | 原测试 HTTP 407 / HTTPS CONNECT 认证失败已复现；修复后 HTTP/HTTPS、五格式报告、日志及身份隔离目标 race 测试通过；构建、vet、short/race 及指定五包真实 Chrome 串行 race 通过；全仓身份门禁/跨平台 CI 待执行 |
 | P0-2 表单与爬取安全 | 已复现并实现；目标 HTTP/Chrome race 回归通过，构建/vet/short-race 通过；完整身份门禁及跨平台 CI 待验证 |
 | P0-3 Chrome 代理 | 已复现绕过代理并修复；普通/认证/直连/拒绝的真实 Chrome race 回归、build/vet/short-race 通过；本项跨平台 CI 待执行 |
-| P0-4 短凭据脱敏 | 待失败测试复现 |
+| P0-4 短凭据脱敏 | 已复现并修复；报告包 race、build/vet/全仓 short-race 通过，指定 Chrome 包与跨平台 CI 待完成 |
 | P0-5 凭据输入入口 | 未完成 |
 | P1-1 Docker | 未完成，需核实基础镜像维护和摘要 |
 | P1-2 模块路径 | 未完成 |
@@ -53,3 +53,13 @@
 - 风险：代理路由不等于完整网络防火墙；Chrome 自行解析 DNS，后台进程、Service Worker 等不可观测路径仍遵循 v1.1.4 的既有限制。
 
 - P0-3 指定五包真实 Chrome 串行 race：268 pass / 0 skip；独立 Go 审查无 CRITICAL/HIGH，vet 和 diff-check 通过，staticcheck 未安装未运行。
+
+## P0-4 验证及边界
+
+- 文件：`pkg/report/redact.go`、`pkg/report/redact_semantic_test.go`、required-tests 新清单、CHANGELOG。
+- 失败记录：`p0-4-before.log` 证实短值破坏 payload/参数/描述/上下文及 HTTP 版本；`p0-4-headers-before.log` 证实自由文本中 Cookie 后续短值、Digest 认证需完整头行脱敏。均在忽略的本地验证目录。
+- 修复：敏感头/URL/键值按位置处理；HTTP 正文与响应片段仍隐藏；全局替换至少 8 字节并有 token 边界，语义字段不做任意值全局替换。五格式与 raw opt-in、Schema 1.1 保持不变；既有 canary/raw 合约未删减。
+- 已运行：报告包全部 race 通过；build/vet 通过；全仓 short/race 1745 pass / 53 short skip。独立 Go 审查在完整头值修复后无 CRITICAL/HIGH。
+- 限制：短凭据在无标签的普通文本回显、嵌入其他 token 的副本、语义字段中的任意秘密副本不再全局清除；未知编码/应用自定义载体仍可能无法识别。默认报告继续隐藏原始 HTTP 正文，不能将启发式脱敏视为完整 DLP。原始证据显式导出仍含凭据且受文件权限保护。
+
+- P0-4 指定五包真实 Chrome 串行 race：268 pass / 0 skip。跨平台完整门禁待本项提交后的 CI；此时 P0-3 CI 41971526767 仍在运行。

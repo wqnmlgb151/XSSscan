@@ -8,6 +8,11 @@
 - 移除 `model.Target.ProxyAuth` 及其重放/去重哈希输入；目标 Cookie、Authorization、请求体等身份信息继续参与隔离。保留代理 CLI 参数及 `ProxyAuthHeader` SDK 辅助函数。
 - 代理状态日志只显示 scheme/host；URL 解析错误不回显含凭据的原始地址。新增 loopback HTTP/CONNECT、五格式报告及日志安全回归，接入独立 required-tests 清单。
 
+### P0-4 报告语义保护
+
+- 复现并修复短 Cookie 值全局替换破坏 Payload、Parameter、Context 和 HTTP 语法的问题。所有敏感位置继续脱敏（完整认证/Cookie 头、URL userinfo、敏感参数、正文隐藏）。
+- 全局凭据副本替换仅用于至少 8 字节的完整 token 边界；Payload、Parameter 等语义字段只按敏感位置处理。五格式、Schema 1.1、显式 raw opt-in 不变，既有 canary/raw 合约保留。
+
 ### 行为变化
 
 - 代理凭据仅提供给代理；自定义目标头中的 `Proxy-Authorization` 也被忽略。这是代理认证泄露修复，不提供向目标泄露代理密码的恢复开关；原有代理用户名/密码参数继续使用。

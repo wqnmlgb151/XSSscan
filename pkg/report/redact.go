@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	xhtml "golang.org/x/net/html"
 )
@@ -22,6 +23,7 @@ const redacted = "[REDACTED]"
 var credentialPair = regexp.MustCompile(`(?i)["']?([a-z0-9_.-]*(?:token|secret|password|passwd|apikey|api_key|api-key|credential|csrf|session)[a-z0-9_.-]*|authorization|cookie|auth|sid|jwt|code|key)["']?\s*[:=]\s*(?:"([^"\r\n]*)"|'([^'\r\n]*)'|([^\s&;,"'<>{}]+))`)
 var authValue = regexp.MustCompile(`(?i)\b(Bearer|Basic)\s+([a-z0-9._~+/=-]+)`)
 var reportURL = regexp.MustCompile(`(?i)https?://[^\s<>"']+`)
+var credentialHeader = regexp.MustCompile(`(?im)\b(cookie|set-cookie|authorization|proxy-authorization)\s*:[^\r\n]*`)
 
 func sensitiveName(name string) bool {
 	name = strings.Map(func(r rune) rune {
@@ -50,11 +52,11 @@ func publicHeader(name string) bool {
 
 type redactor struct {
 	secrets map[string]bool
-	replace *strings.Replacer
+	replace *regexp.Regexp
 }
 
 func (r *redactor) remember(value string) {
-	if value != "" && value != redacted {
+	if len(value) >= 8 && value != redacted {
 		r.secrets[value] = true
 		if decoded, err := url.QueryUnescape(value); err == nil && decoded != "" {
 			r.secrets[decoded] = true
@@ -261,8 +263,10 @@ func (r *redactor) compile() {
 	for secret := range r.secrets {
 		encoded, _ := json.Marshal(secret)
 		for _, form := range []string{secret, string(encoded[1 : len(encoded)-1]), url.QueryEscape(secret), url.PathEscape(secret), html.EscapeString(secret), base64.StdEncoding.EncodeToString([]byte(secret))} {
-			forms[form] = true
-			forms[url.QueryEscape(form)] = true
+			if len(form) >= 8 {
+				forms[form] = true
+				forms[url.QueryEscape(form)] = true
+			}
 		}
 	}
 	keys := make([]string, 0, len(forms))
@@ -275,14 +279,17 @@ func (r *redactor) compile() {
 		}
 		return len(keys[i]) > len(keys[j])
 	})
-	pairs := make([]string, 0, len(keys)*2)
-	for _, key := range keys {
-		pairs = append(pairs, key, redacted)
+	if len(keys) == 0 {
+		return
 	}
-	r.replace = strings.NewReplacer(pairs...)
+	for i := range keys {
+		keys[i] = regexp.QuoteMeta(keys[i])
+	}
+	r.replace = regexp.MustCompile(strings.Join(keys, "|"))
 }
 
-func (r *redactor) text(value string) string {
+func positionalText(value string) string {
+	value = credentialHeader.ReplaceAllString(value, "${1}: "+redacted)
 	value = reportURL.ReplaceAllStringFunc(value, func(raw string) string {
 		u, err := url.Parse(raw)
 		if err != nil {
@@ -303,7 +310,66 @@ func (r *redactor) text(value string) string {
 		u.RawQuery = query.Encode()
 		return u.String()
 	})
-	return r.replace.Replace(value)
+	// Positional redaction also covers short values; global echo removal does not.
+	value = credentialPair.ReplaceAllStringFunc(value, func(pair string) string {
+		spans := credentialPair.FindStringSubmatchIndex(pair)
+		for i := 4; i < len(spans); i += 2 {
+			if spans[i] >= 0 {
+				return pair[:spans[i]] + redacted + pair[spans[i+1]:]
+			}
+		}
+		return pair
+	})
+	value = authValue.ReplaceAllString(value, "${1} "+redacted)
+	return value
+}
+
+func (r *redactor) text(value string) string {
+	value = positionalText(value)
+	if r.replace == nil {
+		return value
+	}
+	var out strings.Builder
+	last := 0
+	for _, span := range r.replace.FindAllStringIndex(value, -1) {
+		if span[0] > 0 {
+			c, _ := utf8.DecodeLastRuneInString(value[:span[0]])
+			if credentialWord(c) {
+				continue
+			}
+		}
+		if span[1] < len(value) {
+			c, _ := utf8.DecodeRuneInString(value[span[1]:])
+			if credentialWord(c) {
+				continue
+			}
+		}
+		out.WriteString(value[last:span[0]])
+		out.WriteString(redacted)
+		last = span[1]
+	}
+	out.WriteString(value[last:])
+	return out.String()
+}
+
+// Include token punctuation to avoid replacing a credential inside another token.
+func credentialWord(c rune) bool {
+	return unicode.IsLetter(c) || unicode.IsDigit(c) || c == '_' || c == '-' || c == '.'
+}
+
+// Semantic fields still redact explicit credential positions, never arbitrary echoes.
+func positionalValue(value any) any {
+	switch v := value.(type) {
+	case string:
+		return positionalText(v)
+	case []any:
+		for i, item := range v {
+			v[i] = positionalValue(item)
+		}
+		return v
+	default:
+		return value
+	}
 }
 
 func safeHTTP(value string) string {
@@ -347,6 +413,9 @@ func (r *redactor) scrub(value any) any {
 			// These are schema identifiers/enums, never credential-bearing content.
 			// A cookie value equal to "completed" or "1" must not change status/schema.
 			switch strings.ToLower(key) {
+			case "payload", "payloads", "verificationpayload", "parameter", "contexts", "reflectionpath":
+				v[key] = positionalValue(item)
+				continue
 			case "schemaversion", "type", "status", "severity", "paramtype", "scheme", "stage", "kind", "analysismethod", "detectionmethod", "analysis_method", "detection_method", "source", "sink":
 				continue
 			}

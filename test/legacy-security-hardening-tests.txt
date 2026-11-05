@@ -18,3 +18,7 @@ github.com/xsscan/xsscan/cmd	TestBrowserVerificationUsesConfiguredProxy/authenti
 github.com/xsscan/xsscan/cmd	TestBrowserVerificationUsesConfiguredProxy/direct
 github.com/xsscan/xsscan/cmd	TestBrowserVerificationUsesConfiguredProxy/rejected
 github.com/xsscan/xsscan/pkg/browser	TestBrowserProxyConfigurationKeepsCredentialsOutOfArguments
+github.com/xsscan/xsscan/pkg/report	TestShortCookiesPreserveReportSemantics
+github.com/xsscan/xsscan/pkg/report	TestCredentialEchoReplacementUsesBoundaries
+github.com/xsscan/xsscan/pkg/report	TestShortCredentialsStillRedactAtPositions
+github.com/xsscan/xsscan/pkg/report	TestCredentialHeaderCopiesRedactWholeValues

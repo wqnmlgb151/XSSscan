@@ -63,6 +63,7 @@ type FileConfig struct {
 	ChromeNoSandbox        bool     `yaml:"chrome-no-sandbox"`
 	ChromeIgnoreCertErrors bool     `yaml:"chrome-ignore-cert-errors"`
 	ChromePath             string   `yaml:"chrome-path"`
+	BrowserDirect          bool     `yaml:"browser-direct"`
 	JWT                    string   `yaml:"jwt"`
 	Silent                 bool     `yaml:"silent"`
 	NoColor                bool     `yaml:"no-color"`
@@ -144,6 +145,7 @@ func (fc *FileConfig) ApplyTo(cfg *ScanConfig, flags map[string]bool) {
 }
 
 var configFlags = map[string]string{
+	"BrowserDirect":          "browser-direct",
 	"ExcludeURLs":            "exclude-url",
 	"IncludeURLs":            "include-url",
 	"NoForms":                "no-forms",

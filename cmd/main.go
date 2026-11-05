@@ -102,6 +102,7 @@ type ScanConfig struct {
 	ChromeNoSandbox        bool
 	ChromeIgnoreCertErrors bool
 	ChromePath             string
+	BrowserDirect          bool
 	ConfigFile             string
 	JWT                    string
 	Silent                 bool
@@ -152,6 +153,8 @@ var rootCmd = &cobra.Command{
 存储展示页可用 --trigger-url 指定；盲检测需要 --callback。
 自动发现跳过密码表单和危险动作路径；认证态自动 POST 默认不提交，--allow-form-submit 可显式启用。
 --no-forms 关闭表单发现；--include-url / --exclude-url 可重复设置扫描与发现的 URL 范围。
+设置 --proxy 后 Chrome 同样走代理；--browser-direct 显式恢复浏览器直连并发出警告。
+--proxy-insecure 仅影响 Go HTTP；Chrome 证书策略仍由 --chrome-ignore-cert-errors 控制。
 
 支持 Query、POST Body (JSON/Form)、Header、Cookie 参数注入。
 支持管道输入：echo http://target | xsscan
@@ -188,6 +191,7 @@ func main() {
 }
 
 func init() {
+	rootCmd.Flags().BoolVar(&cfg.BrowserDirect, "browser-direct", false, "Use direct browser connections instead of --proxy (warning when combined)")
 	rootCmd.Flags().StringArrayVar(&cfg.ExcludeURLs, "exclude-url", nil, "Exclude discovery URLs matching a regex (repeatable)")
 	rootCmd.Flags().StringArrayVar(&cfg.IncludeURLs, "include-url", nil, "Only include discovery URLs matching these regexes (repeatable)")
 	rootCmd.Flags().BoolVar(&cfg.NoForms, "no-forms", false, "Disable automatic form discovery")
@@ -319,6 +323,17 @@ func runScan(cmd *cobra.Command, args []string) error {
 		return scopeErr
 	}
 	ctx = urlScope.Context(ctx)
+	if cfg.Headless || cfg.VerifyExecution || cfg.RenderSPA {
+		browserProxy, proxyErr := browser.ParseProxy(cfg.Proxy, cfg.ProxyUsername, cfg.ProxyPassword, cfg.BrowserDirect)
+		if proxyErr != nil {
+			return proxyErr
+		}
+		ctx = browser.WithProxy(ctx, browserProxy)
+	}
+	if cfg.Proxy != "" && cfg.BrowserDirect {
+		fmt.Fprintln(os.Stderr, "[WARNING] --browser-direct: Chrome bypasses the configured proxy")
+	}
+
 	stopProgress := func() {}
 	if !cfg.Silent && !cfg.Verbose {
 		terminal := isatty.IsTerminal(os.Stderr.Fd()) || isatty.IsCygwinTerminal(os.Stderr.Fd())

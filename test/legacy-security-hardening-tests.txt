@@ -12,3 +12,9 @@ github.com/xsscan/xsscan/cmd	TestDiscoveryUnsafeRedirectIsNotFollowed
 github.com/xsscan/xsscan/cmd	TestBrowserDiscoveryUnsafeRedirectIsNotFollowed
 github.com/xsscan/xsscan/pkg/crawler	TestFormDefaultsKeepExplicitEmptyAndDisabledSelection
 github.com/xsscan/xsscan/cmd	TestStoredNoFormsDoesNotFollowFormActions
+github.com/xsscan/xsscan/cmd	TestBrowserVerificationUsesConfiguredProxy
+github.com/xsscan/xsscan/cmd	TestBrowserVerificationUsesConfiguredProxy/plain
+github.com/xsscan/xsscan/cmd	TestBrowserVerificationUsesConfiguredProxy/authenticated
+github.com/xsscan/xsscan/cmd	TestBrowserVerificationUsesConfiguredProxy/direct
+github.com/xsscan/xsscan/cmd	TestBrowserVerificationUsesConfiguredProxy/rejected
+github.com/xsscan/xsscan/pkg/browser	TestBrowserProxyConfigurationKeepsCredentialsOutOfArguments

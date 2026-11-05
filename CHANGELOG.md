@@ -13,6 +13,8 @@
 - 代理凭据仅提供给代理；自定义目标头中的 `Proxy-Authorization` 也被忽略。这是代理认证泄露修复，不提供向目标泄露代理密码的恢复开关；原有代理用户名/密码参数继续使用。
 - P0-2：认证态自动发现的 POST 表单默认跳过；使用 `--allow-form-submit` 恢复提交。密码表单和危险动作路径始终跳过并报告原因；不提供绕过该保护的开关。未认证的普通表单保留自动提交行为。
 - P0-2：hidden、select、checkbox/radio 等控件保留页面默认值；仅文本类字段填充 `test`。新增 `--no-forms`、可重复的 `--include-url` / `--exclude-url`，同时支持 YAML。URL 范围显式限制扫描请求，跳过原因进入 ScanIssue。
+- P0-3：配置 `--proxy` 时，共享 Chrome allocator 默认同样使用该代理。`--browser-direct` 显式恢复浏览器直连；与代理配置同时使用时 stderr 警告一次。代理密码仅通过 CDP 的匹配 Proxy 认证挑战发送，不出现在 Chrome 参数；`--proxy-insecure` 不改变 Chrome 证书策略。
+- Chrome 不支持带认证的 SOCKS5 时明确报错，支持的 HTTP 代理认证保持可用；纯 Go 扫描不受浏览器限制影响。代理认证拒绝保留不完整诊断，不静默当作安全结果。
 
 ## 未发布 — 性能排查
 

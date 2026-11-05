@@ -11,6 +11,7 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	ext "github.com/chromedp/chromedp"
+	"github.com/xsscan/xsscan/pkg/browser"
 	"github.com/xsscan/xsscan/pkg/requestbudget"
 	"github.com/xsscan/xsscan/pkg/ssrfguard"
 )
@@ -40,11 +41,13 @@ func originLabel(raw string) string {
 // RequestGuard confines intercepted HTTP requests to one origin. Chrome owns
 // DNS and sockets: this is a scope check, not the Go transport's pinned dial.
 type RequestGuard struct {
-	mu      sync.Mutex
-	err     error
-	pending chan *fetch.EventRequestPaused
-	workers sync.WaitGroup
-	stop    context.CancelFunc
+	mu        sync.Mutex
+	err       error
+	pending   chan *fetch.EventRequestPaused
+	auth      chan *fetch.EventAuthRequired
+	authTried map[fetch.RequestID]bool
+	workers   sync.WaitGroup
+	stop      context.CancelFunc
 }
 
 // Close stops request workers and waits for them. Call after the policy action
@@ -87,7 +90,7 @@ func (g *RequestGuard) record(err error) {
 // GuardRequests uses bounded workers. CDP listeners never perform synchronous
 // protocol calls. Saturation cancels the tab instead of leaving requests paused.
 func GuardRequests(origin string, cancel context.CancelFunc, rewrite RequestRewrite) (*RequestGuard, ext.Action) {
-	g := &RequestGuard{pending: make(chan *fetch.EventRequestPaused, 128)}
+	g := &RequestGuard{pending: make(chan *fetch.EventRequestPaused, 128), auth: make(chan *fetch.EventAuthRequired, 128), authTried: make(map[fetch.RequestID]bool)}
 	return g, ext.ActionFunc(func(ctx context.Context) error {
 		if meter := requestbudget.FromContext(ctx); meter != nil && meter.Browser.Denied() > 0 {
 			g.record(requestbudget.ErrBrowser)
@@ -115,6 +118,35 @@ func GuardRequests(origin string, cancel context.CancelFunc, rewrite RequestRewr
 					select {
 					case <-ctx.Done():
 						return
+					case challenge := <-g.auth:
+						proxy, ok := browser.ProxyFromContext(ctx)
+						response := &fetch.AuthChallengeResponse{Response: fetch.AuthChallengeResponseResponseCancelAuth}
+						g.mu.Lock()
+						tried := g.authTried[challenge.RequestID]
+						capacity := len(g.authTried) < 128
+						if !tried && capacity {
+							g.authTried[challenge.RequestID] = true
+						}
+						g.mu.Unlock()
+						if ok && !proxy.Direct() && !tried && capacity && challenge.AuthChallenge != nil && challenge.AuthChallenge.Source == fetch.AuthChallengeSourceProxy && ssrfguard.SameOrigin(proxy.Server(), challenge.AuthChallenge.Origin) {
+							response.Response = fetch.AuthChallengeResponseResponseProvideCredentials
+							response.Username = proxy.Username()
+							response.Password = proxy.Password()
+						}
+						if err := fetch.ContinueWithAuth(challenge.RequestID, response).Do(ctx); err != nil && ctx.Err() == nil {
+							g.fail(fmt.Errorf("browser proxy authentication protocol failed: %w", err), cancel)
+							return
+						}
+						if response.Response != fetch.AuthChallengeResponseResponseProvideCredentials && ctx.Err() == nil {
+							g.record(fmt.Errorf("browser authentication rejected or unavailable"))
+							if err := page.StopLoading().Do(ctx); err != nil {
+								g.mu.Lock()
+								g.err = errors.Join(g.err, fmt.Errorf("stop unauthenticated browser page: %w", err))
+								g.mu.Unlock()
+							}
+							cancel()
+							return
+						}
 					case e := <-g.pending:
 						if ctx.Err() != nil {
 							return
@@ -181,6 +213,14 @@ func GuardRequests(origin string, cancel context.CancelFunc, rewrite RequestRewr
 			}()
 		}
 		ext.ListenTarget(ctx, func(ev interface{}) {
+			if challenge, ok := ev.(*fetch.EventAuthRequired); ok && ctx.Err() == nil {
+				select {
+				case g.auth <- challenge:
+				default:
+					g.fail(fmt.Errorf("browser authentication queue capacity exceeded"), cancel)
+				}
+				return
+			}
 			e, ok := ev.(*fetch.EventRequestPaused)
 			if !ok || ctx.Err() != nil {
 				return
@@ -189,6 +229,10 @@ func GuardRequests(origin string, cancel context.CancelFunc, rewrite RequestRewr
 		})
 		// Only request-stage Fetch events reserve slots. Network events are not
 		// counted again; redirect hops receive distinct Fetch request IDs.
-		return fetch.Enable().WithPatterns([]*fetch.RequestPattern{{URLPattern: "*", RequestStage: fetch.RequestStageRequest}}).Do(ctx)
+		enable := fetch.Enable().WithPatterns([]*fetch.RequestPattern{{URLPattern: "*", RequestStage: fetch.RequestStageRequest}})
+		if proxy, ok := browser.ProxyFromContext(ctx); ok && !proxy.Direct() && (proxy.Username() != "" || proxy.Password() != "") {
+			enable = enable.WithHandleAuthRequests(true)
+		}
+		return enable.Do(ctx)
 	})
 }

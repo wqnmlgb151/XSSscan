@@ -44,6 +44,13 @@ func AllocatorOptions(custom ...ext.ExecAllocatorOption) []ext.ExecAllocatorOpti
 // The CLI settings take precedence over caller options. When ChromePath is set, the
 // binary location is pinned via ExecPath.
 func NewExecAllocator(ctx context.Context, custom ...ext.ExecAllocatorOption) (context.Context, context.CancelFunc) {
+	if proxy, ok := browser.ProxyFromContext(ctx); ok {
+		if proxy.Direct() {
+			custom = append(custom, ext.Flag("no-proxy-server", true))
+		} else if proxy.Server() != "" {
+			custom = append(custom, ext.ProxyServer(proxy.Server()), ext.Flag("proxy-bypass-list", "<-loopback>"))
+		}
+	}
 	custom = append(custom, ext.Flag("no-sandbox", browser.NoSandbox), ext.Flag("ignore-certificate-errors", browser.IgnoreCertErrors))
 	if browser.ChromePath != "" {
 		custom = append(custom, ext.ExecPath(browser.ChromePath))

@@ -3,14 +3,14 @@ package scanner
 import (
 	"context"
 	"fmt"
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"net/http"
 	"testing"
 	"time"
 
-	"github.com/xsscan/xsscan/pkg/httpclient"
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/pkg/httpclient"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 	"io"
 	"strings"
 )
@@ -19,9 +19,7 @@ func TestVerifyFindings_ReplaysOriginalTarget(t *testing.T) {
 	if testing.Short() {
 		t.Skip("browser integration")
 	}
-	previous := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = previous }()
+
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/save" {
 			http.NotFound(w, r)
@@ -56,7 +54,7 @@ func TestVerifyFindings_ReplaysOriginalTarget(t *testing.T) {
 			for i := range findings {
 				p := "<script>alert(1)</script>"
 				engine.csrfToken.Store("fresh")
-				request, err := engine.buildRequest(context.Background(), target)
+				request, err := engine.buildRequest(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -68,7 +66,7 @@ func TestVerifyFindings_ReplaysOriginalTarget(t *testing.T) {
 				// can make the subsequent Chrome POST pass the server's assertion.
 				findings[i] = model.Finding{URL: target.URL, Parameter: "q", ParamType: model.ParamBody, Payload: p, Confidence: 0.9, Evidence: model.Evidence{HTTP: &exchange}}
 			}
-			got := engine.verifyFindingsWithAuth(context.Background(), findings, nil, target)
+			got := engine.verifyFindingsWithAuth(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), findings, nil, target)
 			for i, finding := range got {
 				if !finding.ExecutionVerified || finding.Confidence != 1.0 {
 					t.Fatalf("finding %d not verified: %+v; issues=%+v", i, finding, engine.runIssues)
@@ -82,9 +80,7 @@ func TestVerifyFinding_ReplaysInitialPostRedirect(t *testing.T) {
 	if testing.Short() {
 		t.Skip("browser integration")
 	}
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	var stored string
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/save" {
@@ -105,7 +101,7 @@ func TestVerifyFinding_ReplaysInitialPostRedirect(t *testing.T) {
 	req, _ := http.NewRequest("POST", server.URL+"/save", strings.NewReader("q="+p))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("X-CSRF-Token", "fresh")
-	resp, err := httpclient.WithCapture(httpclient.NewClient(0, nil)).Do(req)
+	resp, err := httpclient.WithCapture(httpclient.NewClient(0, nil, ssrfguard.Policy{AllowPrivate: true})).Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +114,7 @@ func TestVerifyFinding_ReplaysInitialPostRedirect(t *testing.T) {
 	engine := makeTestEngine()
 	engine.config.VerifyTimeout = 20 * time.Second
 	findings := []model.Finding{{URL: server.URL + "/save", Parameter: "q", ParamType: model.ParamBody, Payload: p, Confidence: .9, Evidence: model.Evidence{HTTP: &exchange}}}
-	got := engine.verifyFindingsWithAuth(context.Background(), findings, nil, model.Target{URL: server.URL + "/save", Method: "POST", Body: "q=stale"})
+	got := engine.verifyFindingsWithAuth(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), findings, nil, model.Target{URL: server.URL + "/save", Method: "POST", Body: "q=stale"})
 	if !got[0].ExecutionVerified {
 		t.Fatalf("POST redirect not replayed: %+v", engine.runIssues)
 	}

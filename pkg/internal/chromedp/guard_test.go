@@ -3,7 +3,7 @@ package chromedp
 import (
 	"context"
 	"errors"
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -12,16 +12,14 @@ import (
 
 	"github.com/chromedp/cdproto/browser"
 	ext "github.com/chromedp/chromedp"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 )
 
 func TestBrowserGuardNavigationDiagnostic(t *testing.T) {
 	if testing.Short() {
 		t.Skip("local Chrome integration")
 	}
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	var blockedHits atomic.Int64
 	other := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { blockedHits.Add(1) }))
 	defer other.Close()
@@ -29,7 +27,7 @@ func TestBrowserGuardNavigationDiagnostic(t *testing.T) {
 		http.Redirect(w, r, other.URL+"/destination", http.StatusFound)
 	}))
 	defer seed.Close()
-	alloc, closeAlloc := NewExecAllocator(context.Background(), StandardHeadlessOptions...)
+	alloc, closeAlloc := NewExecAllocator(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), StandardHeadlessOptions...)
 	defer closeAlloc()
 	tab, closeTab, _ := NewTabContext(alloc)
 	defer closeTab()
@@ -53,9 +51,7 @@ func TestBrowserGuardSubframeBlockDoesNotFailMainPage(t *testing.T) {
 	if testing.Short() {
 		t.Skip("local Chrome integration")
 	}
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	var blockedHits atomic.Int64
 	other := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { blockedHits.Add(1) }))
 	defer other.Close()
@@ -64,7 +60,7 @@ func TestBrowserGuardSubframeBlockDoesNotFailMainPage(t *testing.T) {
 		_, _ = w.Write([]byte(`<html><body><iframe src="` + other.URL + `"></iframe><p id="ok">ready</p></body></html>`))
 	}))
 	defer seed.Close()
-	alloc, closeAlloc := NewExecAllocator(context.Background(), StandardHeadlessOptions...)
+	alloc, closeAlloc := NewExecAllocator(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), StandardHeadlessOptions...)
 	defer closeAlloc()
 	tab, closeTab, _ := NewTabContext(alloc)
 	defer closeTab()
@@ -100,7 +96,7 @@ func TestBrowserAllocatorPreservesExplicitHTTPScheme(t *testing.T) {
 	}
 	for _, arg := range arguments {
 		if strings.HasPrefix(arg, "--disable-features=") {
-			for _, feature := range []string{"HttpsUpgrades", "site-per-process", "Translate", "BlinkGenPropertyTrees"} {
+			for _, feature := range []string{"HttpsUpgrades", "Translate", "BlinkGenPropertyTrees"} {
 				if !strings.Contains(arg, feature) {
 					t.Fatalf("missing %s in %s", feature, arg)
 				}

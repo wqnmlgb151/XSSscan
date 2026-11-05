@@ -1,6 +1,6 @@
 package model
 
-import ctx "github.com/xsscan/xsscan/pkg/context"
+import ctx "github.com/wqnmlgb151/XSSscan/pkg/context"
 
 type InjectionPoint struct {
 	Target     Target         `json:"target"`

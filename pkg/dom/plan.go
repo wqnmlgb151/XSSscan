@@ -10,9 +10,9 @@ import (
 	"strings"
 
 	"github.com/chromedp/chromedp"
-	"github.com/xsscan/xsscan/pkg/analyze"
-	"github.com/xsscan/xsscan/pkg/jsanalysis"
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/analyze"
+	"github.com/wqnmlgb151/XSSscan/pkg/jsanalysis"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 type documentPlan struct {
@@ -24,17 +24,16 @@ type documentPlan struct {
 // never be reused across different authenticated requests, even on one URL.
 func (s *Scanner) requestPlanKey(target model.Target) ([sha256.Size]byte, error) {
 	data, err := json.Marshal(struct {
-		Target    model.Target
-		Cookies   []*http.Cookie
-		Auth      *AuthState
-		ProxyAuth string
-	}{target, target.Cookies, s.auth, target.ProxyAuth})
+		Target  model.Target
+		Cookies []*http.Cookie
+		Auth    *AuthState
+	}{target, target.Cookies, s.auth})
 	return sha256.Sum256(data), err
 }
 func (s *Scanner) checkTargetPlan(ctx context.Context, target model.Target) (*documentPlan, error) {
 	plan := &documentPlan{}
 	model.ReportProgress(ctx, "DOM JS data-flow planning", 0, 0)
-	_, err := s.runSingleDOMTest(ctx, target, domXSSTest{Name: "baseline", NavURL: target.URL}, analyze.GenerateMarker(), "", plan)
+	_, err := s.runSingleDOMTest(ctx, target, domXSSTest{Name: "baseline", NavURL: target.URL}, analyze.GenerateMarkerContext(ctx), "", plan)
 	if err != nil {
 		return nil, err
 	}

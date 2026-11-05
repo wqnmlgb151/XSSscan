@@ -2,24 +2,22 @@ package orchestrator
 
 import (
 	"context"
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"net/http"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 )
 
 func TestDOMModuleFailsOnceWhenBaselineNavigationBlocked(t *testing.T) {
 	if testing.Short() {
 		t.Skip("local Chrome integration")
 	}
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	var seedHits, foreignHits atomic.Int64
 	other := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { foreignHits.Add(1) }))
 	defer other.Close()
@@ -32,7 +30,7 @@ func TestDOMModuleFailsOnceWhenBaselineNavigationBlocked(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := runner.Run(context.Background(), model.Target{URL: seed.URL})
+	result, err := runner.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: seed.URL})
 	if err == nil || result.Stats.Status != model.ScanFailed {
 		t.Fatalf("lost incomplete status: %+v %v", result, err)
 	}

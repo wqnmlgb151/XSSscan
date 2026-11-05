@@ -3,20 +3,18 @@ package analyze
 import (
 	"context"
 	"fmt"
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"net/http"
 	"testing"
 
-	ctx "github.com/xsscan/xsscan/pkg/context"
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	ctx "github.com/wqnmlgb151/XSSscan/pkg/context"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 )
 
 // TestAnalyzeReflectsMarkerInHTMLBody verifies the full pipeline detects an
 // injection point when the server reflects the marker in an HTML body.
 func TestAnalyzeReflectsMarkerInHTMLBody(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query().Get("q")
@@ -26,7 +24,7 @@ func TestAnalyzeReflectsMarkerInHTMLBody(t *testing.T) {
 
 	target := model.Target{URL: server.URL + "?q=test", Method: "GET"}
 	analyzer := NewAnalyzer(server.Client())
-	result, err := analyzer.Analyze(context.Background(), target)
+	result, err := analyzer.Analyze(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err != nil {
 		t.Fatalf("Analyze() error: %v", err)
 	}
@@ -43,8 +41,6 @@ func TestAnalyzeReflectsMarkerInHTMLBody(t *testing.T) {
 // TestAnalyzeJSONReflectionDetectsContext verifies that a JSON response with a
 // reflected marker produces a ContextJSONValue context.
 func TestAnalyzeJSONReflectionDetectsContext(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -55,7 +51,7 @@ func TestAnalyzeJSONReflectionDetectsContext(t *testing.T) {
 
 	target := model.Target{URL: server.URL + "?q=test", Method: "GET"}
 	analyzer := NewAnalyzer(server.Client())
-	result, err := analyzer.Analyze(context.Background(), target)
+	result, err := analyzer.Analyze(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err != nil {
 		t.Fatalf("Analyze() error: %v", err)
 	}
@@ -85,8 +81,6 @@ func TestAnalyzeJSONReflectionDetectsContext(t *testing.T) {
 // TestAnalyzeNoMarkerNoInjectionPoints verifies that when the server does not
 // reflect any marker, no injection points are produced.
 func TestAnalyzeNoMarkerNoInjectionPoints(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "<html><body>Hello Static World</body></html>")
@@ -95,7 +89,7 @@ func TestAnalyzeNoMarkerNoInjectionPoints(t *testing.T) {
 
 	target := model.Target{URL: server.URL + "?q=test", Method: "GET"}
 	analyzer := NewAnalyzer(server.Client())
-	result, err := analyzer.Analyze(context.Background(), target)
+	result, err := analyzer.Analyze(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err != nil {
 		t.Fatalf("Analyze() error: %v", err)
 	}
@@ -108,8 +102,6 @@ func TestAnalyzeNoMarkerNoInjectionPoints(t *testing.T) {
 // Authorization header, it is preserved (not replaced with a marker) in the
 // outgoing request.
 func TestAnalyzePreservesAuthorizationHeader(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	var receivedAuth string
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -125,7 +117,7 @@ func TestAnalyzePreservesAuthorizationHeader(t *testing.T) {
 		Headers: map[string]string{"Authorization": "Bearer secret-token-123"},
 	}
 	analyzer := NewAnalyzer(server.Client())
-	_, err := analyzer.Analyze(context.Background(), target)
+	_, err := analyzer.Analyze(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err != nil {
 		t.Fatalf("Analyze() error: %v", err)
 	}
@@ -137,8 +129,6 @@ func TestAnalyzePreservesAuthorizationHeader(t *testing.T) {
 // TestAnalyzeCSPHeaderParsed verifies that a CSP header set by the server is
 // parsed and populated in the analysis result.
 func TestAnalyzeCSPHeaderParsed(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'")
@@ -149,7 +139,7 @@ func TestAnalyzeCSPHeaderParsed(t *testing.T) {
 
 	target := model.Target{URL: server.URL + "?q=test", Method: "GET"}
 	analyzer := NewAnalyzer(server.Client())
-	result, err := analyzer.Analyze(context.Background(), target)
+	result, err := analyzer.Analyze(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err != nil {
 		t.Fatalf("Analyze() error: %v", err)
 	}
@@ -167,8 +157,6 @@ func TestAnalyzeCSPHeaderParsed(t *testing.T) {
 // TestAnalyzeDetectsFramework verifies that HTML response body containing React
 // markers results in framework detection in the analysis result.
 func TestAnalyzeDetectsFramework(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query().Get("q")
@@ -178,7 +166,7 @@ func TestAnalyzeDetectsFramework(t *testing.T) {
 
 	target := model.Target{URL: server.URL + "?q=test", Method: "GET"}
 	analyzer := NewAnalyzer(server.Client())
-	result, err := analyzer.Analyze(context.Background(), target)
+	result, err := analyzer.Analyze(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err != nil {
 		t.Fatalf("Analyze() error: %v", err)
 	}
@@ -203,8 +191,6 @@ func TestAnalyzeDetectsFramework(t *testing.T) {
 // parameters exist but only one reflects in the response, only one injection
 // point is reported.
 func TestAnalyzeMultipleParamsOnlyOneReflects(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Only reflect the "q" parameter; "r" is ignored.
@@ -215,7 +201,7 @@ func TestAnalyzeMultipleParamsOnlyOneReflects(t *testing.T) {
 
 	target := model.Target{URL: server.URL + "?q=test&r=hello", Method: "GET"}
 	analyzer := NewAnalyzer(server.Client())
-	result, err := analyzer.Analyze(context.Background(), target)
+	result, err := analyzer.Analyze(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err != nil {
 		t.Fatalf("Analyze() error: %v", err)
 	}
@@ -230,8 +216,6 @@ func TestAnalyzeMultipleParamsOnlyOneReflects(t *testing.T) {
 // TestAnalyzeEmptyParams verifies that a target with no extractable parameters
 // returns an empty result without error.
 func TestAnalyzeEmptyParams(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "<html><body>ok</body></html>")
@@ -241,7 +225,7 @@ func TestAnalyzeEmptyParams(t *testing.T) {
 	// No query params, no body.
 	target := model.Target{URL: server.URL + "/", Method: "GET"}
 	analyzer := NewAnalyzer(server.Client())
-	result, err := analyzer.Analyze(context.Background(), target)
+	result, err := analyzer.Analyze(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err != nil {
 		t.Fatalf("Analyze() error: %v", err)
 	}

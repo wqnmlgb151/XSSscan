@@ -14,10 +14,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xsscan/xsscan/pkg/httpclient"
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/pkg/payload"
-	"github.com/xsscan/xsscan/pkg/verify"
+	"github.com/wqnmlgb151/XSSscan/pkg/httpclient"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/payload"
+	"github.com/wqnmlgb151/XSSscan/pkg/verify"
 )
 
 const (
@@ -168,14 +168,13 @@ func (l *observationLog) begin(injection model.InjectionPoint, p payload.Payload
 	run, id := l.run, l.next
 	l.mu.Unlock()
 	h := sha256.New()
-	// Cookies and proxy credentials are omitted by Target's JSON tags.
+	// Cookies are omitted by Target's JSON tags.
 	// No credential material is logged; the digest is provenance only.
 	err := json.NewEncoder(h).Encode(struct {
 		Target    model.Target
 		Cookies   []*http.Cookie
-		ProxyAuth string
 		Parameter model.Parameter
-	}{injection.Target, injection.Target.Cookies, injection.Target.ProxyAuth, injection.Parameter})
+	}{injection.Target, injection.Target.Cookies, injection.Parameter})
 	o := attemptObservation{Run: run, ID: id, ParentID: parent, Kind: kind, PathID: hex.EncodeToString(h.Sum(nil)), PayloadDigest: observationDigest(p.Value), Payload: p.Value, Reflection: reflectionUnknown, Offset: -1, Code: verify.AssessmentUnknown}
 	if err != nil {
 		o.IdentityIncomplete = true

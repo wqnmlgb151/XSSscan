@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/xsscan/xsscan/pkg/analyze"
-	"github.com/xsscan/xsscan/pkg/context"
+	"github.com/wqnmlgb151/XSSscan/pkg/analyze"
+	"github.com/wqnmlgb151/XSSscan/pkg/context"
 )
 
 // Phase 1.1: partialMatch correctly handles entity-encoded tags

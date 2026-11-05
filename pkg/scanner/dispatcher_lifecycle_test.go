@@ -3,12 +3,13 @@ package scanner
 import (
 	"context"
 	"fmt"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 	"testing"
 	"time"
 )
 
 func TestDispatcherCancellationWithMoreRelaysThanBuffer(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}))
 	defer cancel()
 	const count = 80
 	paths := make([]scheduledTask, count)
@@ -41,7 +42,7 @@ func TestDispatcherCancellationWithMoreRelaysThanBuffer(t *testing.T) {
 }
 
 func TestDispatcherDrainsProducerAfterPathProof(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}))
 	defer cancel()
 	proven := newAtomicPathSet()
 	s, err := newSchedulerWithProof([]scheduledTask{{path: "a", index: 0}, {path: "a", index: 1}}, 1, proven)

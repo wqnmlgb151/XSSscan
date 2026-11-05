@@ -2,13 +2,14 @@ package execverify
 
 import (
 	"context"
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 func TestVerifyFinding_QueryParam_Alert(t *testing.T) {
@@ -26,7 +27,7 @@ func TestVerifyFinding_QueryParam_Alert(t *testing.T) {
 		t.Skip("skipping browser integration test in short mode")
 	}
 
-	v, err := NewVerifier(context.Background(), 10*time.Second)
+	v, err := NewVerifier(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 10*time.Second)
 	if err != nil {
 		t.Fatalf("NewVerifier: %v", err)
 	}
@@ -39,7 +40,7 @@ func TestVerifyFinding_QueryParam_Alert(t *testing.T) {
 		URL:       server.URL + "?q=test",
 	}
 
-	result, err := v.VerifyFinding(context.Background(), finding, model.Target{URL: server.URL + "?q=test"})
+	result, err := v.VerifyFinding(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), finding, model.Target{URL: server.URL + "?q=test"})
 	if err != nil {
 		t.Fatalf("VerifyFinding: %v", err)
 	}
@@ -66,7 +67,7 @@ func TestVerifyFinding_QueryParam_ScriptInjection(t *testing.T) {
 		t.Skip("skipping browser integration test in short mode")
 	}
 
-	v, err := NewVerifier(context.Background(), 10*time.Second)
+	v, err := NewVerifier(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 10*time.Second)
 	if err != nil {
 		t.Fatalf("NewVerifier: %v", err)
 	}
@@ -79,7 +80,7 @@ func TestVerifyFinding_QueryParam_ScriptInjection(t *testing.T) {
 		URL:       server.URL + "?q=test",
 	}
 
-	result, err := v.VerifyFinding(context.Background(), finding, model.Target{URL: server.URL + "?q=test"})
+	result, err := v.VerifyFinding(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), finding, model.Target{URL: server.URL + "?q=test"})
 	if err != nil {
 		t.Fatalf("VerifyFinding: %v", err)
 	}
@@ -244,7 +245,7 @@ func TestBuildHTMLPOC(t *testing.T) {
 }
 
 func TestNewVerifierDefaultTimeout(t *testing.T) {
-	v, err := NewVerifier(context.Background(), 0)
+	v, err := NewVerifier(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 0)
 	if err != nil {
 		t.Fatalf("NewVerifier with zero timeout: %v", err)
 	}
@@ -258,7 +259,7 @@ func TestNewVerifierWithAuth(t *testing.T) {
 	auth := &AuthState{
 		Cookies: []*http.Cookie{{Name: "session", Value: "abc123"}},
 	}
-	v, err := NewVerifierWithAuth(context.Background(), 5*time.Second, auth)
+	v, err := NewVerifierWithAuth(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 5*time.Second, auth)
 	if err != nil {
 		t.Fatalf("NewVerifierWithAuth: %v", err)
 	}

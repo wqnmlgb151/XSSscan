@@ -4,22 +4,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/pkg/report"
-	"github.com/xsscan/xsscan/pkg/scanner"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/report"
+	"github.com/wqnmlgb151/XSSscan/pkg/scanner"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 	"go.uber.org/zap"
 )
 
 func TestReflectedXSSInHTMLBody(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
+
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query().Get("q")
 		w.Header().Set("Content-Type", "text/html")
@@ -33,7 +32,7 @@ func TestReflectedXSSInHTMLBody(t *testing.T) {
 	}
 	engine := scanner.NewEngine(cfg, zap.NewNop(), nil)
 	target := model.Target{URL: server.URL + "/search?q=test", Method: "GET"}
-	result, err := engine.Run(context.Background(), target)
+	result, err := engine.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err != nil {
 		t.Fatalf("Scan failed: %v", err)
 	}
@@ -56,8 +55,7 @@ func TestReflectedXSSInHTMLBody(t *testing.T) {
 }
 
 func TestReflectedXSSInAttribute(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
+
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		name := r.URL.Query().Get("name")
 		w.Header().Set("Content-Type", "text/html")
@@ -71,7 +69,7 @@ func TestReflectedXSSInAttribute(t *testing.T) {
 	}
 	engine := scanner.NewEngine(cfg, zap.NewNop(), nil)
 	target := model.Target{URL: server.URL + "/page?name=test", Method: "GET"}
-	result, err := engine.Run(context.Background(), target)
+	result, err := engine.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err != nil {
 		t.Fatalf("Scan failed: %v", err)
 	}
@@ -86,8 +84,7 @@ func TestReflectedXSSInAttribute(t *testing.T) {
 }
 
 func TestReflectedXSSInScriptTag(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
+
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callback := r.URL.Query().Get("callback")
 		w.Header().Set("Content-Type", "text/html")
@@ -101,7 +98,7 @@ func TestReflectedXSSInScriptTag(t *testing.T) {
 	}
 	engine := scanner.NewEngine(cfg, zap.NewNop(), nil)
 	target := model.Target{URL: server.URL + "/api?callback=test", Method: "GET"}
-	result, err := engine.Run(context.Background(), target)
+	result, err := engine.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err != nil {
 		t.Fatalf("Scan failed: %v", err)
 	}
@@ -116,8 +113,7 @@ func TestReflectedXSSInScriptTag(t *testing.T) {
 }
 
 func TestNoFalsePositiveOnSanitizedInput(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
+
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		input := r.URL.Query().Get("input")
 		safe := strings.ReplaceAll(input, "<", "&lt;")
@@ -133,7 +129,7 @@ func TestNoFalsePositiveOnSanitizedInput(t *testing.T) {
 	}
 	engine := scanner.NewEngine(cfg, zap.NewNop(), nil)
 	target := model.Target{URL: server.URL + "/page?input=test", Method: "GET"}
-	result, err := engine.Run(context.Background(), target)
+	result, err := engine.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err != nil {
 		t.Fatalf("Scan failed: %v", err)
 	}
@@ -143,8 +139,7 @@ func TestNoFalsePositiveOnSanitizedInput(t *testing.T) {
 }
 
 func TestPOSTBodyJSONParameter(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
+
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var data map[string]string
 		body := make([]byte, 4096)
@@ -167,7 +162,7 @@ func TestPOSTBodyJSONParameter(t *testing.T) {
 		Headers: map[string]string{"Content-Type": "application/json"},
 		Body:    `{"name":"test","email":"test@example.com"}`,
 	}
-	result, err := engine.Run(context.Background(), target)
+	result, err := engine.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err != nil {
 		t.Fatalf("Scan failed: %v", err)
 	}
@@ -178,8 +173,7 @@ func TestPOSTBodyJSONParameter(t *testing.T) {
 }
 
 func TestPOSTBodyFormParameter(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
+
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r.ParseForm()
 		search := r.FormValue("search")
@@ -199,7 +193,7 @@ func TestPOSTBodyFormParameter(t *testing.T) {
 		Headers: map[string]string{"Content-Type": "application/x-www-form-urlencoded"},
 		Body:    `search=test&page=1`,
 	}
-	result, err := engine.Run(context.Background(), target)
+	result, err := engine.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err != nil {
 		t.Fatalf("Scan failed: %v", err)
 	}
@@ -207,8 +201,7 @@ func TestPOSTBodyFormParameter(t *testing.T) {
 }
 
 func TestConcurrentScanning(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
+
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query().Get("q")
 		w.Header().Set("Content-Type", "text/html")
@@ -222,7 +215,7 @@ func TestConcurrentScanning(t *testing.T) {
 	}
 	engine := scanner.NewEngine(cfg, zap.NewNop(), nil)
 	target := model.Target{URL: server.URL + "/search?q=test", Method: "GET"}
-	result, err := engine.Run(context.Background(), target)
+	result, err := engine.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err != nil {
 		t.Fatalf("Scan failed: %v", err)
 	}

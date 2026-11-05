@@ -7,7 +7,7 @@ import (
 	"strings"
 	"unicode"
 
-	ctx "github.com/xsscan/xsscan/pkg/context"
+	ctx "github.com/wqnmlgb151/XSSscan/pkg/context"
 )
 
 // MutationType identifies a WAF bypass strategy at compile time.

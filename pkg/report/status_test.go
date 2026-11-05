@@ -3,7 +3,7 @@ package report
 import (
 	"encoding/json"
 	"encoding/xml"
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 	"strings"
 	"testing"
 )

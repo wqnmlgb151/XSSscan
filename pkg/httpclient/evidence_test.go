@@ -3,8 +3,8 @@ package httpclient
 import (
 	"context"
 	"encoding/base64"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"io"
 	"net/http"
 	"net/url"
@@ -22,9 +22,7 @@ func TestCaptureBinaryAndIncomplete(t *testing.T) {
 }
 
 func TestCapturedActualCookiesCredentialsBodyAndEncodedPath(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		if string(body) != "q=payload&csrf=fresh" || r.Header.Get("Authorization") != "Bearer original" {
@@ -38,7 +36,7 @@ func TestCapturedActualCookiesCredentialsBodyAndEncodedPath(t *testing.T) {
 		w.Write([]byte("<body>original</body>"))
 	}))
 	defer server.Close()
-	client := WithCapture(NewClient(0, nil))
+	client := WithCapture(NewClient(0, nil, ssrfguard.Policy{AllowPrivate: true}))
 	u, _ := url.Parse(server.URL)
 	client.Jar.SetCookies(u, []*http.Cookie{{Name: "session", Value: "jar-secret"}})
 	req, _ := http.NewRequest("POST", server.URL+"/a%2Fb?q=original", strings.NewReader("q=payload&csrf=fresh"))
@@ -62,15 +60,13 @@ func TestCapturedActualCookiesCredentialsBodyAndEncodedPath(t *testing.T) {
 }
 
 func TestCaptureLimitsDoNotTruncateConsumer(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	large := strings.Repeat("x", MaxEvidenceBody+31)
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, large) }))
 	defer server.Close()
-	ctx, capture := RecordContext(context.Background())
+	ctx, capture := RecordContext(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}))
 	req, _ := http.NewRequestWithContext(ctx, "POST", server.URL, strings.NewReader(large))
-	resp, err := WithCapture(NewClient(0, nil)).Do(req)
+	resp, err := WithCapture(NewClient(0, nil, ssrfguard.Policy{AllowPrivate: true})).Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -2,14 +2,16 @@
 package httpclient
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
 	"time"
 
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -22,12 +24,25 @@ const MaxResponseSize = 10 * 1024 * 1024 // 10MB
 // NewClient creates an HTTP client with sensible defaults for scanning.
 // Includes a cookie jar to maintain session state across requests.
 // If proxy is non-nil, all requests are routed through the proxy.
-func NewClient(timeout time.Duration, proxy *ProxyConfig) *http.Client {
+func NewClient(timeout time.Duration, proxy *ProxyConfig, policies ...ssrfguard.Policy) *http.Client {
+	var policy ssrfguard.Policy
+	hasPolicy := len(policies) > 0
+	if hasPolicy {
+		policy = policies[0]
+	}
+	applyPolicy := func(ctx context.Context) context.Context {
+		if hasPolicy {
+			return ssrfguard.WithPolicy(ctx, policy)
+		}
+		return ctx
+	}
 	jar, _ := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 
 	transport := &http.Transport{
 		TLSClientConfig: &tls.Config{},
-		DialContext:     ssrfguard.DialContext,
+		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+			return ssrfguard.DialContext(applyPolicy(ctx), network, address)
+		},
 	}
 
 	var proxyErr error
@@ -45,7 +60,7 @@ func NewClient(timeout time.Duration, proxy *ProxyConfig) *http.Client {
 		if proxyErr != nil {
 			return nil, proxyErr
 		}
-		if err := ssrfguard.IsURLTargetAllowedContext(req.Context(), req.URL.String()); err != nil {
+		if err := ssrfguard.IsURLTargetAllowedContext(applyPolicy(req.Context()), req.URL.String()); err != nil {
 			return nil, err
 		}
 		if selectProxy != nil {
@@ -54,16 +69,21 @@ func NewClient(timeout time.Duration, proxy *ProxyConfig) *http.Client {
 		return nil, nil
 	}
 	return &http.Client{
-		Timeout:       timeout,
-		Jar:           jar,
-		Transport:     transport,
-		CheckRedirect: CheckRedirect,
+		Timeout:   timeout,
+		Jar:       jar,
+		Transport: transport,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return CheckRedirect(req.WithContext(applyPolicy(req.Context())), via)
+		},
 	}
 }
 
 // CheckRedirect confines automatic redirects to the original HTTP origin.
 // Explicit authentication endpoints are independent requests, not redirects.
 func CheckRedirect(req *http.Request, via []*http.Request) error {
+	if err := ssrfguard.CheckNavigation(req.Context(), req.URL.String()); err != nil {
+		return err
+	}
 	if len(via) >= 10 {
 		return http.ErrUseLastResponse
 	}

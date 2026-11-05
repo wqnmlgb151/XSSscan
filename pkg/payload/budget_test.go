@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	xctx "github.com/xsscan/xsscan/pkg/context"
-	"github.com/xsscan/xsscan/pkg/model"
+	xctx "github.com/wqnmlgb151/XSSscan/pkg/context"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 func TestMinimalPresetChoosesCompatibleQuote(t *testing.T) {

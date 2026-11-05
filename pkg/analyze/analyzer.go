@@ -5,18 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math/rand"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
-	ctx "github.com/xsscan/xsscan/pkg/context"
-	"github.com/xsscan/xsscan/pkg/httpclient"
-	"github.com/xsscan/xsscan/pkg/internal/request"
-	"github.com/xsscan/xsscan/pkg/internal/text"
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	ctx "github.com/wqnmlgb151/XSSscan/pkg/context"
+	"github.com/wqnmlgb151/XSSscan/pkg/httpclient"
+	"github.com/wqnmlgb151/XSSscan/pkg/internal/request"
+	"github.com/wqnmlgb151/XSSscan/pkg/internal/text"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 )
 
 type Analyzer struct {
@@ -73,7 +72,7 @@ func (a *Analyzer) Analyze(gtx stdctx.Context, target model.Target) (*AnalysisRe
 	// parameter's reflection is wrongly attributed to another.
 	paramMarkers := make(map[string]string, len(params))
 	for _, p := range params {
-		paramMarkers[paramKey(p)] = GenerateMarker()
+		paramMarkers[paramKey(p)] = GenerateMarkerContext(gtx)
 	}
 
 	preserveAuth := hasAuthCredentials(target)
@@ -344,7 +343,7 @@ func paramKey(p model.Parameter) string {
 
 func (a *Analyzer) sendRequest(gtx stdctx.Context, target model.Target) (*http.Response, error) {
 	// SSRF protection: validate target URL before making the request
-	if err := ssrfguard.IsURLTargetAllowed(target.URL); err != nil {
+	if err := ssrfguard.IsURLTargetAllowedContext(gtx, target.URL); err != nil {
 		return nil, fmt.Errorf("ssrf blocked: %w", err)
 	}
 
@@ -467,21 +466,4 @@ func hasAuthCredentials(target model.Target) bool {
 		}
 	}
 	return false
-}
-
-// MarkerPrefix is the prefix for all reflection/stored detection markers.
-const MarkerPrefix = "xsscan"
-
-// MarkerRandomLen is the number of random chars appended to MarkerPrefix.
-const MarkerRandomLen = 12
-
-// GenerateMarker produces a unique marker for detection (reflection or stored).
-// Format: MarkerPrefix + MarkerRandomLen random alphanumeric chars.
-func GenerateMarker() string {
-	const letters = "abcdefghijklmnopqrstuvwxyz0123456789"
-	b := make([]byte, MarkerRandomLen)
-	for i := range b {
-		b[i] = letters[rand.Intn(len(letters))]
-	}
-	return MarkerPrefix + string(b)
 }

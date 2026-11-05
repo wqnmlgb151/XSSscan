@@ -9,12 +9,13 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/xsscan/xsscan/pkg/blind"
-	"github.com/xsscan/xsscan/pkg/callback"
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/pkg/orchestrator"
-	"github.com/xsscan/xsscan/pkg/scanner"
-	"github.com/xsscan/xsscan/pkg/stored"
+	"github.com/wqnmlgb151/XSSscan/pkg/blind"
+	"github.com/wqnmlgb151/XSSscan/pkg/callback"
+	"github.com/wqnmlgb151/XSSscan/pkg/crawler"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/orchestrator"
+	"github.com/wqnmlgb151/XSSscan/pkg/scanner"
+	"github.com/wqnmlgb151/XSSscan/pkg/stored"
 )
 
 func configureTypes(cmd *cobra.Command) error {
@@ -86,6 +87,11 @@ func selectedType(name string) bool {
 // CLI composes dependencies; Runner owns type scheduling and lifecycle. The
 // legacy reflected discovery helper is retained while modules migrate.
 func runSelectedModules(ctx context.Context, engine *scanner.Engine, client *http.Client, urls []string, base model.Target, srv *callback.Server, findings *[]model.Finding, stats *model.ScanStats) error {
+	scope, scopeErr := crawler.NewURLScope(cfg.ExcludeURLs, cfg.IncludeURLs)
+	if scopeErr != nil {
+		return scopeErr
+	}
+	ctx = scope.Context(ctx)
 	kinds, err := orchestrator.Select(cfg.Types, cfg.ExcludeTypes)
 	if err != nil {
 		return err
@@ -95,7 +101,7 @@ func runSelectedModules(ctx context.Context, engine *scanner.Engine, client *htt
 			return engine.Run(ctx, target)
 		}},
 		orchestrator.DOMModule(client, time.Duration(cfg.Timeout)*time.Second, cfg.VerifyExecution),
-		orchestrator.StoredModule(client, stored.Config{TriggerURLs: cfg.TriggerURLs, PollingInterval: time.Duration(cfg.StoredPollInterval) * time.Second, MaxPolls: cfg.StoredMaxPolls, RequestTimeout: time.Duration(cfg.Timeout) * time.Second, Concurrency: cfg.Workers, VerifyExecution: cfg.VerifyExecution, VerifyTimeout: time.Duration(cfg.VerifyTimeout) * time.Second}, cfg.DiscoverHeaders),
+		orchestrator.StoredModule(client, stored.Config{NoForms: cfg.NoForms, Scope: scope, TriggerURLs: cfg.TriggerURLs, PollingInterval: time.Duration(cfg.StoredPollInterval) * time.Second, MaxPolls: cfg.StoredMaxPolls, RequestTimeout: time.Duration(cfg.Timeout) * time.Second, Concurrency: cfg.Workers, VerifyExecution: cfg.VerifyExecution, VerifyTimeout: time.Duration(cfg.VerifyTimeout) * time.Second}, cfg.DiscoverHeaders),
 		{Type: orchestrator.Blind, Check: func(context.Context, model.Target) error {
 			if cfg.Callback == "" {
 				return fmt.Errorf("callback endpoint not configured")
@@ -134,7 +140,7 @@ func runSelectedModules(ctx context.Context, engine *scanner.Engine, client *htt
 		return err
 	}
 	var problems []error
-	discoverer := orchestrator.Discoverer{Client: client, Config: orchestrator.DiscoveryConfig{Crawl: cfg.Crawl, RenderSPA: cfg.RenderSPA, Depth: cfg.CrawlDepth, MaxPages: cfg.CrawlMaxPages}}
+	discoverer := orchestrator.Discoverer{Client: client, Config: orchestrator.DiscoveryConfig{ExcludeURLs: cfg.ExcludeURLs, IncludeURLs: cfg.IncludeURLs, NoForms: cfg.NoForms, AllowFormSubmit: cfg.AllowFormSubmit, Authenticated: cfg.LoginURL != "" || cfg.JWT != "" || len(cfg.Cookies) > 0 || cfg.OAuthClientID != "", Crawl: cfg.Crawl, RenderSPA: cfg.RenderSPA, Depth: cfg.CrawlDepth, MaxPages: cfg.CrawlMaxPages}}
 	for _, rawURL := range urls {
 		model.ReportProgress(ctx, "page discovery", 0, 0)
 		targets, discoveryIssues := discoverer.Expand(ctx, deriveTarget(base, rawURL))

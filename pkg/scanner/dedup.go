@@ -4,10 +4,10 @@ import (
 	"regexp"
 	"strings"
 
-	ctx "github.com/xsscan/xsscan/pkg/context"
-	"github.com/xsscan/xsscan/pkg/internal/urlutil"
-	"github.com/xsscan/xsscan/pkg/internal/xsspatterns"
-	"github.com/xsscan/xsscan/pkg/model"
+	ctx "github.com/wqnmlgb151/XSSscan/pkg/context"
+	"github.com/wqnmlgb151/XSSscan/pkg/internal/urlutil"
+	"github.com/wqnmlgb151/XSSscan/pkg/internal/xsspatterns"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 // attackVectorClass represents the broad category of an XSS attack technique.

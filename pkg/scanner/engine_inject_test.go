@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 func TestInjectPayloadDoesNotMutateOriginal(t *testing.T) {

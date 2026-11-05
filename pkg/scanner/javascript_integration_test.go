@@ -4,23 +4,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"html"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/pkg/payload"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/payload"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 	"go.uber.org/zap"
 )
 
 func TestFilterIsolationAcrossParameters(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprint(w, "<div>"+html.EscapeString(r.URL.Query().Get("a"))+"</div><div>"+r.URL.Query().Get("b")+"</div>")
@@ -28,7 +26,7 @@ func TestFilterIsolationAcrossParameters(t *testing.T) {
 	defer server.Close()
 	e := NewEngine(Config{Concurrency: 2, RateLimit: 10000, RateBurst: 10000, RequestTimeout: 5 * time.Second, MaxPayloads: 10}, zap.NewNop(), newTestClient(server.URL))
 	e.generator.SetCustomPayloads([]payload.Payload{{Value: "SAFE", Type: payload.PayloadTypeCustom}})
-	got, err := e.Run(context.Background(), model.Target{URL: server.URL + "?a=x&b=x"})
+	got, err := e.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: server.URL + "?a=x&b=x"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,16 +45,14 @@ func TestFilterIsolationAcrossParameters(t *testing.T) {
 }
 
 func TestUnknownJSAnalysisIsIncomplete(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprint(w, `<script>import x from 'm';let a='`+r.URL.Query().Get("q")+`';</script>`)
 	}))
 	defer server.Close()
 	e := NewEngine(Config{Concurrency: 1, RateLimit: 1000, RateBurst: 1000}, zap.NewNop(), newTestClient(server.URL))
-	got, err := e.Run(context.Background(), model.Target{URL: server.URL + "?q=x"})
+	got, err := e.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: server.URL + "?q=x"})
 	if err == nil || got.Stats.Status == model.ScanCompleted || len(got.Stats.Issues) == 0 || len(got.Findings) != 0 {
 		t.Fatalf("unknown JS reported clean/valid: %+v %v", got, err)
 	}
@@ -66,9 +62,7 @@ func TestJSASTBrowserCorpus(t *testing.T) {
 	if testing.Short() {
 		t.Skip("real Chrome corpus")
 	}
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query().Get("q")
 		w.Header().Set("Content-Type", "text/html")
@@ -117,7 +111,7 @@ func TestJSASTBrowserCorpus(t *testing.T) {
 	}{{"regex", true}, {"regex-class", true}, {"template", true}, {"nested", true}, {"block", true}, {"line", true}, {"handler", true}, {"escaped", false}, {"invalid", false}, {"module", true}, {"module-await", true}, {"module-escaped", false}, {"module-invalid-strict", false}} {
 		t.Run(tc.path, func(t *testing.T) {
 			e := NewEngine(Config{Concurrency: 2, RateLimit: 10000, RateBurst: 10000, RequestTimeout: 5 * time.Second, MaxPayloads: 8, VerifyExecution: true, VerifyTimeout: 20 * time.Second}, zap.NewNop(), newTestClient(server.URL))
-			got, err := e.Run(context.Background(), model.Target{URL: server.URL + "/" + tc.path + "?q=x"})
+			got, err := e.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: server.URL + "/" + tc.path + "?q=x"})
 			if !strings.Contains(tc.path, "invalid") && err != nil {
 				t.Fatal(err)
 			}

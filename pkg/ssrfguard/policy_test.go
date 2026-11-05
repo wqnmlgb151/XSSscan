@@ -34,9 +34,7 @@ func TestSameOrigin(t *testing.T) {
 }
 
 func TestDialResolvedPinsValidatedAddress(t *testing.T) {
-	old := AllowPrivate
-	AllowPrivate = false
-	defer func() { AllowPrivate = old }()
+
 	calls := 0
 	resolver := resolverFunc(func(context.Context, string) ([]net.IPAddr, error) {
 		calls++
@@ -47,7 +45,7 @@ func TestDialResolvedPinsValidatedAddress(t *testing.T) {
 	})
 	left, right := net.Pipe()
 	defer right.Close()
-	conn, err := dialResolved(context.Background(), "tcp", "changing.test:443", resolver, func(_ context.Context, network, address string) (net.Conn, error) {
+	conn, err := dialResolved(WithPolicy(context.Background(), Policy{AllowPrivate: false}), "tcp", "changing.test:443", resolver, func(_ context.Context, network, address string) (net.Conn, error) {
 		if address != "93.184.216.34:443" || network != "tcp" {
 			t.Fatalf("unexpected dial %s %s", network, address)
 		}
@@ -63,14 +61,12 @@ func TestDialResolvedPinsValidatedAddress(t *testing.T) {
 }
 
 func TestDialResolvedRejectsMixedAndULA(t *testing.T) {
-	old := AllowPrivate
-	AllowPrivate = false
-	defer func() { AllowPrivate = old }()
+
 	for _, restricted := range []string{"127.0.0.1", "fc00::1", "fd00::1", "::ffff:127.0.0.1"} {
 		resolver := resolverFunc(func(context.Context, string) ([]net.IPAddr, error) {
 			return []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}, {IP: net.ParseIP(restricted)}}, nil
 		})
-		_, err := dialResolved(context.Background(), "tcp", "mixed.test:80", resolver, func(context.Context, string, string) (net.Conn, error) {
+		_, err := dialResolved(WithPolicy(context.Background(), Policy{AllowPrivate: false}), "tcp", "mixed.test:80", resolver, func(context.Context, string, string) (net.Conn, error) {
 			t.Fatal("dialed rejected answer")
 			return nil, nil
 		})
@@ -81,7 +77,7 @@ func TestDialResolvedRejectsMixedAndULA(t *testing.T) {
 }
 
 func TestDialResolvedCancellation(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(WithPolicy(context.Background(), Policy{AllowPrivate: false}))
 	cancel()
 	resolver := resolverFunc(func(ctx context.Context, _ string) ([]net.IPAddr, error) { return nil, ctx.Err() })
 	_, err := dialResolved(ctx, "tcp", "cancel.test:80", resolver, func(context.Context, string, string) (net.Conn, error) {

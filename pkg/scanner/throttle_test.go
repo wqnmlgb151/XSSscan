@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"context"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 	"testing"
 	"time"
 
@@ -33,7 +34,7 @@ func TestNewThrottleAdaptive(t *testing.T) {
 
 func TestThrottleWait(t *testing.T) {
 	th := NewThrottle(100, 200, false)
-	ctx := context.Background()
+	ctx := ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true})
 	err := th.Wait(ctx, "example.com")
 	if err != nil {
 		t.Errorf("Wait returned error: %v", err)
@@ -147,7 +148,7 @@ func TestCurrentLimit(t *testing.T) {
 
 func TestThrottleMultipleHosts(t *testing.T) {
 	th := NewThrottle(100, 200, false)
-	ctx := context.Background()
+	ctx := ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true})
 	for _, host := range []string{"a.com", "b.com", "c.com"} {
 		if err := th.Wait(ctx, host); err != nil {
 			t.Errorf("Wait for %s returned error: %v", host, err)
@@ -160,7 +161,7 @@ func TestThrottleMultipleHosts(t *testing.T) {
 
 func TestThrottleContextCancel(t *testing.T) {
 	th := NewThrottle(1, 1, false) // Very slow rate
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}))
 	cancel() // Cancel immediately
 	err := th.Wait(ctx, "example.com")
 	if err == nil {
@@ -198,7 +199,7 @@ func TestAdaptiveRateE2E(t *testing.T) {
 
 func TestThrottleWaitWithJitter(t *testing.T) {
 	th := NewThrottle(1000, 2000, false) // High rate so jitter is the main delay
-	ctx := context.Background()
+	ctx := ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true})
 	start := time.Now()
 	err := th.Wait(ctx, "example.com")
 	elapsed := time.Since(start)

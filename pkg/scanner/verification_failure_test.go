@@ -3,16 +3,16 @@ package scanner
 import (
 	"context"
 	"errors"
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"net/http"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/xsscan/xsscan/pkg/execverify"
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/pkg/execverify"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 )
 
 func TestVerificationErrorRetainsStructuralEvidence(t *testing.T) {
@@ -42,9 +42,7 @@ func TestVerificationNavigationFailureReportsCandidateError(t *testing.T) {
 	if testing.Short() {
 		t.Skip("local Chrome integration")
 	}
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	var foreignHits atomic.Int64
 	other := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { foreignHits.Add(1) }))
 	defer other.Close()
@@ -57,7 +55,7 @@ func TestVerificationNavigationFailureReportsCandidateError(t *testing.T) {
 		for i := range findings {
 			findings[i] = model.Finding{URL: seed.URL + "?q=original", ParamType: model.ParamQuery, Parameter: "q", Payload: "<script>alert(1)</script>", Confidence: .9}
 		}
-		got := engine.verifyFindingsWithAuth(context.Background(), findings, nil, model.Target{URL: seed.URL + "?q=original"})
+		got := engine.verifyFindingsWithAuth(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), findings, nil, model.Target{URL: seed.URL + "?q=original"})
 		for _, finding := range got {
 			if finding.ExecutionVerified || finding.Confidence != .9 || !strings.Contains(finding.Evidence.VerificationError, "same-origin policy") || finding.Evidence.VerificationPayload == "" {
 				t.Fatalf("missing failure proof: %+v", finding)

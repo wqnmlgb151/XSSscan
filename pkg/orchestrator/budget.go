@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/xsscan/xsscan/pkg/requestbudget"
+	"github.com/wqnmlgb151/XSSscan/pkg/requestbudget"
 )
 
 var ErrRequestBudget = requestbudget.ErrHTTP

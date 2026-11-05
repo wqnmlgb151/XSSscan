@@ -23,22 +23,22 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"github.com/xsscan/xsscan/pkg/analyze"
-	"github.com/xsscan/xsscan/pkg/auth"
-	"github.com/xsscan/xsscan/pkg/auth/oauth"
-	"github.com/xsscan/xsscan/pkg/browser"
-	"github.com/xsscan/xsscan/pkg/callback"
-	"github.com/xsscan/xsscan/pkg/crawler"
-	"github.com/xsscan/xsscan/pkg/dom"
-	"github.com/xsscan/xsscan/pkg/httpclient"
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/pkg/orchestrator"
-	"github.com/xsscan/xsscan/pkg/payload"
-	"github.com/xsscan/xsscan/pkg/report"
-	"github.com/xsscan/xsscan/pkg/requestbudget"
-	"github.com/xsscan/xsscan/pkg/scanner"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
-	"github.com/xsscan/xsscan/pkg/stored"
+	"github.com/wqnmlgb151/XSSscan/pkg/analyze"
+	"github.com/wqnmlgb151/XSSscan/pkg/auth"
+	"github.com/wqnmlgb151/XSSscan/pkg/auth/oauth"
+	"github.com/wqnmlgb151/XSSscan/pkg/browser"
+	"github.com/wqnmlgb151/XSSscan/pkg/callback"
+	"github.com/wqnmlgb151/XSSscan/pkg/crawler"
+	"github.com/wqnmlgb151/XSSscan/pkg/dom"
+	"github.com/wqnmlgb151/XSSscan/pkg/httpclient"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/orchestrator"
+	"github.com/wqnmlgb151/XSSscan/pkg/payload"
+	"github.com/wqnmlgb151/XSSscan/pkg/report"
+	"github.com/wqnmlgb151/XSSscan/pkg/requestbudget"
+	"github.com/wqnmlgb151/XSSscan/pkg/scanner"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/pkg/stored"
 	"go.uber.org/zap"
 )
 
@@ -49,68 +49,81 @@ const (
 
 // ScanConfig holds all CLI flags
 type ScanConfig struct {
-	legacyTypeFlags        map[string]bool
-	typesExplicit          bool
-	OAuthAllowedOrigins    []string
-	LoginSuccessContains   string
-	LoginSuccessURL        string
-	Types                  string
-	ExcludeTypes           string
-	ModuleTimeout          int
-	RequestBudget          int
-	BrowserRequestBudget   int
-	URL                    string
-	Method                 string
-	Headers                []string
-	Body                   string
-	Cookies                []string
-	Output                 string
-	Format                 string
-	IncludeRawEvidence     bool
-	Workers                int
-	RateLimit              int
-	Timeout                int
-	MaxPayload             int
-	Callback               string
-	Verbose                bool
-	LoginURL               string
-	Username               string
-	Password               string
-	TestHPP                bool
-	WAFBypass              bool
-	ConfidenceMin          float64
-	AllowPrivate           bool
-	Proxy                  string
-	ProxyUsername          string
-	ProxyPassword          string
-	ProxyInsecure          bool
-	Crawl                  bool
-	CrawlDepth             int
-	CrawlMaxPages          int
-	TargetsFile            string
-	RandomUA               bool
-	AdaptiveRate           bool
-	Strategy               string
-	PayloadPreset          string
-	PayloadWordlist        string
-	Headless               bool
-	RenderSPA              bool
-	ChromeNoSandbox        bool
-	ChromeIgnoreCertErrors bool
-	ChromePath             string
-	ConfigFile             string
-	JWT                    string
-	Silent                 bool
-	NoColor                bool
-	EnableProbe            bool
-	VerifyExecution        bool
-	VerifyTimeout          int
-	DiscoverHeaders        bool
-	EnableStored           bool
-	TriggerURLs            []string
-	StoredPollInterval     int
-	StoredMaxPolls         int
-	CSRFToken              string
+	PasswordFile               string
+	JWTFile                    string
+	PasswordStdin              bool
+	legacyTypeFlags            map[string]bool
+	typesExplicit              bool
+	OAuthAllowedOrigins        []string
+	LoginSuccessContains       string
+	LoginSuccessURL            string
+	Types                      string
+	ExcludeTypes               string
+	ModuleTimeout              int
+	RequestBudget              int
+	BrowserRequestBudget       int
+	URL                        string
+	Method                     string
+	Headers                    []string
+	Body                       string
+	Cookies                    []string
+	Output                     string
+	Format                     string
+	IncludeRawEvidence         bool
+	Workers                    int
+	RateLimit                  int
+	Timeout                    int
+	MaxPayload                 int
+	Callback                   string
+	Verbose                    bool
+	LoginURL                   string
+	Username                   string
+	Password                   string
+	TestHPP                    bool
+	WAFBypass                  bool
+	ConfidenceMin              float64
+	AllowPrivate               bool
+	Proxy                      string
+	ProxyUsername              string
+	ProxyPassword              string
+	ProxyInsecure              bool
+	Crawl                      bool
+	ExcludeURLs                []string
+	IncludeURLs                []string
+	NoForms                    bool
+	AllowFormSubmit            bool
+	CrawlDepth                 int
+	CrawlMaxPages              int
+	TargetsFile                string
+	RandomUA                   bool
+	AdaptiveRate               bool
+	Strategy                   string
+	PayloadPreset              string
+	PayloadWordlist            string
+	Headless                   bool
+	RenderSPA                  bool
+	ChromeNoSandbox            bool
+	ChromeIgnoreCertErrors     bool
+	ChromePath                 string
+	BrowserDirect              bool
+	ChromePinDNS               bool
+	ChromeDisableSiteIsolation bool
+	ChromeLegacyStartup        bool
+	MarkerPrefix               string
+	RandomMarkerPrefix         bool
+	ConfigFile                 string
+	JWT                        string
+	Silent                     bool
+	NoColor                    bool
+	EnableProbe                bool
+	VerifyExecution            bool
+	VerifyTimeout              int
+	DiscoverHeaders            bool
+	EnableStored               bool
+	TriggerURLs                []string
+	StoredPollInterval         int
+	StoredMaxPolls             int
+	CSRFToken                  string
 
 	// OAuth 2.0
 	OAuthIssuer       string
@@ -142,10 +155,21 @@ var rootCmd = &cobra.Command{
 	Short: "xsscan - 上下文感知 XSS 扫描器",
 	Long: `xsscan - 上下文感知 XSS 扫描器
 
+凭据优先级：显式 CLI（含文件/stdin）> 环境变量 > YAML。
+环境变量：XSSCAN_PASSWORD、XSSCAN_PROXY_PASSWORD、XSSCAN_OAUTH_CLIENT_SECRET、XSSCAN_OAUTH_PASSWORD、XSSCAN_JWT。
+敏感 argv 非 silent 模式提示暴露风险；--silent 关闭此提示。
+默认拒绝私网及特殊用途地址；授权环境用 --allow-private 放开。
+Chrome 默认恢复站点隔离并禁用组件更新；--chrome-legacy-startup 恢复旧启动参数。
+--chrome-pin-dns 默认关闭；设为 false 恢复普通 DNS，开启时限单 --url 且浏览器直连。
+
 默认调度 reflected、dom、stored、blind 四类检测，使用 --types 选择类型。
 支持上下文感知 payload、JavaScript AST、CSP 分析和 WAF 绕过。
 浏览器执行验证默认启用；--verify-execution=false 可关闭。
 存储展示页可用 --trigger-url 指定；盲检测需要 --callback。
+自动发现跳过密码表单和危险动作路径；认证态自动 POST 默认不提交，--allow-form-submit 可显式启用。
+--no-forms 关闭表单发现；--include-url / --exclude-url 可重复设置扫描与发现的 URL 范围。
+设置 --proxy 后 Chrome 同样走代理；--browser-direct 显式恢复浏览器直连并发出警告。
+--proxy-insecure 仅影响 Go HTTP；Chrome 证书策略仍由 --chrome-ignore-cert-errors 控制。
 
 支持 Query、POST Body (JSON/Form)、Header、Cookie 参数注入。
 支持管道输入：echo http://target | xsscan
@@ -182,6 +206,16 @@ func main() {
 }
 
 func init() {
+	rootCmd.Flags().StringVar(&cfg.MarkerPrefix, "marker-prefix", analyze.MarkerPrefix, "Marker prefix: lowercase letter then lowercase letters/digits, max 32 (empty uses default)")
+	rootCmd.Flags().BoolVar(&cfg.RandomMarkerPrefix, "random-marker-prefix", false, "Use one cryptographically random prefix per scan (overrides --marker-prefix)")
+	rootCmd.Flags().BoolVar(&cfg.ChromeLegacyStartup, "chrome-legacy-startup", false, "Restore legacy site-isolation and component-update startup flags")
+	rootCmd.Flags().BoolVar(&cfg.ChromeDisableSiteIsolation, "chrome-disable-site-isolation", false, "Restore legacy Chrome site-isolation disable flags (default: site isolation enabled)")
+	rootCmd.Flags().BoolVar(&cfg.ChromePinDNS, "chrome-pin-dns", false, "Experimental: pin one --url browser origin to validated DNS; forces direct browser connections")
+	rootCmd.Flags().BoolVar(&cfg.BrowserDirect, "browser-direct", false, "Use direct browser connections instead of --proxy (warning when combined)")
+	rootCmd.Flags().StringArrayVar(&cfg.ExcludeURLs, "exclude-url", nil, "Exclude discovery URLs matching a regex (repeatable)")
+	rootCmd.Flags().StringArrayVar(&cfg.IncludeURLs, "include-url", nil, "Only include discovery URLs matching these regexes (repeatable)")
+	rootCmd.Flags().BoolVar(&cfg.NoForms, "no-forms", false, "Disable automatic form discovery")
+	rootCmd.Flags().BoolVar(&cfg.AllowFormSubmit, "allow-form-submit", false, "Allow automatically discovered POST forms with authentication (default: skipped)")
 	rootCmd.Flags().StringSliceVar(&cfg.OAuthAllowedOrigins, "oauth-allow-origin", nil, "Explicit additional OAuth endpoint origins")
 	rootCmd.Flags().StringVar(&cfg.LoginSuccessContains, "login-success-contains", "", "Required login response text")
 	rootCmd.Flags().StringVar(&cfg.LoginSuccessURL, "login-success-url", "", "Required final login URL")
@@ -207,14 +241,17 @@ func init() {
 	rootCmd.Flags().BoolVarP(&cfg.Verbose, "verbose", "v", false, "Verbose output")
 	rootCmd.Flags().StringVar(&cfg.LoginURL, "login-url", "", "Login URL for authenticated scanning")
 	rootCmd.Flags().StringVar(&cfg.Username, "username", "", "Username for login")
-	rootCmd.Flags().StringVar(&cfg.Password, "password", "", "Password for login")
+	rootCmd.Flags().StringVar(&cfg.Password, "password", "", "Password for login (argv exposure warning; prefer XSSCAN_PASSWORD/file/stdin)")
+	rootCmd.Flags().StringVar(&cfg.PasswordFile, "password-file", "", "Read login password from file (explicit CLI source; trims trailing newlines)")
+	rootCmd.Flags().BoolVar(&cfg.PasswordStdin, "password-stdin", false, "Read login password from stdin; cannot also read target URLs from stdin")
+	rootCmd.Flags().StringVar(&cfg.JWTFile, "jwt-file", "", "Read JWT from file (explicit CLI source; trims trailing newlines)")
 	rootCmd.Flags().BoolVar(&cfg.TestHPP, "hpp", false, "Enable HTTP Parameter Pollution testing")
 	rootCmd.Flags().BoolVar(&cfg.WAFBypass, "waf-bypass", false, "Enable WAF bypass via payload mutation")
 	rootCmd.Flags().Float64Var(&cfg.ConfidenceMin, "confidence", 0.60, "Minimum confidence threshold (0.0-1.0)")
-	rootCmd.Flags().BoolVar(&cfg.AllowPrivate, "allow-private", false, "Allow scanning private/internal networks (SSRF protection bypass)")
+	rootCmd.Flags().BoolVar(&cfg.AllowPrivate, "allow-private", false, "Allow private and special-use addresses (default: blocked; authorized environments only)")
 	rootCmd.Flags().StringVar(&cfg.Proxy, "proxy", "", "HTTP proxy URL (e.g., http://127.0.0.1:8080 for Burp Suite)")
-	rootCmd.Flags().StringVar(&cfg.ProxyUsername, "proxy-username", "", "Proxy basic auth username (optional)")
-	rootCmd.Flags().StringVar(&cfg.ProxyPassword, "proxy-password", "", "Proxy basic auth password (optional)")
+	rootCmd.Flags().StringVar(&cfg.ProxyUsername, "proxy-username", "", "Proxy basic auth username (proxy/CONNECT only, never sent to target)")
+	rootCmd.Flags().StringVar(&cfg.ProxyPassword, "proxy-password", "", "Proxy basic auth password (proxy/CONNECT only, never sent to target)")
 	rootCmd.Flags().BoolVar(&cfg.ProxyInsecure, "proxy-insecure", false, "Skip TLS verification for proxy (useful with Burp self-signed CA)")
 	rootCmd.Flags().BoolVar(&cfg.Crawl, "crawl", false, "Enable link discovery crawling before scanning")
 	rootCmd.Flags().IntVar(&cfg.CrawlDepth, "crawl-depth", 2, "Maximum crawl depth (0 = start URL only)")
@@ -231,7 +268,7 @@ func init() {
 	rootCmd.Flags().StringVar(&cfg.ChromePath, "chrome-path", "", "Path to Chrome/Chromium binary (auto-detected if empty)")
 	rootCmd.Flags().StringVar(&cfg.PayloadWordlist, "payload-wordlist", "", "Path to custom payload wordlist (one payload per line)")
 	rootCmd.Flags().StringVar(&cfg.ConfigFile, "config", "", "Path to YAML config file")
-	rootCmd.Flags().StringVar(&cfg.JWT, "jwt", "", "JWT token (sent as Bearer in Authorization header)")
+	rootCmd.Flags().StringVar(&cfg.JWT, "jwt", "", "JWT token (argv warning; prefer XSSCAN_JWT or --jwt-file)")
 	rootCmd.Flags().BoolVar(&cfg.Silent, "silent", false, "Suppress banner and status output (for pipelines)")
 	rootCmd.Flags().BoolVar(&cfg.NoColor, "no-color", false, "Disable ANSI color output")
 	rootCmd.Flags().BoolVar(&cfg.EnableProbe, "probe", false, "Run context probes before payload scanning (reduces false positives)")
@@ -302,8 +339,52 @@ func runScan(cmd *cobra.Command, args []string) error {
 	logger := setupLogger()
 	defer logger.Sync()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: cfg.AllowPrivate}))
 	defer cancel()
+	ctx = browser.WithSiteIsolationDisabled(ctx, cfg.ChromeDisableSiteIsolation)
+	ctx = browser.WithLegacyStartup(ctx, cfg.ChromeLegacyStartup)
+	if cfg.RandomMarkerPrefix {
+		prefix, err := analyze.RandomMarkerPrefix()
+		if err != nil {
+			return fmt.Errorf("secure marker prefix: %w", err)
+		}
+		cfg.MarkerPrefix = prefix
+	}
+	var markerErr error
+	ctx, markerErr = analyze.WithMarkerPrefix(ctx, cfg.MarkerPrefix)
+	if markerErr != nil {
+		return markerErr
+	}
+	urlScope, scopeErr := crawler.NewURLScope(cfg.ExcludeURLs, cfg.IncludeURLs)
+	if scopeErr != nil {
+		return scopeErr
+	}
+	ctx = urlScope.Context(ctx)
+	if cfg.ChromePinDNS {
+		if cfg.URL == "" || cfg.TargetsFile != "" {
+			return fmt.Errorf("--chrome-pin-dns currently requires a single --url")
+		}
+		if cfg.Proxy != "" && !cfg.BrowserDirect {
+			return fmt.Errorf("--chrome-pin-dns requires direct Chrome networking; use --browser-direct explicitly with --proxy")
+		}
+		pinned, rule, err := ssrfguard.PolicyFromContext(ctx).PinURL(ctx, cfg.URL)
+		if err != nil {
+			return err
+		}
+		ctx = ssrfguard.WithPolicy(ctx, pinned)
+		ctx = browser.WithDNSRule(ctx, rule)
+	}
+	if cfg.Headless || cfg.VerifyExecution || cfg.RenderSPA {
+		browserProxy, proxyErr := browser.ParseProxy(cfg.Proxy, cfg.ProxyUsername, cfg.ProxyPassword, cfg.BrowserDirect)
+		if proxyErr != nil {
+			return proxyErr
+		}
+		ctx = browser.WithProxy(ctx, browserProxy)
+	}
+	if cfg.Proxy != "" && cfg.BrowserDirect {
+		fmt.Fprintln(os.Stderr, "[WARNING] --browser-direct: Chrome bypasses the configured proxy")
+	}
+
 	stopProgress := func() {}
 	if !cfg.Silent && !cfg.Verbose {
 		terminal := isatty.IsTerminal(os.Stderr.Fd()) || isatty.IsCygwinTerminal(os.Stderr.Fd())
@@ -329,11 +410,10 @@ func runScan(cmd *cobra.Command, args []string) error {
 		Cookies: parseCookies(cfg.Cookies),
 	}
 
-	client, proxyConfig, err := setupHTTPClient(target)
+	client, _, err := setupHTTPClient(target)
 	if err != nil {
 		return err
 	}
-	target = applyProxyAuth(target, proxyConfig)
 
 	var requestCount atomic.Int64
 	baseTransport := client.Transport
@@ -430,7 +510,9 @@ func loadAndValidateConfig(cmd *cobra.Command) error {
 		flags := collectChangedFlags(cmd)
 		fc.ApplyTo(&cfg, flags)
 	}
-	ssrfguard.AllowPrivate = cfg.AllowPrivate
+	if err := resolveCredentials(&cfg, collectChangedFlags(cmd), os.LookupEnv, os.Stdin, os.Stderr); err != nil {
+		return err
+	}
 	return validateConfig(&cfg)
 }
 
@@ -456,26 +538,17 @@ func setupHTTPClient(target model.Target) (*http.Client, *httpclient.ProxyConfig
 			Password: cfg.ProxyPassword,
 			Insecure: cfg.ProxyInsecure,
 		}
-		if err := proxyConfig.Validate(); err != nil {
+		if err := proxyConfig.Validate(ssrfguard.Policy{AllowPrivate: cfg.AllowPrivate}); err != nil {
 			return nil, nil, fmt.Errorf("proxy validation failed: %w", err)
 		}
-		statusCyan("[*] Using proxy: %s\n", cfg.Proxy)
+		logProxyEndpoint(cfg.Proxy)
 	}
-	client := httpclient.NewClient(engineCfg.RequestTimeout, proxyConfig)
+	client := httpclient.NewClient(engineCfg.RequestTimeout, proxyConfig, ssrfguard.Policy{AllowPrivate: cfg.AllowPrivate})
 	return client, proxyConfig, nil
 }
 
-func applyProxyAuth(target model.Target, proxyConfig *httpclient.ProxyConfig) model.Target {
-	if proxyConfig != nil {
-		if authHeader, ok := proxyConfig.ProxyAuthHeader(); ok {
-			target.ProxyAuth = authHeader
-		}
-	}
-	return target
-}
-
 func setupAuthentication(client *http.Client, headers map[string]string, target model.Target) error {
-	return setupAuthenticationContext(context.Background(), client, headers, target)
+	return setupAuthenticationContext(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: cfg.AllowPrivate}), client, headers, target)
 }
 
 func setupAuthenticationContext(ctx context.Context, client *http.Client, headers map[string]string, target model.Target) error {
@@ -684,12 +757,11 @@ func resolveTargets(primaryURL string) ([]string, error) {
 
 func deriveTarget(base model.Target, urlStr string) model.Target {
 	return model.Target{
-		URL:       urlStr,
-		Method:    base.Method,
-		Headers:   cloneHeaders(base.Headers),
-		Cookies:   cloneCookies(base.Cookies),
-		Body:      base.Body,
-		ProxyAuth: base.ProxyAuth,
+		URL:     urlStr,
+		Method:  base.Method,
+		Headers: cloneHeaders(base.Headers),
+		Cookies: cloneCookies(base.Cookies),
+		Body:    base.Body,
 	}
 }
 
@@ -1502,7 +1574,7 @@ func runStoredXSSScan(ctx context.Context, client *http.Client, tgt model.Target
 		injections = append(injections, stored.Injection{
 			Target:    tgt,
 			Parameter: param,
-			Marker:    analyze.GenerateMarker(),
+			Marker:    analyze.GenerateMarkerContext(ctx),
 		})
 	}
 

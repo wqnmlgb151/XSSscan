@@ -12,8 +12,8 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
-	allocopts "github.com/xsscan/xsscan/pkg/internal/chromedp"
-	"github.com/xsscan/xsscan/pkg/model"
+	allocopts "github.com/wqnmlgb151/XSSscan/pkg/internal/chromedp"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 /*

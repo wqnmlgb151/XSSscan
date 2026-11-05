@@ -2,7 +2,7 @@ package stored
 
 import (
 	"context"
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"html"
 	"net/http"
 	"strings"
@@ -11,14 +11,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 )
 
 func TestPollingProgressPreservesRoundsAndCancellation(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	var requests atomic.Int64
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
@@ -27,7 +25,7 @@ func TestPollingProgressPreservesRoundsAndCancellation(t *testing.T) {
 	defer server.Close()
 	s := NewScanner(server.Client(), Config{MaxPolls: 3, PollingInterval: 10 * time.Millisecond}, nil)
 	var events []model.Progress
-	ctx := model.WithProgress(context.Background(), func(p model.Progress) { events = append(events, p) })
+	ctx := model.WithProgress(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), func(p model.Progress) { events = append(events, p) })
 	urls := []string{server.URL + "/a", server.URL + "/b"}
 	start := time.Now()
 	found, err := s.pollObservations(ctx, urls, model.Target{}, "marker", "stored polling query:q")
@@ -42,7 +40,7 @@ func TestPollingProgressPreservesRoundsAndCancellation(t *testing.T) {
 			t.Fatalf("progress=%+v", events)
 		}
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}))
 	defer cancel()
 	ctx = model.WithProgress(ctx, func(p model.Progress) {
 		if p.Completed == 2 {
@@ -56,15 +54,13 @@ func TestPollingProgressPreservesRoundsAndCancellation(t *testing.T) {
 }
 
 func TestStoredParameterProgressDoesNotResetSameStage(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("safe")) }))
 	defer server.Close()
 	s := NewScanner(server.Client(), Config{TriggerURLs: []string{server.URL + "/view"}, MaxPolls: 1, Concurrency: 2}, nil)
 	var mu sync.Mutex
 	stages := map[string]bool{}
-	ctx := model.WithProgress(context.Background(), func(p model.Progress) { mu.Lock(); defer mu.Unlock(); stages[p.Stage] = true })
+	ctx := model.WithProgress(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), func(p model.Progress) { mu.Lock(); defer mu.Unlock(); stages[p.Stage] = true })
 	_, err := s.DetectWithError(ctx, []Injection{
 		{Target: model.Target{URL: server.URL + "/?a=x&b=x"}, Parameter: model.Parameter{Type: model.ParamQuery, Name: "a"}},
 		{Target: model.Target{URL: server.URL + "/?a=x&b=x"}, Parameter: model.Parameter{Type: model.ParamQuery, Name: "b"}},
@@ -83,9 +79,7 @@ func TestStoredParameterProgressDoesNotResetSameStage(t *testing.T) {
 // slower page is still about to render it, so whether a finding is reported depends on
 // which page happened to be ready first.
 func TestPollingIsNotCutShortByAnEarlierDisplayingTrigger(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	marker := "xsscanStoredMarker123"
 	var latePolls atomic.Int64
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -104,7 +98,7 @@ func TestPollingIsNotCutShortByAnEarlierDisplayingTrigger(t *testing.T) {
 	defer server.Close()
 	s := NewScanner(server.Client(), Config{MaxPolls: 5, PollingInterval: 5 * time.Millisecond}, nil)
 	urls := []string{server.URL + "/early", server.URL + "/late"}
-	found, err := s.pollObservations(context.Background(), urls, model.Target{}, marker, "stored polling")
+	found, err := s.pollObservations(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), urls, model.Target{}, marker, "stored polling")
 	if err != nil {
 		t.Fatalf("poll: %v", err)
 	}
@@ -123,9 +117,7 @@ func TestPollingIsNotCutShortByAnEarlierDisplayingTrigger(t *testing.T) {
 // Evidence must be attributed to the specific trigger page that displayed the marker,
 // never to the trigger set as a whole.
 func TestPollingAttributesEvidenceToTheDisplayingPage(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	marker := "xsscanAttributionMarker"
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/a" {
@@ -136,7 +128,7 @@ func TestPollingAttributesEvidenceToTheDisplayingPage(t *testing.T) {
 	}))
 	defer server.Close()
 	s := NewScanner(server.Client(), Config{MaxPolls: 2, PollingInterval: 5 * time.Millisecond}, nil)
-	found, err := s.pollObservations(context.Background(), []string{server.URL + "/a", server.URL + "/b"}, model.Target{}, marker, "stored polling")
+	found, err := s.pollObservations(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), []string{server.URL + "/a", server.URL + "/b"}, model.Target{}, marker, "stored polling")
 	if err != nil {
 		t.Fatalf("poll: %v", err)
 	}
@@ -151,9 +143,7 @@ func TestPollingAttributesEvidenceToTheDisplayingPage(t *testing.T) {
 }
 
 func TestStoredConfirmationCandidateProgress(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	var saved atomic.Value
 	saved.Store("")
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -169,7 +159,7 @@ func TestStoredConfirmationCandidateProgress(t *testing.T) {
 	defer server.Close()
 	s := NewScanner(server.Client(), Config{TriggerURLs: []string{server.URL + "/view"}, MaxPolls: 1}, nil)
 	stages := map[string]bool{}
-	ctx := model.WithProgress(context.Background(), func(p model.Progress) {
+	ctx := model.WithProgress(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), func(p model.Progress) {
 		if strings.HasPrefix(p.Stage, "stored confirmation") && p.Completed == 0 {
 			stages[p.Stage] = true
 		}

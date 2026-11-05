@@ -1,7 +1,7 @@
 package context
 
 import (
-	"github.com/xsscan/xsscan/pkg/jsanalysis"
+	"github.com/wqnmlgb151/XSSscan/pkg/jsanalysis"
 	"golang.org/x/net/html"
 	"strings"
 )

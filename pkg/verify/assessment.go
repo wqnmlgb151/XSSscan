@@ -1,6 +1,6 @@
 package verify
 
-import "github.com/xsscan/xsscan/pkg/context"
+import "github.com/wqnmlgb151/XSSscan/pkg/context"
 
 // AssessmentCode describes the rule that ended verification, independently of
 // confidence and of browser execution. An unconfirmed context is not proof of safety.

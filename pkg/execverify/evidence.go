@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/xsscan/xsscan/pkg/internal/request"
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/internal/request"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 // capturedTarget replays the actual authenticated request, including refreshed

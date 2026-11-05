@@ -1,0 +1,789 @@
+{
+  "date": "2026-11-03",
+  "platform": "Windows amd64",
+  "chrome": "156.0.8078.79",
+  "fixture_latency_ms": 20,
+  "configuration": "CLI defaults; allow-private, silent and JSON output only",
+  "rounds": [
+    {
+      "round": 1,
+      "version": "v1.1.1",
+      "wall_ms": 69662.09709999998,
+      "duration_ms": 69390,
+      "module_ms": {
+        "reflected": 728,
+        "dom": 44134,
+        "stored": 24528,
+        "blind": 0
+      },
+      "requests_sent": 24,
+      "target_requests": 159,
+      "payloads_sent": 9,
+      "coverage": {
+        "stage": "dom_source_checks",
+        "target": "http://localhost:2123/index.php?c=text&a=gywm&id=10",
+        "planned_known": true,
+        "planned": 65,
+        "started": 65,
+        "completed": 65,
+        "failed": 0,
+        "canceled": 0,
+        "not_started": 0
+      },
+      "findings": [
+        {
+          "Type": "reflected_xss",
+          "Parameter": "id",
+          "ExecutionVerified": true
+        }
+      ],
+      "module_counts": {
+        "reflected": {
+          "requests": 4,
+          "candidates": 1,
+          "findings": 1
+        },
+        "dom": {
+          "requests": 0,
+          "candidates": 5,
+          "findings": 0
+        },
+        "stored": {
+          "requests": 20,
+          "candidates": 3,
+          "findings": 0
+        },
+        "blind": {
+          "requests": 0,
+          "candidates": 0,
+          "findings": 0
+        }
+      }
+    },
+    {
+      "round": 1,
+      "version": "v1.1.4",
+      "wall_ms": 69607.2072,
+      "duration_ms": 69336,
+      "module_ms": {
+        "reflected": 661,
+        "dom": 44145,
+        "stored": 24530,
+        "blind": 0
+      },
+      "requests_sent": 24,
+      "target_requests": 158,
+      "payloads_sent": 9,
+      "coverage": {
+        "stage": "dom_source_checks",
+        "target": "http://localhost:2123/index.php?c=text&a=gywm&id=10",
+        "planned_known": true,
+        "planned": 65,
+        "started": 65,
+        "completed": 65,
+        "failed": 0,
+        "canceled": 0,
+        "not_started": 0
+      },
+      "findings": [
+        {
+          "Type": "reflected_xss",
+          "Parameter": "id",
+          "ExecutionVerified": true
+        }
+      ],
+      "module_counts": {
+        "reflected": {
+          "requests": 4,
+          "candidates": 1,
+          "findings": 1
+        },
+        "dom": {
+          "requests": 0,
+          "candidates": 5,
+          "findings": 0
+        },
+        "stored": {
+          "requests": 20,
+          "candidates": 3,
+          "findings": 0
+        },
+        "blind": {
+          "requests": 0,
+          "candidates": 0,
+          "findings": 0
+        }
+      }
+    },
+    {
+      "round": 2,
+      "version": "v1.1.4",
+      "wall_ms": 68938.46089999999,
+      "duration_ms": 68669,
+      "module_ms": {
+        "reflected": 659,
+        "dom": 43481,
+        "stored": 24527,
+        "blind": 0
+      },
+      "requests_sent": 24,
+      "target_requests": 158,
+      "payloads_sent": 9,
+      "coverage": {
+        "stage": "dom_source_checks",
+        "target": "http://localhost:2123/index.php?c=text&a=gywm&id=10",
+        "planned_known": true,
+        "planned": 65,
+        "started": 65,
+        "completed": 65,
+        "failed": 0,
+        "canceled": 0,
+        "not_started": 0
+      },
+      "findings": [
+        {
+          "Type": "reflected_xss",
+          "Parameter": "id",
+          "ExecutionVerified": true
+        }
+      ],
+      "module_counts": {
+        "reflected": {
+          "requests": 4,
+          "candidates": 1,
+          "findings": 1
+        },
+        "dom": {
+          "requests": 0,
+          "candidates": 5,
+          "findings": 0
+        },
+        "stored": {
+          "requests": 20,
+          "candidates": 3,
+          "findings": 0
+        },
+        "blind": {
+          "requests": 0,
+          "candidates": 0,
+          "findings": 0
+        }
+      }
+    },
+    {
+      "round": 2,
+      "version": "v1.1.1",
+      "wall_ms": 69693.16189999995,
+      "duration_ms": 69426,
+      "module_ms": {
+        "reflected": 705,
+        "dom": 44192,
+        "stored": 24529,
+        "blind": 0
+      },
+      "requests_sent": 24,
+      "target_requests": 159,
+      "payloads_sent": 9,
+      "coverage": {
+        "stage": "dom_source_checks",
+        "target": "http://localhost:2123/index.php?c=text&a=gywm&id=10",
+        "planned_known": true,
+        "planned": 65,
+        "started": 65,
+        "completed": 65,
+        "failed": 0,
+        "canceled": 0,
+        "not_started": 0
+      },
+      "findings": [
+        {
+          "Type": "reflected_xss",
+          "Parameter": "id",
+          "ExecutionVerified": true
+        }
+      ],
+      "module_counts": {
+        "reflected": {
+          "requests": 4,
+          "candidates": 1,
+          "findings": 1
+        },
+        "dom": {
+          "requests": 0,
+          "candidates": 5,
+          "findings": 0
+        },
+        "stored": {
+          "requests": 20,
+          "candidates": 3,
+          "findings": 0
+        },
+        "blind": {
+          "requests": 0,
+          "candidates": 0,
+          "findings": 0
+        }
+      }
+    },
+    {
+      "round": 3,
+      "version": "v1.1.1",
+      "wall_ms": 69473.2802000001,
+      "duration_ms": 69201,
+      "module_ms": {
+        "reflected": 680,
+        "dom": 44009,
+        "stored": 24512,
+        "blind": 0
+      },
+      "requests_sent": 24,
+      "target_requests": 159,
+      "payloads_sent": 9,
+      "coverage": {
+        "stage": "dom_source_checks",
+        "target": "http://localhost:2123/index.php?c=text&a=gywm&id=10",
+        "planned_known": true,
+        "planned": 65,
+        "started": 65,
+        "completed": 65,
+        "failed": 0,
+        "canceled": 0,
+        "not_started": 0
+      },
+      "findings": [
+        {
+          "Type": "reflected_xss",
+          "Parameter": "id",
+          "ExecutionVerified": true
+        }
+      ],
+      "module_counts": {
+        "reflected": {
+          "requests": 4,
+          "candidates": 1,
+          "findings": 1
+        },
+        "dom": {
+          "requests": 0,
+          "candidates": 5,
+          "findings": 0
+        },
+        "stored": {
+          "requests": 20,
+          "candidates": 3,
+          "findings": 0
+        },
+        "blind": {
+          "requests": 0,
+          "candidates": 0,
+          "findings": 0
+        }
+      }
+    },
+    {
+      "round": 3,
+      "version": "v1.1.4",
+      "wall_ms": 69777.90059999995,
+      "duration_ms": 69508,
+      "module_ms": {
+        "reflected": 635,
+        "dom": 44360,
+        "stored": 24513,
+        "blind": 0
+      },
+      "requests_sent": 24,
+      "target_requests": 158,
+      "payloads_sent": 9,
+      "coverage": {
+        "stage": "dom_source_checks",
+        "target": "http://localhost:2123/index.php?c=text&a=gywm&id=10",
+        "planned_known": true,
+        "planned": 65,
+        "started": 65,
+        "completed": 65,
+        "failed": 0,
+        "canceled": 0,
+        "not_started": 0
+      },
+      "findings": [
+        {
+          "Type": "reflected_xss",
+          "Parameter": "id",
+          "ExecutionVerified": true
+        }
+      ],
+      "module_counts": {
+        "reflected": {
+          "requests": 4,
+          "candidates": 1,
+          "findings": 1
+        },
+        "dom": {
+          "requests": 0,
+          "candidates": 5,
+          "findings": 0
+        },
+        "stored": {
+          "requests": 20,
+          "candidates": 3,
+          "findings": 0
+        },
+        "blind": {
+          "requests": 0,
+          "candidates": 0,
+          "findings": 0
+        }
+      }
+    },
+    {
+      "round": 4,
+      "version": "v1.1.4",
+      "wall_ms": 69767.87520000005,
+      "duration_ms": 69491,
+      "module_ms": {
+        "reflected": 656,
+        "dom": 44321,
+        "stored": 24513,
+        "blind": 0
+      },
+      "requests_sent": 24,
+      "target_requests": 158,
+      "payloads_sent": 9,
+      "coverage": {
+        "stage": "dom_source_checks",
+        "target": "http://localhost:2123/index.php?c=text&a=gywm&id=10",
+        "planned_known": true,
+        "planned": 65,
+        "started": 65,
+        "completed": 65,
+        "failed": 0,
+        "canceled": 0,
+        "not_started": 0
+      },
+      "findings": [
+        {
+          "Type": "reflected_xss",
+          "Parameter": "id",
+          "ExecutionVerified": true
+        }
+      ],
+      "module_counts": {
+        "reflected": {
+          "requests": 4,
+          "candidates": 1,
+          "findings": 1
+        },
+        "dom": {
+          "requests": 0,
+          "candidates": 5,
+          "findings": 0
+        },
+        "stored": {
+          "requests": 20,
+          "candidates": 3,
+          "findings": 0
+        },
+        "blind": {
+          "requests": 0,
+          "candidates": 0,
+          "findings": 0
+        }
+      }
+    },
+    {
+      "round": 4,
+      "version": "v1.1.1",
+      "wall_ms": 70327.82859999998,
+      "duration_ms": 70031,
+      "module_ms": {
+        "reflected": 1362,
+        "dom": 44137,
+        "stored": 24531,
+        "blind": 0
+      },
+      "requests_sent": 24,
+      "target_requests": 159,
+      "payloads_sent": 9,
+      "coverage": {
+        "stage": "dom_source_checks",
+        "target": "http://localhost:2676/index.php?c=text&a=gywm&id=10",
+        "planned_known": true,
+        "planned": 65,
+        "started": 65,
+        "completed": 65,
+        "failed": 0,
+        "canceled": 0,
+        "not_started": 0
+      },
+      "module_counts": {
+        "reflected": {
+          "requests": 4,
+          "candidates": 1,
+          "findings": 1
+        },
+        "dom": {
+          "requests": 0,
+          "candidates": 5,
+          "findings": 0
+        },
+        "stored": {
+          "requests": 20,
+          "candidates": 3,
+          "findings": 0
+        },
+        "blind": {
+          "requests": 0,
+          "candidates": 0,
+          "findings": 0
+        }
+      },
+      "findings": [
+        {
+          "Type": "reflected_xss",
+          "Parameter": "id",
+          "ExecutionVerified": true
+        }
+      ]
+    },
+    {
+      "round": 5,
+      "version": "v1.1.1",
+      "wall_ms": 68726.02840000036,
+      "duration_ms": 68412,
+      "module_ms": {
+        "reflected": 792,
+        "dom": 43109,
+        "stored": 24510,
+        "blind": 0
+      },
+      "requests_sent": 24,
+      "target_requests": 159,
+      "payloads_sent": 9,
+      "coverage": {
+        "stage": "dom_source_checks",
+        "target": "http://localhost:2676/index.php?c=text&a=gywm&id=10",
+        "planned_known": true,
+        "planned": 65,
+        "started": 65,
+        "completed": 65,
+        "failed": 0,
+        "canceled": 0,
+        "not_started": 0
+      },
+      "module_counts": {
+        "reflected": {
+          "requests": 4,
+          "candidates": 1,
+          "findings": 1
+        },
+        "dom": {
+          "requests": 0,
+          "candidates": 5,
+          "findings": 0
+        },
+        "stored": {
+          "requests": 20,
+          "candidates": 3,
+          "findings": 0
+        },
+        "blind": {
+          "requests": 0,
+          "candidates": 0,
+          "findings": 0
+        }
+      },
+      "findings": [
+        {
+          "Type": "reflected_xss",
+          "Parameter": "id",
+          "ExecutionVerified": true
+        }
+      ]
+    },
+    {
+      "round": 5,
+      "version": "v1.1.4",
+      "wall_ms": 67735.12430000029,
+      "duration_ms": 67388,
+      "module_ms": {
+        "reflected": 743,
+        "dom": 42097,
+        "stored": 24547,
+        "blind": 0
+      },
+      "requests_sent": 24,
+      "target_requests": 159,
+      "payloads_sent": 9,
+      "coverage": {
+        "stage": "dom_source_checks",
+        "target": "http://localhost:2676/index.php?c=text&a=gywm&id=10",
+        "planned_known": true,
+        "planned": 65,
+        "started": 65,
+        "completed": 65,
+        "failed": 0,
+        "canceled": 0,
+        "not_started": 0
+      },
+      "module_counts": {
+        "reflected": {
+          "requests": 4,
+          "candidates": 1,
+          "findings": 1
+        },
+        "dom": {
+          "requests": 0,
+          "candidates": 5,
+          "findings": 0
+        },
+        "stored": {
+          "requests": 20,
+          "candidates": 3,
+          "findings": 0
+        },
+        "blind": {
+          "requests": 0,
+          "candidates": 0,
+          "findings": 0
+        }
+      },
+      "findings": [
+        {
+          "Type": "reflected_xss",
+          "Parameter": "id",
+          "ExecutionVerified": true
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "v1.1.1": {
+      "rounds": 5,
+      "wall_median_ms": 69662.09709999998,
+      "modules_median_ms": {
+        "reflected": 728,
+        "dom": 44134,
+        "stored": 24528
+      },
+      "target_requests": [
+        159,
+        159,
+        159,
+        159,
+        159
+      ]
+    },
+    "v1.1.4": {
+      "rounds": 5,
+      "wall_median_ms": 69607.2072,
+      "modules_median_ms": {
+        "reflected": 659,
+        "dom": 44145,
+        "stored": 24527
+      },
+      "target_requests": [
+        158,
+        158,
+        158,
+        158,
+        159
+      ]
+    }
+  },
+  "profiling": {
+    "v1.1.1": {
+      "dom/browser_init": {
+        "Calls": 1,
+        "TotalMS": 372.256,
+        "MaxMS": 372.256
+      },
+      "dom/browser_process_cleanup": {
+        "Calls": 1,
+        "TotalMS": 168.3125,
+        "MaxMS": 168.3125
+      },
+      "dom/context_cleanup": {
+        "Calls": 66,
+        "TotalMS": 3282.1581999999994,
+        "MaxMS": 162.8884
+      },
+      "dom/context_setup": {
+        "Calls": 66,
+        "TotalMS": 5494.941500000001,
+        "MaxMS": 163.3838
+      },
+      "dom/dns_ssrf": {
+        "Calls": 200,
+        "TotalMS": 412.40250000000015,
+        "MaxMS": 25.3667
+      },
+      "dom/guard_cdp_continue": {
+        "Calls": 133,
+        "TotalMS": 249.9380000000001,
+        "MaxMS": 13.4849
+      },
+      "dom/guard_setup": {
+        "Calls": 66,
+        "TotalMS": 401.70930000000004,
+        "MaxMS": 27.1621
+      },
+      "dom/page_observation": {
+        "Calls": 71,
+        "TotalMS": 137023.5061999999,
+        "MaxMS": 2001.4408
+      },
+      "reflected/context_setup": {
+        "Calls": 1,
+        "TotalMS": 49.8901,
+        "MaxMS": 49.8901
+      },
+      "reflected/dns_ssrf": {
+        "Calls": 11,
+        "TotalMS": 26.237000000000002,
+        "MaxMS": 21.345
+      },
+      "reflected/guard_cdp_continue": {
+        "Calls": 2,
+        "TotalMS": 0.5099,
+        "MaxMS": 0.5099
+      },
+      "reflected/guard_setup": {
+        "Calls": 1,
+        "TotalMS": 1.0249,
+        "MaxMS": 1.0249
+      },
+      "stored/dns_ssrf": {
+        "Calls": 41,
+        "TotalMS": 77.80030000000001,
+        "MaxMS": 14.956
+      },
+      "stored/stored_discovery": {
+        "Calls": 1,
+        "TotalMS": 45.9666,
+        "MaxMS": 45.9666
+      },
+      "stored/stored_fetch": {
+        "Calls": 15,
+        "TotalMS": 402.01790000000005,
+        "MaxMS": 37.4455
+      },
+      "stored/stored_poll_wait": {
+        "Calls": 12,
+        "TotalMS": 24005.915,
+        "MaxMS": 2000.8204
+      },
+      "stored/stored_polling": {
+        "Calls": 3,
+        "TotalMS": 24407.9329,
+        "MaxMS": 8145.2344
+      },
+      "stored/stored_submit": {
+        "Calls": 3,
+        "TotalMS": 68.5748,
+        "MaxMS": 23.161
+      }
+    },
+    "v1.1.4": {
+      "dom/browser_init": {
+        "Calls": 1,
+        "TotalMS": 348.1462,
+        "MaxMS": 348.1462
+      },
+      "dom/browser_process_cleanup": {
+        "Calls": 1,
+        "TotalMS": 141.7306,
+        "MaxMS": 141.7306
+      },
+      "dom/context_cleanup": {
+        "Calls": 66,
+        "TotalMS": 2714.734200000001,
+        "MaxMS": 180.4062
+      },
+      "dom/context_setup": {
+        "Calls": 66,
+        "TotalMS": 4902.032,
+        "MaxMS": 164.2928
+      },
+      "dom/dns_ssrf": {
+        "Calls": 200,
+        "TotalMS": 392.6547000000002,
+        "MaxMS": 21.6296
+      },
+      "dom/guard_cdp_continue": {
+        "Calls": 133,
+        "TotalMS": 222.65740000000002,
+        "MaxMS": 9.2361
+      },
+      "dom/guard_setup": {
+        "Calls": 66,
+        "TotalMS": 414.7944,
+        "MaxMS": 91.9814
+      },
+      "dom/page_observation": {
+        "Calls": 71,
+        "TotalMS": 137026.88589999996,
+        "MaxMS": 2002.1793
+      },
+      "reflected/context_setup": {
+        "Calls": 1,
+        "TotalMS": 46.0345,
+        "MaxMS": 46.0345
+      },
+      "reflected/dns_ssrf": {
+        "Calls": 11,
+        "TotalMS": 26.4667,
+        "MaxMS": 22.0605
+      },
+      "reflected/guard_cdp_continue": {
+        "Calls": 2,
+        "TotalMS": 0.6859,
+        "MaxMS": 0.6859
+      },
+      "reflected/guard_setup": {
+        "Calls": 1,
+        "TotalMS": 1.0513,
+        "MaxMS": 1.0513
+      },
+      "stored/dns_ssrf": {
+        "Calls": 41,
+        "TotalMS": 80.9203,
+        "MaxMS": 18.6995
+      },
+      "stored/stored_discovery": {
+        "Calls": 1,
+        "TotalMS": 45.8001,
+        "MaxMS": 45.8001
+      },
+      "stored/stored_fetch": {
+        "Calls": 15,
+        "TotalMS": 408.29400000000004,
+        "MaxMS": 40.8967
+      },
+      "stored/stored_poll_wait": {
+        "Calls": 12,
+        "TotalMS": 24005.7033,
+        "MaxMS": 2000.6928
+      },
+      "stored/stored_polling": {
+        "Calls": 3,
+        "TotalMS": 24413.9973,
+        "MaxMS": 8147.8106
+      },
+      "stored/stored_submit": {
+        "Calls": 3,
+        "TotalMS": 67.7773,
+        "MaxMS": 23.0694
+      }
+    }
+  },
+  "pprof": {
+    "v1.1.1": {
+      "cpu": "File: profile-111.exe\nBuild ID: D:\\github\\XSS\\dist\\performance\\profile-111.exe2026-11-03 12:57:37.4292254 +0800 CST\nType: cpu\nTime: 2026-11-03 13:01:51 CST\nDuration: 70.21s, Total samples = 45.58s (64.92%)\nShowing nodes accounting for 45.10s, 98.95% of 45.58s total\nDropped 234 nodes (cum <= 0.23s)\nShowing top 20 nodes out of 44\n      flat  flat%   sum%        cum   cum%\n    45.10s 98.95% 98.95%     45.10s 98.95%  runtime.cgocall\n         0     0% 98.95%      0.42s  0.92%  bufio.(*Reader).ReadBytes\n         0     0% 98.95%      0.42s  0.92%  bufio.(*Reader).ReadSlice\n         0     0% 98.95%      0.42s  0.92%  bufio.(*Reader).collectFragments\n         0     0% 98.95%      0.42s  0.92%  bufio.(*Reader).fill\n         0     0% 98.95%     43.89s 96.29%  github.com/chromedp/chromedp.(*ExecAllocator).Allocate.func2\n         0     0% 98.95%      0.42s  0.92%  github.com/chromedp/chromedp.(*ExecAllocator).Allocate.func3\n         0     0% 98.95%      0.42s  0.92%  github.com/chromedp/chromedp.readOutput\n         0     0% 98.95%      0.32s   0.7%  github.com/spf13/cobra.(*Command).Execute (inline)\n         0     0% 98.95%      0.32s   0.7%  github.com/spf13/cobra.(*Command).ExecuteC\n         0     0% 98.95%      0.30s  0.66%  github.com/spf13/cobra.(*Command).execute\n         0     0% 98.95%      0.26s  0.57%  github.com/wqnmlgb151/XSSscan/pkg/browser.EnsureChrome\n         0     0% 98.95%      0.26s  0.57%  github.com/wqnmlgb151/XSSscan/pkg/browser.FindChrome (inline)\n         0     0% 98.95%      0.26s  0.57%  github.com/wqnmlgb151/XSSscan/pkg/browser.detectChrome\n         0     0% 98.95%      0.49s  1.08%  internal/poll.(*FD).Read\n         0     0% 98.95%      0.42s  0.92%  internal/poll.(*FD).Read.func1\n         0     0% 98.95%      0.54s  1.18%  internal/poll.(*FD).execIO\n         0     0% 98.95%      0.32s   0.7%  main.Execute (inline)\n         0     0% 98.95%      0.32s   0.7%  main.main\n         0     0% 98.95%      0.30s  0.66%  main.runScan\n",
+      "block": "File: profile-111.exe\nBuild ID: D:\\github\\XSS\\dist\\performance\\profile-111.exe2026-11-03 12:57:37.4292254 +0800 CST\nType: delay\nTime: 2026-11-03 13:03:01 CST\nShowing nodes accounting for 2318.70s, 97.47% of 2378.89s total\nDropped 235 nodes (cum <= 11.89s)\nShowing top 30 nodes out of 44\n      flat  flat%   sum%        cum   cum%\n  2074.24s 87.19% 87.19%   2074.24s 87.19%  runtime.selectgo\n         0     0% 87.19%   1146.45s 48.19%  github.com/wqnmlgb151/XSSscan/pkg/dom.(*Scanner).runSingleDOMTest.GuardRequests.func8.1\n   244.46s 10.28% 97.47%    244.46s 10.28%  runtime.chanrecv1\n         0     0% 97.47%    200.48s  8.43%  github.com/chromedp/chromedp.NewContext.func1\n         0     0% 97.47%    196.84s  8.27%  github.com/chromedp/chromedp.(*Context).attachTarget.gowrap1\n         0     0% 97.47%    196.84s  8.27%  github.com/chromedp/chromedp.(*Target).run\n         0     0% 97.47%    196.76s  8.27%  github.com/chromedp/chromedp.(*Target).run.func1\n         0     0% 97.47%    163.03s  6.85%  github.com/wqnmlgb151/XSSscan/pkg/dom.(*Scanner).runSingleDOMTest\n         0     0% 97.47%    160.60s  6.75%  github.com/wqnmlgb151/XSSscan/pkg/dom.(*Scanner).DetectPayloadsWithCoverage.func1\n         0     0% 97.47%    160.60s  6.75%  github.com/wqnmlgb151/XSSscan/pkg/dom.(*Scanner).DetectPayloadsWithCoverage.func1.1\n         0     0% 97.47%    154.73s  6.50%  github.com/chromedp/chromedp.Run\n         0     0% 97.47%    143.72s  6.04%  github.com/chromedp/chromedp.Tasks.Do (inline)\n         0     0% 97.47%    143.69s  6.04%  github.com/chromedp/chromedp.ActionFunc.Do\n         0     0% 97.47%    143.40s  6.03%  github.com/wqnmlgb151/XSSscan/pkg/internal/chromedp.ListenDialogs.func2\n         0     0% 97.47%       137s  5.76%  github.com/wqnmlgb151/XSSscan/pkg/dom.(*pageActivity).wait\n         0     0% 97.47%       132s  5.55%  github.com/wqnmlgb151/XSSscan/pkg/dom.(*Scanner).runSingleDOMTest.func6\n         0     0% 97.47%     69.90s  2.94%  main.setupSignalHandler.func1\n         0     0% 97.47%     69.77s  2.93%  main.main\n         0     0% 97.47%     69.77s  2.93%  runtime.main\n         0     0% 97.47%     69.77s  2.93%  github.com/spf13/cobra.(*Command).Execute (inline)\n         0     0% 97.47%     69.77s  2.93%  github.com/spf13/cobra.(*Command).ExecuteC\n         0     0% 97.47%     69.77s  2.93%  github.com/spf13/cobra.(*Command).execute\n         0     0% 97.47%     69.77s  2.93%  main.Execute (inline)\n         0     0% 97.47%     69.77s  2.93%  main.runScan\n         0     0% 97.47%     69.77s  2.93%  github.com/wqnmlgb151/XSSscan/pkg/orchestrator.(*Runner).Run\n         0     0% 97.47%     69.77s  2.93%  main.runSelectedModules\n         0     0% 97.47%     69.77s  2.93%  github.com/wqnmlgb151/XSSscan/pkg/orchestrator.invoke\n         0     0% 97.47%     69.77s  2.93%  main.runSelectedModules.func4\n         0     0% 97.47%     48.95s  2.06%  github.com/wqnmlgb151/XSSscan/pkg/stored.(*Scanner).DetectWithError.func1\n         0     0% 97.47%     44.99s  1.89%  os/exec.(*Cmd).Start.gowrap2\n"
+    },
+    "v1.1.4": {
+      "cpu": "File: profile-114.exe\nBuild ID: D:\\github\\XSS\\dist\\performance\\profile-114.exe2026-11-03 12:58:04.7830295 +0800 CST\nType: cpu\nTime: 2026-11-03 13:03:01 CST\nDuration: 74.35s, Total samples = 49.85s (67.04%)\nShowing nodes accounting for 49.32s, 98.94% of 49.85s total\nDropped 283 nodes (cum <= 0.25s)\nShowing top 20 nodes out of 40\n      flat  flat%   sum%        cum   cum%\n    49.32s 98.94% 98.94%     49.32s 98.94%  runtime.cgocall\n         0     0% 98.94%      0.39s  0.78%  bufio.(*Reader).ReadBytes\n         0     0% 98.94%      0.39s  0.78%  bufio.(*Reader).ReadSlice\n         0     0% 98.94%      0.39s  0.78%  bufio.(*Reader).collectFragments\n         0     0% 98.94%      0.39s  0.78%  bufio.(*Reader).fill\n         0     0% 98.94%      0.26s  0.52%  github.com/chromedp/chromedp.(*ExecAllocator).Allocate\n         0     0% 98.94%     47.78s 95.85%  github.com/chromedp/chromedp.(*ExecAllocator).Allocate.func2\n         0     0% 98.94%      0.39s  0.78%  github.com/chromedp/chromedp.(*ExecAllocator).Allocate.func3\n         0     0% 98.94%      0.30s   0.6%  github.com/chromedp/chromedp.Run\n         0     0% 98.94%      0.26s  0.52%  github.com/chromedp/chromedp.initContextBrowser\n         0     0% 98.94%      0.39s  0.78%  github.com/chromedp/chromedp.readOutput\n         0     0% 98.94%      0.28s  0.56%  github.com/spf13/cobra.(*Command).Execute (inline)\n         0     0% 98.94%      0.28s  0.56%  github.com/spf13/cobra.(*Command).ExecuteC\n         0     0% 98.94%      0.26s  0.52%  github.com/spf13/cobra.(*Command).execute\n         0     0% 98.94%      0.48s  0.96%  internal/poll.(*FD).Read\n         0     0% 98.94%      0.39s  0.78%  internal/poll.(*FD).Read.func1\n         0     0% 98.94%      0.62s  1.24%  internal/poll.(*FD).execIO\n         0     0% 98.94%      0.28s  0.56%  main.Execute (inline)\n         0     0% 98.94%      0.28s  0.56%  main.main\n         0     0% 98.94%      0.26s  0.52%  main.runScan\n",
+      "block": "File: profile-114.exe\nBuild ID: D:\\github\\XSS\\dist\\performance\\profile-114.exe2026-11-03 12:58:04.7830295 +0800 CST\nType: delay\nTime: 2026-11-03 13:04:16 CST\nShowing nodes accounting for 2420.57s, 97.52% of 2482.04s total\nDropped 226 nodes (cum <= 12.41s)\nShowing top 30 nodes out of 47\n      flat  flat%   sum%        cum   cum%\n  2148.39s 86.56% 86.56%   2148.39s 86.56%  runtime.selectgo\n         0     0% 86.56%   1138.91s 45.89%  github.com/wqnmlgb151/XSSscan/pkg/dom.(*Scanner).runSingleDOMTest.GuardRequests.func9.1\n   272.18s 10.97% 97.52%    272.18s 10.97%  runtime.chanrecv1\n         0     0% 97.52%    223.89s  9.02%  github.com/chromedp/chromedp.NewContext.func1\n         0     0% 97.52%    220.78s  8.90%  github.com/chromedp/chromedp.(*Context).attachTarget.gowrap1\n         0     0% 97.52%    220.78s  8.90%  github.com/chromedp/chromedp.(*Target).run\n         0     0% 97.52%    220.70s  8.89%  github.com/chromedp/chromedp.(*Target).run.func1\n         0     0% 97.52%    181.44s  7.31%  github.com/wqnmlgb151/XSSscan/pkg/dom.(*Scanner).runSingleDOMTest\n         0     0% 97.52%    179.02s  7.21%  github.com/wqnmlgb151/XSSscan/pkg/dom.(*Scanner).DetectPayloadsWithCoverage.func1\n         0     0% 97.52%    179.02s  7.21%  github.com/wqnmlgb151/XSSscan/pkg/dom.(*Scanner).DetectPayloadsWithCoverage.func1.1\n         0     0% 97.52%    174.27s  7.02%  github.com/chromedp/chromedp.Run\n         0     0% 97.52%    142.73s  5.75%  github.com/chromedp/chromedp.Tasks.Do (inline)\n         0     0% 97.52%    142.69s  5.75%  github.com/chromedp/chromedp.ActionFunc.Do\n         0     0% 97.52%    142.40s  5.74%  github.com/wqnmlgb151/XSSscan/pkg/internal/chromedp.ListenDialogs.func2\n         0     0% 97.52%    137.01s  5.52%  github.com/wqnmlgb151/XSSscan/pkg/dom.(*pageActivity).wait\n         0     0% 97.52%    132.01s  5.32%  github.com/wqnmlgb151/XSSscan/pkg/dom.(*Scanner).runSingleDOMTest.func7\n         0     0% 97.52%     74.08s  2.98%  main.setupSignalHandler.func1\n         0     0% 97.52%     73.97s  2.98%  main.main\n         0     0% 97.52%     73.97s  2.98%  runtime.main\n         0     0% 97.52%     73.96s  2.98%  github.com/spf13/cobra.(*Command).Execute (inline)\n         0     0% 97.52%     73.96s  2.98%  github.com/spf13/cobra.(*Command).ExecuteC\n         0     0% 97.52%     73.96s  2.98%  github.com/spf13/cobra.(*Command).execute\n         0     0% 97.52%     73.96s  2.98%  main.Execute (inline)\n         0     0% 97.52%     73.96s  2.98%  main.runScan\n         0     0% 97.52%     73.96s  2.98%  github.com/wqnmlgb151/XSSscan/pkg/orchestrator.(*Runner).Run\n         0     0% 97.52%     73.96s  2.98%  main.runSelectedModules\n         0     0% 97.52%     73.96s  2.98%  github.com/wqnmlgb151/XSSscan/pkg/orchestrator.invoke\n         0     0% 97.52%     73.96s  2.98%  main.runSelectedModules.func4\n         0     0% 97.52%     48.99s  1.97%  os/exec.(*Cmd).Start.gowrap2\n         0     0% 97.52%     48.99s  1.97%  os/exec.(*Cmd).watchCtx\n"
+    }
+  }
+}

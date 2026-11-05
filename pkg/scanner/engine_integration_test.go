@@ -2,17 +2,18 @@ package scanner
 
 import (
 	"context"
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"net/http"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	ctx "github.com/xsscan/xsscan/pkg/context"
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/pkg/payload"
-	"github.com/xsscan/xsscan/pkg/verify"
+	ctx "github.com/wqnmlgb151/XSSscan/pkg/context"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/payload"
+	"github.com/wqnmlgb151/XSSscan/pkg/verify"
 	"go.uber.org/zap"
 )
 
@@ -36,7 +37,7 @@ func TestFullPipeline_VulnerableTarget(t *testing.T) {
 	engine := NewEngine(cfg, zap.NewNop(), newTestClient(server.URL))
 	target := model.Target{URL: server.URL + "/search?q=test", Method: "GET"}
 
-	result, err := engine.Run(context.Background(), target)
+	result, err := engine.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
@@ -93,7 +94,7 @@ func TestFullPipeline_NoFalsePositive(t *testing.T) {
 	engine := NewEngine(cfg, zap.NewNop(), newTestClient(server.URL))
 	target := model.Target{URL: server.URL + "/page?q=test", Method: "GET"}
 
-	result, err := engine.Run(context.Background(), target)
+	result, err := engine.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
@@ -147,7 +148,7 @@ func TestFullPipeline_WAFAutoBypass(t *testing.T) {
 	engine := NewEngine(cfg, zap.NewNop(), newTestClient(server.URL))
 	target := model.Target{URL: server.URL + "/search?q=test", Method: "GET"}
 
-	result, err := engine.Run(context.Background(), target)
+	result, err := engine.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err == nil || result == nil || result.Stats.Status != model.ScanPartial {
 		t.Fatalf("expected partial result retaining probe failure: result=%+v err=%v", result, err)
 	}
@@ -204,7 +205,7 @@ func TestFullPipeline_ContextProbeFiltering(t *testing.T) {
 	engine := NewEngine(cfg, zap.NewNop(), newTestClient(server.URL))
 	target := model.Target{URL: server.URL + "/page?q=test", Method: "GET"}
 
-	result, err := engine.Run(context.Background(), target)
+	result, err := engine.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
@@ -244,7 +245,7 @@ func TestFullPipeline_ProbeDisabledAllowsFindings(t *testing.T) {
 	engine := NewEngine(cfg, zap.NewNop(), newTestClient(server.URL))
 	target := model.Target{URL: server.URL + "/page?q=test", Method: "GET"}
 
-	result, err := engine.Run(context.Background(), target)
+	result, err := engine.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
@@ -280,7 +281,7 @@ func TestFullPipeline_MultiParameterPartialVuln(t *testing.T) {
 	engine := NewEngine(cfg, zap.NewNop(), newTestClient(server.URL))
 	target := model.Target{URL: server.URL + "/page?q=test&safe=hello", Method: "GET"}
 
-	result, err := engine.Run(context.Background(), target)
+	result, err := engine.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
@@ -325,7 +326,7 @@ func TestFullPipeline_SemanticDedup(t *testing.T) {
 	engine := NewEngine(cfg, zap.NewNop(), newTestClient(server.URL))
 	target := model.Target{URL: server.URL + "/page?q=test", Method: "GET"}
 
-	result, err := engine.Run(context.Background(), target)
+	result, err := engine.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
@@ -383,7 +384,7 @@ func TestScanPayload_AutoWAFBypassFindsVulnerability(t *testing.T) {
 		Desc:    "test auto-bypass",
 	}
 
-	finding, err := engine.scanPayload(context.Background(), injection, p, nil, "127.0.0.1", pathID(""))
+	finding, err := engine.scanPayload(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), injection, p, nil, "127.0.0.1", pathID(""))
 	if err != nil {
 		t.Fatalf("scanPayload failed: %v", err)
 	}

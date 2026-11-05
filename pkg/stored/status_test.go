@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"net/http"
 	"net/url"
 	"sync/atomic"
@@ -15,9 +15,7 @@ import (
 )
 
 func TestDetectWithErrorPreservesFindingAndFailures(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	var saved atomic.Value
 	saved.Store("unique-marker")
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -34,11 +32,11 @@ func TestDetectWithErrorPreservesFindingAndFailures(t *testing.T) {
 	defer server.Close()
 	s := NewScanner(server.Client(), Config{TriggerURLs: []string{server.URL + "/good", server.URL + "/broken"}, MaxPolls: 1, PollingInterval: time.Millisecond}, nil)
 	inj := Injection{Target: model.Target{URL: server.URL + "?q=x"}, Parameter: model.Parameter{Name: "q", Type: model.ParamQuery}, Marker: "unique-marker"}
-	findings, err := s.DetectWithError(context.Background(), []Injection{inj})
+	findings, err := s.DetectWithError(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), []Injection{inj})
 	if err == nil || len(findings) != 1 {
 		t.Fatalf("findings=%v err=%v", findings, err)
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}))
 	cancel()
 	_, err = s.DetectWithError(ctx, []Injection{inj})
 	if !errors.Is(err, context.Canceled) {
@@ -47,9 +45,7 @@ func TestDetectWithErrorPreservesFindingAndFailures(t *testing.T) {
 }
 
 func TestAutoTriggerDiscoveryKeepsHealthyPagesOnPartialFailure(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	var saved atomic.Value
 	saved.Store("unique-marker")
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -65,23 +61,21 @@ func TestAutoTriggerDiscoveryKeepsHealthyPagesOnPartialFailure(t *testing.T) {
 	}))
 	defer server.Close()
 	s := NewScanner(server.Client(), Config{MaxPolls: 1, PollingInterval: time.Millisecond}, nil)
-	findings, err := s.DetectWithError(context.Background(), []Injection{{Target: model.Target{URL: server.URL + "?q=x"}, Parameter: model.Parameter{Name: "q", Type: model.ParamQuery}, Marker: "unique-marker"}})
+	findings, err := s.DetectWithError(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), []Injection{{Target: model.Target{URL: server.URL + "?q=x"}, Parameter: model.Parameter{Name: "q", Type: model.ParamQuery}, Marker: "unique-marker"}})
 	if err == nil || len(findings) != 1 {
 		t.Fatalf("partial crawl erased usable triggers: findings=%d err=%v", len(findings), err)
 	}
 }
 
 func TestAutoTriggerRequiresIndependentQueryDisplay(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprint(w, "<body>no display links</body>")
 	}))
 	defer server.Close()
 	s := NewScanner(server.Client(), Config{}, nil)
-	urls, err := s.discoverTriggerURLs(context.Background(), server.URL+"?q=original", nil)
+	urls, err := s.discoverTriggerURLs(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), server.URL+"?q=original", nil)
 	if err == nil || len(urls) > 0 {
 		t.Fatalf("query entry became its own trigger: %v %v", urls, err)
 	}

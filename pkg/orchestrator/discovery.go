@@ -6,14 +6,16 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/xsscan/xsscan/pkg/crawler"
-	"github.com/xsscan/xsscan/pkg/internal/request"
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/crawler"
+	"github.com/wqnmlgb151/XSSscan/pkg/internal/request"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 type DiscoveryConfig struct {
-	Crawl, RenderSPA bool
-	Depth, MaxPages  int
+	ExcludeURLs, IncludeURLs                []string
+	Crawl, RenderSPA                        bool
+	NoForms, AllowFormSubmit, Authenticated bool
+	Depth, MaxPages                         int
 }
 
 // Discoverer expands one explicit target once for all detector types. Link
@@ -24,6 +26,14 @@ type Discoverer struct {
 }
 
 func (d Discoverer) Expand(ctx context.Context, base model.Target) ([]model.Target, []model.ScanIssue) {
+	scope, err := crawler.NewURLScope(d.Config.ExcludeURLs, d.Config.IncludeURLs)
+	if err != nil {
+		return nil, []model.ScanIssue{{Target: base.URL, Stage: "scope", Message: err.Error()}}
+	}
+	if err = scope.Check(base.URL); err != nil {
+		return nil, []model.ScanIssue{{Target: base.URL, Stage: "discovery-skip", Message: err.Error()}}
+	}
+	ctx = scope.Context(ctx)
 	targets := []model.Target{base}
 	var forms []crawler.FormInfo
 	var issues []model.ScanIssue
@@ -37,11 +47,12 @@ func (d Discoverer) Expand(ctx context.Context, base model.Target) ([]model.Targ
 		queryless = len(u.Query()) == 0
 	}
 	if d.Config.Crawl {
-		c := crawler.NewCrawlerWithConfig(d.Client, crawler.CrawlerConfig{MaxDepth: d.Config.Depth, MaxPages: d.Config.MaxPages, SameHostOnly: true, ExtraHeaders: base.Headers})
+		c := crawler.NewCrawlerWithConfig(d.Client, crawler.CrawlerConfig{NoForms: d.Config.NoForms, Scope: scope, MaxDepth: d.Config.Depth, MaxPages: d.Config.MaxPages, SameHostOnly: true, ExtraHeaders: base.Headers})
 		result, err := c.Crawl(ctx, base.URL)
 		addIssue("crawl", err)
 		if result != nil {
 			forms = result.Forms
+			issues = append(issues, result.Skipped...)
 			for _, rawURL := range result.URLs {
 				target := cloneTarget(base)
 				target.URL = rawURL
@@ -49,7 +60,7 @@ func (d Discoverer) Expand(ctx context.Context, base model.Target) ([]model.Targ
 			}
 		}
 	}
-	if base.Body == "" && (d.Config.Crawl || queryless) {
+	if !d.Config.NoForms && base.Body == "" && (d.Config.Crawl || queryless) {
 		info, err := crawler.ExtractPageInfo(ctx, d.Client, base.URL, base.Headers)
 		addIssue("discovery", err)
 		if info != nil {
@@ -58,6 +69,10 @@ func (d Discoverer) Expand(ctx context.Context, base model.Target) ([]model.Targ
 			}
 			if d.Config.Crawl {
 				for _, mined := range info.ParamTargets {
+					if err := scope.Check(mined.URL); err != nil {
+						issues = append(issues, model.ScanIssue{Target: mined.URL, Stage: "discovery-skip", Message: err.Error()})
+						continue
+					}
 					target := cloneTarget(base)
 					u, err := url.Parse(mined.URL)
 					if err != nil {
@@ -76,7 +91,7 @@ func (d Discoverer) Expand(ctx context.Context, base model.Target) ([]model.Targ
 			}
 		}
 	}
-	if len(forms) == 0 && d.Config.RenderSPA && base.Body == "" && (queryless || d.Config.Crawl) {
+	if !d.Config.NoForms && len(forms) == 0 && d.Config.RenderSPA && base.Body == "" && (queryless || d.Config.Crawl) {
 		rendered, err := crawler.RenderPage(ctx, base.URL, base.Headers, 0)
 		addIssue("render", err)
 		if rendered != nil {
@@ -84,6 +99,33 @@ func (d Discoverer) Expand(ctx context.Context, base model.Target) ([]model.Targ
 		}
 	}
 	for _, form := range forms {
+		if err := scope.Check(form.Action); err != nil {
+			issues = append(issues, model.ScanIssue{Target: form.Action, Stage: "discovery-skip", Message: err.Error()})
+			continue
+		}
+		if d.Config.NoForms {
+			continue
+		}
+		password := false
+		for _, field := range form.Fields {
+			if field.Type == "password" {
+				password = true
+			}
+		}
+		if password {
+			issues = append(issues, model.ScanIssue{Target: form.Action, Stage: "discovery-skip", Message: "password form skipped"})
+			continue
+		}
+		authenticated := d.Config.Authenticated || len(base.Cookies) > 0
+		for name := range base.Headers {
+			if strings.EqualFold(name, "Authorization") || strings.EqualFold(name, "Cookie") {
+				authenticated = true
+			}
+		}
+		if authenticated && strings.EqualFold(form.Method, http.MethodPost) && !d.Config.AllowFormSubmit {
+			issues = append(issues, model.ScanIssue{Target: form.Action, Stage: "discovery-skip", Message: "authenticated automatic POST form skipped; use --allow-form-submit to opt in"})
+			continue
+		}
 		target := cloneTarget(base)
 		target.URL, target.Method = form.Action, strings.ToUpper(form.Method)
 		target.Body = ""
@@ -95,10 +137,7 @@ func (d Discoverer) Expand(ctx context.Context, base model.Target) ([]model.Targ
 		if target.Method == "" {
 			target.Method = http.MethodGet
 		}
-		values := url.Values{}
-		for _, name := range form.Inputs {
-			values.Set(name, "test")
-		}
+		values := form.DefaultValues()
 		if target.Method == http.MethodPost {
 			target.Body = values.Encode()
 			if target.Headers == nil {

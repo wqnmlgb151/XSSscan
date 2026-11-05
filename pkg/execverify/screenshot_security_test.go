@@ -2,6 +2,7 @@ package execverify
 
 import (
 	"context"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -10,12 +11,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 )
 
 func TestScreenshotsDisabledByDefault(t *testing.T) {
-	v, err := NewVerifier(context.Background(), time.Second)
+	v, err := NewVerifier(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +30,7 @@ func TestScreenshotsDisabledByDefault(t *testing.T) {
 }
 
 func TestScreenshotPrivateLifecycleAndConcurrentClose(t *testing.T) {
-	v, err := NewVerifierWithOptions(context.Background(), time.Second, VerifierOptions{CaptureScreenshots: true})
+	v, err := NewVerifierWithOptions(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), time.Second, VerifierOptions{CaptureScreenshots: true})
 	if err != nil || v.screenshotErr != nil {
 		t.Fatalf("storage setup: %v %+v", err, v)
 	}
@@ -77,12 +78,12 @@ func TestOptInScreenshotRealChromeIsPrivateAndTemporary(t *testing.T) {
 		w.Write([]byte("<body>" + r.URL.Query().Get("q") + "</body>"))
 	}))
 	defer server.Close()
-	v, err := NewVerifierWithOptions(context.Background(), 15*time.Second, VerifierOptions{CaptureScreenshots: true})
+	v, err := NewVerifierWithOptions(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 15*time.Second, VerifierOptions{CaptureScreenshots: true})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer v.Close()
-	result, err := v.VerifyPayload(context.Background(), model.Target{URL: server.URL + "/?q=test"}, "q", model.ParamQuery, "<script>alert(1)</script>")
+	result, err := v.VerifyPayload(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: server.URL + "/?q=test"}, "q", model.ParamQuery, "<script>alert(1)</script>")
 	if err != nil || !result.Executed || result.ScreenshotPath == "" {
 		t.Fatalf("opt-in screenshot: %+v %v", result, err)
 	}
@@ -99,13 +100,13 @@ func TestOptInScreenshotRealChromeIsPrivateAndTemporary(t *testing.T) {
 }
 
 func TestScreenshotCancellationRemovesOnlyOwnedDirectory(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}))
 	v, err := NewVerifierWithOptions(ctx, time.Second, VerifierOptions{CaptureScreenshots: true})
 	if err != nil || v.screenshotErr != nil {
 		t.Fatalf("storage setup: %v %+v", err, v)
 	}
 	defer v.Close()
-	other, err := NewVerifierWithOptions(context.Background(), time.Second, VerifierOptions{CaptureScreenshots: true})
+	other, err := NewVerifierWithOptions(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), time.Second, VerifierOptions{CaptureScreenshots: true})
 	if err != nil || other.screenshotErr != nil {
 		t.Fatalf("independent storage: %v %+v", err, other)
 	}

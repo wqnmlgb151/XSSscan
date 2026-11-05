@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	ctx "github.com/xsscan/xsscan/pkg/context"
+	ctx "github.com/wqnmlgb151/XSSscan/pkg/context"
 )
 
 func TestMutatorEntityAngleBrackets(t *testing.T) {

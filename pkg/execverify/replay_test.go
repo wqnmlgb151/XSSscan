@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"io"
 	"net/http"
 	"net/url"
@@ -12,15 +12,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 )
 
 func allowLocalVerification(t *testing.T) {
 	t.Helper()
-	previous := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	t.Cleanup(func() { ssrfguard.AllowPrivate = previous })
+
 }
 
 func TestBuildVerificationRequest_PreservesOriginal(t *testing.T) {
@@ -33,7 +31,7 @@ func TestBuildVerificationRequest_PreservesOriginal(t *testing.T) {
 			target := model.Target{URL: "https://example.com/save", Method: "POST", Body: body,
 				Headers: map[string]string{"Content-Type": ct, "Authorization": "Bearer token"},
 				Cookies: []*http.Cookie{{Name: "session", Value: "secret"}}}
-			req, err := buildVerificationRequest(context.Background(), target, "q", model.ParamBody, "injected")
+			req, err := buildVerificationRequest(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target, "q", model.ParamBody, "injected")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -54,11 +52,11 @@ func TestBuildVerificationRequest_PreservesOriginal(t *testing.T) {
 
 func TestBuildVerificationRequest_ReplacesCookieAndHeader(t *testing.T) {
 	target := model.Target{URL: "https://example.com/", Headers: map[string]string{"x-test": "old", "Cookie": "q=old; session=keep"}}
-	req, err := buildVerificationRequest(context.Background(), target, "X-Test", model.ParamHeader, "new")
+	req, err := buildVerificationRequest(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target, "X-Test", model.ParamHeader, "new")
 	if err != nil || req.Header.Get("X-Test") != "new" {
 		t.Fatalf("Header injection failed: %v", err)
 	}
-	req, err = buildVerificationRequest(context.Background(), target, "q", model.ParamCookie, "new")
+	req, err = buildVerificationRequest(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target, "q", model.ParamCookie, "new")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +130,7 @@ func TestVerifyPayload_ReplaysAuthenticatedPOST(t *testing.T) {
 				io.WriteString(w, "<html><body>"+q+"</body></html>")
 			}))
 			defer server.Close()
-			v, err := NewVerifier(context.Background(), 15*time.Second)
+			v, err := NewVerifier(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 15*time.Second)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -142,7 +140,7 @@ func TestVerifyPayload_ReplaysAuthenticatedPOST(t *testing.T) {
 				body = `{"q":"old","csrf":"token"}`
 			}
 			target := model.Target{URL: server.URL + "/save", Method: "POST", Body: body, Headers: map[string]string{"Content-Type": ct, "Authorization": "Bearer token"}, Cookies: []*http.Cookie{{Name: "session", Value: "secret"}}}
-			result, err := v.VerifyPayload(context.Background(), target, "q", model.ParamBody, `<script>alert('replayed')</script>`)
+			result, err := v.VerifyPayload(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target, "q", model.ParamBody, `<script>alert('replayed')</script>`)
 			if err != nil || !result.Executed || !strings.HasPrefix(result.DialogMessage, "xsscan") {
 				t.Fatalf("POST not verified: %+v, %v", result, err)
 			}
@@ -165,7 +163,7 @@ func TestVerifyPayload_DialogVariantsAndInertReflection(t *testing.T) {
 		fmt.Fprint(w, "<html><body>"+value+"</body></html>")
 	}))
 	defer server.Close()
-	v, err := NewVerifier(context.Background(), 15*time.Second)
+	v, err := NewVerifier(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 15*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +173,7 @@ func TestVerifyPayload_DialogVariantsAndInertReflection(t *testing.T) {
 		{"/", `<script>setTimeout(()=>prompt('proof'),100)</script>`, "prompt"},
 		{"/inert", `<script>alert('proof')</script>`, ""},
 	} {
-		result, err := v.VerifyPayload(context.Background(), model.Target{URL: server.URL + tc.path}, "q", model.ParamQuery, tc.value)
+		result, err := v.VerifyPayload(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: server.URL + tc.path}, "q", model.ParamQuery, tc.value)
 		if err != nil {
 			t.Fatal(err)
 		}

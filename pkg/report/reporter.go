@@ -7,9 +7,9 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/xsscan/xsscan/pkg/internal/privatefs"
-	"github.com/xsscan/xsscan/pkg/internal/text"
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/internal/privatefs"
+	"github.com/wqnmlgb151/XSSscan/pkg/internal/text"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 type OutputFormat string

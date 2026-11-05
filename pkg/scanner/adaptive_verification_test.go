@@ -4,14 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 	"math"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/xsscan/xsscan/pkg/execverify"
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/execverify"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 type adaptiveTestVerifier struct {
@@ -29,7 +30,7 @@ func (v *adaptiveTestVerifier) VerifyFinding(ctx context.Context, f model.Findin
 
 func TestAdaptiveVerificationBoundedAndCancellationJoins(t *testing.T) {
 	e := NewEngine(Config{}, nil, nil)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}))
 	defer cancel()
 	entered := make(chan struct{}, 8)
 	release := make(chan struct{})
@@ -92,7 +93,7 @@ func TestAdaptiveVerificationSetupPanicAndNilAreIncomplete(t *testing.T) {
 	for _, panicSetup := range []bool{false, true} {
 		t.Run(fmt.Sprint(panicSetup), func(t *testing.T) {
 			e := NewEngine(Config{}, nil, nil)
-			s := newAdaptiveVerification(context.Background(), e, model.Target{})
+			s := newAdaptiveVerification(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), e, model.Target{})
 			s.open = func() (candidateVerifier, error) {
 				if panicSetup {
 					panic("setup failure")
@@ -100,8 +101,8 @@ func TestAdaptiveVerificationSetupPanicAndNilAreIncomplete(t *testing.T) {
 				return nil, nil
 			}
 			f := adaptiveCandidate("a", "alert(1)")
-			s.check(context.Background(), &f)
-			s.check(context.Background(), &f)
+			s.check(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), &f)
+			s.check(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), &f)
 			s.Close()
 			if f.ExecutionVerified || f.Evidence.VerificationError == "" || len(e.runIssues) != 1 || e.runCoverage[0].Started != 0 {
 				t.Fatalf("setup failure hidden or retried: %+v %+v", f, e.runIssues)
@@ -121,14 +122,14 @@ func TestAdaptiveVerificationReusesPositiveAndNegativeEvidence(t *testing.T) {
 	v := &adaptiveTestVerifier{check: func(_ context.Context, f model.Finding, _ model.Target) (*execverify.ExecutionResult, error) {
 		return &execverify.ExecutionResult{Executed: f.ReflectionPath == "positive", VerificationPayload: "exact-token"}, nil
 	}}
-	s := newAdaptiveVerification(context.Background(), e, model.Target{})
+	s := newAdaptiveVerification(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), e, model.Target{})
 	s.open = func() (candidateVerifier, error) { return v, nil }
 	positive := adaptiveCandidate("positive", "alert(1)")
 	negative := adaptiveCandidate("negative", "confirm(1)")
 	unsupported := adaptiveCandidate("positive", "custom()")
-	s.check(context.Background(), &unsupported)
-	s.check(context.Background(), &positive)
-	s.check(context.Background(), &negative)
+	s.check(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), &unsupported)
+	s.check(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), &positive)
+	s.check(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), &negative)
 	got := s.finish([]model.Finding{positive, negative, unsupported})
 	s.Close()
 	s.Close()
@@ -159,13 +160,13 @@ func TestAdaptiveVerificationFailureSurvivesLaterProofAndCancellation(t *testing
 		}
 		return &execverify.ExecutionResult{Executed: true}, nil
 	}}
-	s := newAdaptiveVerification(context.Background(), e, model.Target{})
+	s := newAdaptiveVerification(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), e, model.Target{})
 	s.open = func() (candidateVerifier, error) { return v, nil }
 	defer s.Close()
 	a, b := adaptiveCandidate("same", "alert(1)"), adaptiveCandidate("same", "confirm(1)")
-	s.check(context.Background(), &a)
-	s.check(context.Background(), &b)
-	canceled, cancel := context.WithCancel(context.Background())
+	s.check(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), &a)
+	s.check(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), &b)
+	canceled, cancel := context.WithCancel(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}))
 	cancel()
 	other := adaptiveCandidate("independent", "prompt(1)")
 	s.check(canceled, &other)
@@ -180,14 +181,14 @@ func TestAdaptiveVerificationFailureSurvivesLaterProofAndCancellation(t *testing
 
 func TestAdaptiveVerificationUnavailableAndUnsupportedRemainVisible(t *testing.T) {
 	e := NewEngine(Config{}, nil, nil)
-	s := newAdaptiveVerification(context.Background(), e, model.Target{})
+	s := newAdaptiveVerification(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), e, model.Target{})
 	opens := 0
 	s.open = func() (candidateVerifier, error) { opens++; return nil, errors.New("browser unavailable") }
 	a, b := adaptiveCandidate("a", "alert(1)"), adaptiveCandidate("b", "confirm(1)")
-	s.check(context.Background(), &a)
-	s.check(context.Background(), &b)
+	s.check(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), &a)
+	s.check(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), &b)
 	c := adaptiveCandidate("c", "custom()")
-	s.check(context.Background(), &c)
+	s.check(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), &c)
 	got := s.finish([]model.Finding{a, b, c})
 	s.Close()
 	if opens != 1 || len(got) != 3 || len(e.runIssues) != 2 {

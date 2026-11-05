@@ -11,13 +11,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xsscan/xsscan/pkg/analyze"
-	"github.com/xsscan/xsscan/pkg/callback"
-	"github.com/xsscan/xsscan/pkg/httpclient"
-	"github.com/xsscan/xsscan/pkg/internal/request"
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/pkg/payload"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/pkg/analyze"
+	"github.com/wqnmlgb151/XSSscan/pkg/callback"
+	"github.com/wqnmlgb151/XSSscan/pkg/httpclient"
+	"github.com/wqnmlgb151/XSSscan/pkg/internal/request"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/payload"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 )
 
 type Config struct {
@@ -58,7 +58,7 @@ func (s *Scanner) Scan(ctx context.Context, target model.Target) (*model.ScanRes
 			return result, err
 		}
 		for probeIndex := 0; probeIndex < 3; probeIndex++ {
-			token := analyze.GenerateMarker()
+			token := analyze.GenerateMarkerContext(ctx)
 			endpoint := strings.TrimSpace(s.config.Callback)
 			var generator *payload.Generator
 			if !strings.ContainsAny(endpoint, ":/") {

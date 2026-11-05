@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 // startProgress owns its output goroutine; stop waits before results are printed.

@@ -2,12 +2,13 @@
 package httpclient
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"net/http"
 	"net/url"
 
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 )
 
 // ProxyConfig configures an HTTP proxy for all requests (e.g., Burp Suite, ZAP).
@@ -20,14 +21,14 @@ type ProxyConfig struct {
 
 // Validate checks the proxy URL format and SSRF safety.
 // Port is fully user-controllable: specify any port in the URL (e.g., http://127.0.0.1:9090).
-func (p *ProxyConfig) Validate() error {
+func (p *ProxyConfig) Validate(policies ...ssrfguard.Policy) error {
 	if p.URL == "" {
 		return fmt.Errorf("proxy URL is empty")
 	}
 
 	proxyURL, err := url.Parse(p.URL)
 	if err != nil {
-		return fmt.Errorf("invalid proxy URL: %w", err)
+		return fmt.Errorf("invalid proxy URL")
 	}
 
 	// Only allow http, https, and socks5 schemes for proxy
@@ -39,11 +40,14 @@ func (p *ProxyConfig) Validate() error {
 		return fmt.Errorf("proxy URL has no host")
 	}
 
-	// SSRF protection: don't allow proxying to internal IPs unless --allow-private
-	if !ssrfguard.AllowPrivate {
-		if err := ssrfguard.IsURLTargetAllowed(p.URL); err != nil {
-			return fmt.Errorf("proxy target blocked by SSRF guard: %w", err)
-		}
+	var policy ssrfguard.Policy
+	if len(policies) > 0 {
+		policy = policies[0]
+	} else {
+		policy = ssrfguard.PolicyFromContext(context.Background())
+	}
+	if err := policy.IsURLTargetAllowedContext(context.Background(), p.URL); err != nil {
+		return fmt.Errorf("proxy target blocked by SSRF guard: %w", err)
 	}
 
 	return nil
@@ -53,13 +57,19 @@ func (p *ProxyConfig) Validate() error {
 func (p *ProxyConfig) ApplyToTransport(transport *http.Transport) error {
 	proxyURL, err := url.Parse(p.URL)
 	if err != nil {
-		return fmt.Errorf("invalid proxy URL: %w", err)
+		return fmt.Errorf("invalid proxy URL")
 	}
 
+	// net/http applies URL credentials to the proxy request or CONNECT only.
+	// They must never be copied into the target request headers.
+	if p.Username != "" || p.Password != "" {
+		username := p.Username
+		if username == "" && proxyURL.User != nil {
+			username = proxyURL.User.Username()
+		}
+		proxyURL.User = url.UserPassword(username, p.Password)
+	}
 	transport.Proxy = http.ProxyURL(proxyURL)
-
-	// Note: ProxyAuth is set per-request via header, not on Transport.
-	// This is handled in ApplyHeaders if credentials are provided.
 
 	return nil
 }

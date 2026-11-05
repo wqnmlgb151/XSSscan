@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/xsscan/xsscan/pkg/context"
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/context"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 // mkInjection builds an injection point whose contexts carry explicit

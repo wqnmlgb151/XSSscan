@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/fatih/color"
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"math"
 	"net/http"
 	"os"
@@ -17,15 +17,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/pkg/report"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/report"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 )
 
 func TestPrivateBlockNeverPrintsCleanResult(t *testing.T) {
 	defer saveCfg()()
-	old := ssrfguard.AllowPrivate
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	var hits atomic.Int64
 	server := testenv.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { hits.Add(1) }))
 	defer server.Close()
@@ -64,8 +63,7 @@ func TestPrivateBlockNeverPrintsCleanResult(t *testing.T) {
 
 func TestRunScanPartialFailureWritesFindingsAndStatus(t *testing.T) {
 	defer saveCfg()()
-	old := ssrfguard.AllowPrivate
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	var hits atomic.Int64
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
@@ -103,7 +101,7 @@ func TestRunScanPartialFailureWritesFindingsAndStatus(t *testing.T) {
 }
 
 func TestScanAllTargetsCanceledReturnsError(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}))
 	cancel()
 	var findings []model.Finding
 	var stats model.ScanStats

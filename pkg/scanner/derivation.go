@@ -4,8 +4,8 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/xsscan/xsscan/pkg/payload"
-	"github.com/xsscan/xsscan/pkg/verify"
+	"github.com/wqnmlgb151/XSSscan/pkg/payload"
+	"github.com/wqnmlgb151/XSSscan/pkg/verify"
 )
 
 /*

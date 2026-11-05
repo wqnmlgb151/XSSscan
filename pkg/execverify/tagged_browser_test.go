@@ -3,23 +3,21 @@ package execverify
 import (
 	"context"
 	"fmt"
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 )
 
 func TestTaggedDialogRealChrome(t *testing.T) {
 	if testing.Short() {
 		t.Skip("real Chrome")
 	}
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query().Get("q")
 		if r.URL.Path == "/inert" {
@@ -29,13 +27,13 @@ func TestTaggedDialogRealChrome(t *testing.T) {
 		fmt.Fprint(w, "<html><body><script>"+q+"</script></body></html>")
 	}))
 	defer server.Close()
-	v, err := NewVerifier(context.Background(), 20*time.Second)
+	v, err := NewVerifier(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 20*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer v.Close()
 	for _, path := range []string{"active", "inert"} {
-		result, err := v.VerifyPayload(context.Background(), model.Target{URL: server.URL + "/" + path + "?q=x"}, "q", model.ParamQuery, "alert`1`")
+		result, err := v.VerifyPayload(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: server.URL + "/" + path + "?q=x"}, "q", model.ParamQuery, "alert`1`")
 		if err != nil {
 			t.Fatal(err)
 		}

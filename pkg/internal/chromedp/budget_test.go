@@ -6,9 +6,9 @@ import (
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/target"
 	ext "github.com/chromedp/chromedp"
-	"github.com/xsscan/xsscan/pkg/requestbudget"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/pkg/requestbudget"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -20,9 +20,7 @@ func TestBrowserBudgetNetworkAndCleanup(t *testing.T) {
 	if testing.Short() {
 		t.Skip("real Chrome")
 	}
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	var hits atomic.Int64
 	var active atomic.Int64
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -48,7 +46,7 @@ func TestBrowserBudgetNetworkAndCleanup(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	alloc, closeAlloc := NewExecAllocator(context.Background(), StandardHeadlessOptions...)
+	alloc, closeAlloc := NewExecAllocator(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), StandardHeadlessOptions...)
 	defer closeAlloc()
 	parent, closeParent, _ := NewTabContext(alloc)
 	defer closeParent()
@@ -64,7 +62,7 @@ func TestBrowserBudgetNetworkAndCleanup(t *testing.T) {
 		t.Run(map[int64]string{0: "exact", 2: "exhausted"}[limit], func(t *testing.T) {
 			hits.Store(0)
 			m := requestbudget.New(1, limit)
-			caller := requestbudget.WithMeter(context.Background(), m)
+			caller := requestbudget.WithMeter(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), m)
 			tab, closeTab, _, err := NewIsolatedTabContext(caller, parent, 10*time.Second)
 			if err != nil {
 				t.Fatal(err)
@@ -97,7 +95,7 @@ func TestBrowserBudgetNetworkAndCleanup(t *testing.T) {
 	var wg sync.WaitGroup
 	for range 8 {
 		wg.Go(func() {
-			caller := requestbudget.WithMeter(context.Background(), m)
+			caller := requestbudget.WithMeter(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), m)
 			tab, closeTab, _, err := NewIsolatedTabContext(caller, parent, 10*time.Second)
 			if err != nil {
 				t.Error(err)
@@ -115,7 +113,7 @@ func TestBrowserBudgetNetworkAndCleanup(t *testing.T) {
 	if m.Browser.Count() != 2 || hits.Load() != 2 || m.Browser.Denied() == 0 {
 		t.Fatalf("concurrent cap count=%d hits=%d denied=%d", m.Browser.Count(), hits.Load(), m.Browser.Denied())
 	}
-	caller, cancel := context.WithCancel(context.Background())
+	caller, cancel := context.WithCancel(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}))
 	cancel()
 	if _, _, _, err := NewIsolatedTabContext(caller, parent, time.Second); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
@@ -126,7 +124,7 @@ func TestBrowserBudgetNetworkAndCleanup(t *testing.T) {
 	}
 	t.Run("timeout", func(t *testing.T) {
 		m := requestbudget.New(0, 10)
-		tab, closeTab, _, err := NewIsolatedTabContext(requestbudget.WithMeter(context.Background(), m), parent, 5*time.Second)
+		tab, closeTab, _, err := NewIsolatedTabContext(requestbudget.WithMeter(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), m), parent, 5*time.Second)
 		if err != nil {
 			t.Fatal(err)
 		}

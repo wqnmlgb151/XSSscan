@@ -4,9 +4,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/xsscan/xsscan/pkg/analyze"
-	ctx "github.com/xsscan/xsscan/pkg/context"
-	"github.com/xsscan/xsscan/pkg/payload"
+	"github.com/wqnmlgb151/XSSscan/pkg/analyze"
+	ctx "github.com/wqnmlgb151/XSSscan/pkg/context"
+	"github.com/wqnmlgb151/XSSscan/pkg/payload"
 )
 
 // pruneContextPayloads narrows the candidate set using the per-context filter

@@ -3,18 +3,16 @@ package crawler
 import (
 	"context"
 	"fmt"
-	"github.com/xsscan/xsscan/pkg/httpclient"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/pkg/httpclient"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"net/http"
 	"sync/atomic"
 	"testing"
 )
 
 func TestAutomaticDiscoveryStaysInOrigin(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	var foreignHits atomic.Int32
 	foreign := testenv.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { foreignHits.Add(1) }))
 	defer foreign.Close()
@@ -23,9 +21,9 @@ func TestAutomaticDiscoveryStaysInOrigin(t *testing.T) {
 		fmt.Fprintf(w, `<form action="/local"><input name="q"></form><form action="%s/foreign"><input name="secret"></form><a href="%s/page?q=x">foreign</a><a href="/local?q=x">local</a>`, foreign.URL, foreign.URL)
 	}))
 	defer origin.Close()
-	client := httpclient.NewClient(0, nil)
+	client := httpclient.NewClient(0, nil, ssrfguard.Policy{AllowPrivate: true})
 	defer client.CloseIdleConnections()
-	info, err := ExtractPageInfo(context.Background(), client, origin.URL, map[string]string{"Authorization": "Bearer exact", "Cookie": "session=exact"})
+	info, err := ExtractPageInfo(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), client, origin.URL, map[string]string{"Authorization": "Bearer exact", "Cookie": "session=exact"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +31,7 @@ func TestAutomaticDiscoveryStaysInOrigin(t *testing.T) {
 		t.Fatalf("forms: %+v", info.Forms)
 	}
 	crawler := NewCrawlerWithConfig(client, CrawlerConfig{MaxDepth: 2, MaxPages: 10, SameHostOnly: true, ExtraHeaders: map[string]string{"Authorization": "Bearer exact"}})
-	result, err := crawler.Crawl(context.Background(), origin.URL)
+	result, err := crawler.Crawl(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), origin.URL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,15 +64,13 @@ func TestDiscoveryAcceptsEquivalentOrigin(t *testing.T) {
 }
 
 func TestDiscoveryGuardsCallerClientRedirects(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	var hits atomic.Int32
 	foreign := testenv.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { hits.Add(1) }))
 	defer foreign.Close()
 	origin := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, foreign.URL, http.StatusFound) }))
 	defer origin.Close()
-	_, err := ExtractPageInfo(context.Background(), origin.Client(), origin.URL, map[string]string{"Authorization": "Bearer exact"})
+	_, err := ExtractPageInfo(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), origin.Client(), origin.URL, map[string]string{"Authorization": "Bearer exact"})
 	if err == nil || hits.Load() != 0 {
 		t.Fatalf("cross-origin discovery redirect: err=%v hits=%d", err, hits.Load())
 	}

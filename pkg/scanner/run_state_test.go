@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"io"
 	"net/http"
 	"strings"
@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	xssctx "github.com/xsscan/xsscan/pkg/context"
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/pkg/payload"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	xssctx "github.com/wqnmlgb151/XSSscan/pkg/context"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/payload"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 )
 
 type runTransportFunc func(*http.Request) (*http.Response, error)
@@ -23,9 +23,7 @@ type runTransportFunc func(*http.Request) (*http.Response, error)
 func (f runTransportFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
 func TestWorkerPanicsDoNotAbandonDispatcher(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	var calls atomic.Int32
 	client := &http.Client{Transport: runTransportFunc(func(r *http.Request) (*http.Response, error) {
 		if calls.Add(1) > 3 {
@@ -34,7 +32,7 @@ func TestWorkerPanicsDoNotAbandonDispatcher(t *testing.T) {
 		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"text/html"}}, Body: io.NopCloser(strings.NewReader("<body>" + r.URL.Query().Get("q") + "</body>")), Request: r}, nil
 	})}
 	e := NewEngine(Config{Concurrency: 1, RateLimit: 10000, RateBurst: 10000, MaxPayloads: 8}, nil, client)
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 3*time.Second)
 	defer cancel()
 	result, err := e.Run(ctx, model.Target{URL: "http://127.0.0.1/?q=x"})
 	if err == nil || ctx.Err() != nil || result.Stats.Status != model.ScanFailed || result.Stats.Errors < 3 {
@@ -43,21 +41,17 @@ func TestWorkerPanicsDoNotAbandonDispatcher(t *testing.T) {
 }
 
 func TestRequestDeadlineIsFailureNotCancellation(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	client := &http.Client{Transport: runTransportFunc(func(*http.Request) (*http.Response, error) { return nil, context.DeadlineExceeded })}
 	e := NewEngine(Config{}, nil, client)
-	result, err := e.Run(context.Background(), model.Target{URL: "http://127.0.0.1/?q=x"})
+	result, err := e.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: "http://127.0.0.1/?q=x"})
 	if err == nil || result.Stats.Status != model.ScanFailed {
 		t.Fatalf("request timeout mislabeled: %+v %v", result, err)
 	}
 }
 
 func TestRunResetsTargetStateAndCountsRequests(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	var hits atomic.Int64
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
@@ -71,7 +65,7 @@ func TestRunResetsTargetStateAndCountsRequests(t *testing.T) {
 	}))
 	defer server.Close()
 	e := NewEngine(Config{Concurrency: 2, RateLimit: 10000, RateBurst: 10000, MaxPayloads: 1}, nil, server.Client())
-	first, err := e.Run(context.Background(), model.Target{URL: server.URL + "/first?q=x"})
+	first, err := e.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: server.URL + "/first?q=x"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +76,7 @@ func TestRunResetsTargetStateAndCountsRequests(t *testing.T) {
 	e.mutator.Store(payload.NewMutator())
 	e.probeFiltered = 99
 	before := hits.Load()
-	second, err := e.Run(context.Background(), model.Target{URL: server.URL + "/second?q=x"})
+	second, err := e.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: server.URL + "/second?q=x"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +102,7 @@ func TestRunResetsTargetStateAndCountsRequests(t *testing.T) {
 func TestRunWaitingCallerCanCancel(t *testing.T) {
 	e := NewEngine(Config{}, nil, nil)
 	e.runGate <- struct{}{}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}))
 	cancel()
 	result, err := e.Run(ctx, model.Target{URL: "http://127.0.0.1"})
 	<-e.runGate
@@ -118,14 +112,12 @@ func TestRunWaitingCallerCanCancel(t *testing.T) {
 }
 
 func TestRunCanceledDuringAnalysisReturnsResult(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	started := make(chan struct{})
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { close(started); <-r.Context().Done() }))
 	defer server.Close()
 	e := NewEngine(Config{RateLimit: 1000, RateBurst: 1000}, nil, server.Client())
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}))
 	defer cancel()
 	go func() { <-started; cancel() }()
 	start := time.Now()
@@ -139,22 +131,18 @@ func TestRunCanceledDuringAnalysisReturnsResult(t *testing.T) {
 }
 
 func TestProbeHTTPFailureIsNotCleanNegative(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(503) }))
 	defer server.Close()
 	e := NewEngine(Config{RateLimit: 10000, RateBurst: 10000}, nil, server.Client())
-	_, err := e.sendProbeRequest(context.Background(), model.InjectionPoint{Target: model.Target{URL: server.URL + "?q=x"}, Parameter: model.Parameter{Name: "q", Type: model.ParamQuery}}, "probe", "local")
+	_, err := e.sendProbeRequest(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.InjectionPoint{Target: model.Target{URL: server.URL + "?q=x"}, Parameter: model.Parameter{Name: "q", Type: model.ParamQuery}}, "probe", "local")
 	if err == nil || atomic.LoadInt64(&e.errors) == 0 {
 		t.Fatal("probe HTTP failure swallowed")
 	}
 }
 
 func TestMutationFailureRecordedWhileKeepingLaterFinding(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	var count atomic.Int32
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		n := count.Add(1)
@@ -172,7 +160,7 @@ func TestMutationFailureRecordedWhileKeepingLaterFinding(t *testing.T) {
 	defer server.Close()
 	e := NewEngine(Config{RateLimit: 10000, RateBurst: 10000, WAFBypass: true}, nil, server.Client())
 	injection := model.InjectionPoint{Target: model.Target{URL: server.URL + "?q=x"}, Parameter: model.Parameter{Name: "q", Type: model.ParamQuery}, Contexts: []xssctx.Context{{Type: xssctx.ContextHTMLBody}}}
-	_, err := e.scanPayload(context.Background(), injection, payload.Payload{Value: `<img src=x onerror=alert(1)>`, Context: xssctx.ContextHTMLBody}, nil, "local", pathID(""))
+	_, err := e.scanPayload(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), injection, payload.Payload{Value: `<img src=x onerror=alert(1)>`, Context: xssctx.ContextHTMLBody}, nil, "local", pathID(""))
 	if err != nil {
 		t.Fatal(err)
 	}

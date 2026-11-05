@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 	"golang.org/x/net/html"
 )
 

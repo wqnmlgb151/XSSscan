@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 // Module adapts a detector to one run's common input, lifecycle and output.

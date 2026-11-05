@@ -2,14 +2,14 @@ package scanner
 
 import (
 	"context"
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"net/http"
 	"strings"
 	"testing"
 
-	ctx "github.com/xsscan/xsscan/pkg/context"
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	ctx "github.com/wqnmlgb151/XSSscan/pkg/context"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 )
 
 // init is in engine_coverage_test.go — do not duplicate
@@ -91,7 +91,7 @@ func TestProbeValues(t *testing.T) {
 }
 
 func TestRunContextProbe(t *testing.T) {
-	ssrfguard.AllowPrivate = true
+
 	tests := []struct {
 		name     string
 		handler  http.HandlerFunc
@@ -154,7 +154,7 @@ func TestRunContextProbe(t *testing.T) {
 			}
 
 			engine := newTestEngine(server.URL)
-			got := engine.runContextProbe(context.Background(), injection, "127.0.0.1")
+			got := engine.runContextProbe(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), injection, "127.0.0.1")
 			if (got != nil) != tt.wantPass {
 				t.Errorf("runContextProbe(%s) = %v, want %v", tt.name, got != nil, tt.wantPass)
 			}
@@ -185,7 +185,7 @@ func TestRunContextProbe_MultipleContextsPicksBest(t *testing.T) {
 		},
 	}
 
-	got := engine.runContextProbe(context.Background(), injection, "127.0.0.1")
+	got := engine.runContextProbe(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), injection, "127.0.0.1")
 	if got == nil {
 		t.Error("Expected probe to pass (highest-priority exploitable context should be tested)")
 	}
@@ -205,7 +205,7 @@ func TestRunContextProbe_NoContextsFailOpen(t *testing.T) {
 		Contexts:  []ctx.Context{}, // no contexts at all
 	}
 
-	got := engine.runContextProbe(context.Background(), injection, "127.0.0.1")
+	got := engine.runContextProbe(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), injection, "127.0.0.1")
 	if got == nil {
 		t.Error("Expected fail-open when no contexts are present")
 	}
@@ -227,7 +227,7 @@ func TestRunContextProbe_OnlyNonExploitableFailOpen(t *testing.T) {
 		},
 	}
 
-	got := engine.runContextProbe(context.Background(), injection, "127.0.0.1")
+	got := engine.runContextProbe(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), injection, "127.0.0.1")
 	if got == nil {
 		t.Error("Expected fail-open when only non-exploitable contexts are present")
 	}
@@ -251,7 +251,7 @@ func TestRunContextProbe_JSStringContext(t *testing.T) {
 		},
 	}
 
-	got := engine.runContextProbe(context.Background(), injection, "127.0.0.1")
+	got := engine.runContextProbe(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), injection, "127.0.0.1")
 	if got == nil {
 		t.Error("Expected JS string probe to pass when reflection is unescaped")
 	}
@@ -275,7 +275,7 @@ func TestRunContextProbe_JSONContext(t *testing.T) {
 		},
 	}
 
-	got := engine.runContextProbe(context.Background(), injection, "127.0.0.1")
+	got := engine.runContextProbe(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), injection, "127.0.0.1")
 	if got == nil {
 		t.Error("Expected JSON probe to pass when reflection is unescaped")
 	}
@@ -293,7 +293,7 @@ func TestRunContextProbe_NetworkErrorFailOpen(t *testing.T) {
 		},
 	}
 
-	got := engine.runContextProbe(context.Background(), injection, "127.0.0.1")
+	got := engine.runContextProbe(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), injection, "127.0.0.1")
 	if got == nil {
 		t.Error("Expected fail-open on network error")
 	}
@@ -383,7 +383,7 @@ func TestValidateUnescapedProbeWithSpecialChars(t *testing.T) {
 }
 
 func TestSendProbeRequest(t *testing.T) {
-	ssrfguard.AllowPrivate = true
+
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query().Get("q")
 		w.Write([]byte("probe response: " + q))
@@ -397,7 +397,7 @@ func TestSendProbeRequest(t *testing.T) {
 		Parameter: model.Parameter{Name: "q", Type: model.ParamQuery},
 	}
 
-	body, err := engine.sendProbeRequest(context.Background(), injection, "PROBE_VALUE", "127.0.0.1")
+	body, err := engine.sendProbeRequest(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), injection, "PROBE_VALUE", "127.0.0.1")
 	if err != nil {
 		t.Fatalf("sendProbeRequest failed: %v", err)
 	}
@@ -415,7 +415,7 @@ func TestSendProbeRequestInjectError(t *testing.T) {
 		Parameter: model.Parameter{Name: "x", Type: model.ParamType("unsupported")},
 	}
 
-	_, err := engine.sendProbeRequest(context.Background(), injection, "probe", "127.0.0.1")
+	_, err := engine.sendProbeRequest(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), injection, "probe", "127.0.0.1")
 	if err == nil {
 		t.Fatal("Expected error for unsupported parameter type")
 	}

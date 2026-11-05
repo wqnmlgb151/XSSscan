@@ -1,12 +1,13 @@
 package execverify
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
 
-	"github.com/xsscan/xsscan/pkg/analyze"
+	"github.com/wqnmlgb151/XSSscan/pkg/analyze"
 )
 
 var dialogCall = regexp.MustCompile(`\b(alert|confirm|prompt)\(\s*(?:1|'[^'\r\n]*'|"[^"\r\n]*")\s*\)`)
@@ -19,10 +20,14 @@ func SupportsDialogVerification(value string) bool {
 // InstrumentDialogPayload gives supported dialog calls a unique candidate token.
 // Numeric character codes preserve HTML attribute quote compatibility.
 func InstrumentDialogPayload(value string) (string, string, error) {
+	return InstrumentDialogPayloadContext(context.Background(), value)
+}
+
+func InstrumentDialogPayloadContext(ctx context.Context, value string) (string, string, error) {
 	if !SupportsDialogVerification(value) {
 		return "", "", fmt.Errorf("payload has no supported dialog call for candidate-specific verification")
 	}
-	token := analyze.GenerateMarker()
+	token := analyze.GenerateMarkerContext(ctx)
 	codes := make([]string, 0, len(token))
 	for _, r := range token {
 		codes = append(codes, strconv.Itoa(int(r)))

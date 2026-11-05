@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"html"
 	"net/http"
 	"os"
@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	"github.com/fatih/color"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
 )
 
 func captureCLIStreams(t *testing.T, action func() error) (string, string, error) {
@@ -39,8 +38,9 @@ func captureCLIStreams(t *testing.T, action func() error) (string, string, error
 
 func TestSilentConfigurationAndPipelineProduceNoStatus(t *testing.T) {
 	defer saveCfg()()
-	oldPrivate, oldNoColor := ssrfguard.AllowPrivate, color.NoColor
-	defer func() { ssrfguard.AllowPrivate = oldPrivate; color.NoColor = oldNoColor }()
+	oldNoColor := color.NoColor
+	defer func() { color.NoColor = oldNoColor }()
+
 	var authenticated atomic.Int64
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") == "Bearer test-token" {

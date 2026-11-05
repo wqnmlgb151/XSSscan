@@ -5,8 +5,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/xsscan/xsscan/pkg/internal/text"
-	"github.com/xsscan/xsscan/pkg/internal/xsspatterns"
+	"github.com/wqnmlgb151/XSSscan/pkg/internal/text"
+	"github.com/wqnmlgb151/XSSscan/pkg/internal/xsspatterns"
 	"golang.org/x/net/html"
 )
 

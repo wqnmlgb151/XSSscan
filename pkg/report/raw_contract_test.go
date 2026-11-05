@@ -4,7 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/xml"
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 	"golang.org/x/net/html"
 	"os"
 	"path/filepath"

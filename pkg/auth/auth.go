@@ -4,9 +4,9 @@ package auth
 import (
 	"context"
 	"fmt"
-	"github.com/xsscan/xsscan/pkg/csrf"
-	"github.com/xsscan/xsscan/pkg/httpclient"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/pkg/csrf"
+	"github.com/wqnmlgb151/XSSscan/pkg/httpclient"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 	"golang.org/x/net/html"
 	"io"
 	"net/http"

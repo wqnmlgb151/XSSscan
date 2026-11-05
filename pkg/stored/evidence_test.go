@@ -3,7 +3,7 @@ package stored
 import (
 	"context"
 	"fmt"
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"html"
 	"net/http"
 	"strings"
@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xsscan/xsscan/pkg/analyze"
-	"github.com/xsscan/xsscan/pkg/browser"
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/pkg/analyze"
+	"github.com/wqnmlgb151/XSSscan/pkg/browser"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 )
 
 func TestStoredUnknownJavaScriptDiagnostic(t *testing.T) {
@@ -26,9 +26,7 @@ func TestStoredUnknownJavaScriptDiagnostic(t *testing.T) {
 }
 
 func TestStoredEvidenceStructuralGate(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	for _, mode := range []string{"escaped", "textarea", "json", "plain", "stripped", "html"} {
 		t.Run(mode, func(t *testing.T) {
 			var saved atomic.Value
@@ -63,7 +61,7 @@ func TestStoredEvidenceStructuralGate(t *testing.T) {
 			defer server.Close()
 			s := NewScanner(server.Client(), Config{TriggerURLs: []string{server.URL + "/view"}, MaxPolls: 1}, nil)
 			marker := analyze.GenerateMarker()
-			got, err := s.DetectWithError(context.Background(), []Injection{{Target: model.Target{URL: server.URL + "/save?q=test"}, Parameter: model.Parameter{Name: "q", Type: model.ParamQuery}, Marker: marker}})
+			got, err := s.DetectWithError(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), []Injection{{Target: model.Target{URL: server.URL + "/save?q=test"}, Parameter: model.Parameter{Name: "q", Type: model.ParamQuery}, Marker: marker}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -87,9 +85,7 @@ func TestStoredBrowserEvidence(t *testing.T) {
 	if _, err := browser.FindChrome(); err != nil {
 		t.Fatal(err)
 	}
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	for _, mode := range []string{"html", "double-attr", "single-attr", "blocked"} {
 		t.Run(mode, func(t *testing.T) {
 			var saved atomic.Value
@@ -126,7 +122,7 @@ func TestStoredBrowserEvidence(t *testing.T) {
 			defer server.Close()
 			target := model.Target{URL: server.URL + "/save", Method: "POST", Body: "q=test&csrf=keep", Headers: map[string]string{"Authorization": "Bearer proof", "Content-Type": "application/x-www-form-urlencoded"}, Cookies: []*http.Cookie{{Name: "session", Value: "secret"}}}
 			s := NewScanner(server.Client(), Config{TriggerURLs: []string{server.URL + "/view"}, MaxPolls: 1, VerifyExecution: true, RequestTimeout: 15 * time.Second}, nil)
-			got, err := s.DetectWithError(context.Background(), []Injection{{Target: target, Parameter: model.Parameter{Name: "q", Type: model.ParamBody}}})
+			got, err := s.DetectWithError(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), []Injection{{Target: target, Parameter: model.Parameter{Name: "q", Type: model.ParamBody}}})
 			if err != nil {
 				t.Fatal(err)
 			}

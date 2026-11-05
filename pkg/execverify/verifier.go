@@ -22,11 +22,11 @@ import (
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 
-	allocopts "github.com/xsscan/xsscan/pkg/internal/chromedp"
-	"github.com/xsscan/xsscan/pkg/internal/privatefs"
-	"github.com/xsscan/xsscan/pkg/internal/request"
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	allocopts "github.com/wqnmlgb151/XSSscan/pkg/internal/chromedp"
+	"github.com/wqnmlgb151/XSSscan/pkg/internal/privatefs"
+	"github.com/wqnmlgb151/XSSscan/pkg/internal/request"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 )
 
 // ExecutionResult holds the outcome of browser-based execution verification.
@@ -178,7 +178,7 @@ func (v *Verifier) VerifyFinding(ctx context.Context, finding model.Finding, tar
 // VerifyPayload verifies a specific payload against a target parameter.
 func (v *Verifier) VerifyPayload(ctx context.Context, target model.Target, paramName string, paramType model.ParamType, payload string) (result *ExecutionResult, err error) {
 	result = &ExecutionResult{}
-	payload, message, err := InstrumentDialogPayload(payload)
+	payload, message, err := InstrumentDialogPayloadContext(ctx, payload)
 	if err != nil {
 		return result, err
 	}

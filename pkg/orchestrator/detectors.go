@@ -7,12 +7,12 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/xsscan/xsscan/pkg/analyze"
-	"github.com/xsscan/xsscan/pkg/browser"
-	"github.com/xsscan/xsscan/pkg/dom"
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
-	"github.com/xsscan/xsscan/pkg/stored"
+	"github.com/wqnmlgb151/XSSscan/pkg/analyze"
+	"github.com/wqnmlgb151/XSSscan/pkg/browser"
+	"github.com/wqnmlgb151/XSSscan/pkg/dom"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/pkg/stored"
 )
 
 // DOMModule keeps browser creation and detector lifecycle out of CLI parsing.
@@ -65,7 +65,7 @@ func StoredModule(client *http.Client, config stored.Config, discoverHeaders boo
 		result.Stats.ParametersFound = len(params)
 		injections := make([]stored.Injection, 0, len(params))
 		for _, param := range params {
-			injections = append(injections, stored.Injection{Target: target, Parameter: param, Marker: analyze.GenerateMarker()})
+			injections = append(injections, stored.Injection{Target: target, Parameter: param, Marker: analyze.GenerateMarkerContext(ctx)})
 		}
 		detector := stored.NewScanner(client, config, nil)
 		findings, err := detector.DetectWithError(ctx, injections)

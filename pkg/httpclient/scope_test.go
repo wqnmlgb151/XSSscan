@@ -1,17 +1,15 @@
 package httpclient
 
 import (
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"net/http"
 	"sync/atomic"
 	"testing"
 )
 
 func TestRedirectScopeDoesNotForwardCredentials(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	var foreignHits atomic.Int32
 	foreign := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { foreignHits.Add(1) }))
 	defer foreign.Close()
@@ -29,7 +27,7 @@ func TestRedirectScopeDoesNotForwardCredentials(t *testing.T) {
 		http.Redirect(w, r, foreign.URL, http.StatusTemporaryRedirect)
 	}))
 	defer origin.Close()
-	client := NewClient(0, nil)
+	client := NewClient(0, nil, ssrfguard.Policy{AllowPrivate: true})
 	defer client.CloseIdleConnections()
 	for _, path := range []string{"/cross", "/same"} {
 		req, _ := http.NewRequest(http.MethodGet, origin.URL+path, nil)
@@ -53,13 +51,11 @@ func TestRedirectScopeDoesNotForwardCredentials(t *testing.T) {
 }
 
 func TestInitialPrivateRequestBlocked(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = false
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	var hits atomic.Int32
 	server := testenv.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { hits.Add(1) }))
 	defer server.Close()
-	client := NewClient(0, nil)
+	client := NewClient(0, nil, ssrfguard.Policy{AllowPrivate: false})
 	defer client.CloseIdleConnections()
 	resp, err := client.Get(server.URL)
 	if resp != nil {

@@ -5,11 +5,11 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/xsscan/xsscan/pkg/analyze"
-	ctx "github.com/xsscan/xsscan/pkg/context"
-	"github.com/xsscan/xsscan/pkg/internal/xsspatterns"
-	"github.com/xsscan/xsscan/pkg/jsanalysis"
-	"github.com/xsscan/xsscan/pkg/payload"
+	"github.com/wqnmlgb151/XSSscan/pkg/analyze"
+	ctx "github.com/wqnmlgb151/XSSscan/pkg/context"
+	"github.com/wqnmlgb151/XSSscan/pkg/internal/xsspatterns"
+	"github.com/wqnmlgb151/XSSscan/pkg/jsanalysis"
+	"github.com/wqnmlgb151/XSSscan/pkg/payload"
 	"golang.org/x/net/html"
 )
 

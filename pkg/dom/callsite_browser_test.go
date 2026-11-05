@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xsscan/xsscan/pkg/browser"
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/pkg/browser"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 )
 
 // A sink hit must be attributable to the page code that reached it. The stack is read
@@ -25,9 +25,6 @@ func TestDOMBrowserCallSiteAttribution(t *testing.T) {
 	if _, err := browser.FindChrome(); err != nil {
 		t.Fatal(err)
 	}
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
 
 	// The page defines a named function that reaches the sink, so the captured frame
 	// can be checked for a specific, non-incidental name rather than just "something".
@@ -42,7 +39,7 @@ reachSink(decodeURIComponent(location.hash.slice(1)));
 	}))
 	defer server.Close()
 
-	scanner, err := NewScanner(context.Background(), 20*time.Second)
+	scanner, err := NewScanner(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 20*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +51,7 @@ reachSink(decodeURIComponent(location.hash.slice(1)));
 		t.Fatal(err)
 	}
 	test := domXSSTest{Name: "fragment", Source: "location.hash", NavURL: buildURLWithFragment(u, marker)}
-	findings, err := scanner.runSingleDOMTest(context.Background(), model.Target{URL: server.URL}, test, marker, marker)
+	findings, err := scanner.runSingleDOMTest(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: server.URL}, test, marker, marker)
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -86,9 +83,6 @@ func TestDOMBrowserCallSiteUnknownIsReported(t *testing.T) {
 	if _, err := browser.FindChrome(); err != nil {
 		t.Fatal(err)
 	}
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
 
 	// The marker reaches the sink from an inline handler, where the stack may be thin.
 	server := newBrowserServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -99,7 +93,7 @@ document.getElementById('host').innerHTML = decodeURIComponent(location.hash.sli
 	}))
 	defer server.Close()
 
-	scanner, err := NewScanner(context.Background(), 20*time.Second)
+	scanner, err := NewScanner(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 20*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +105,7 @@ document.getElementById('host').innerHTML = decodeURIComponent(location.hash.sli
 		t.Fatal(err)
 	}
 	test := domXSSTest{Name: "fragment", Source: "location.hash", NavURL: buildURLWithFragment(u, marker)}
-	findings, err := scanner.runSingleDOMTest(context.Background(), model.Target{URL: server.URL}, test, marker, marker)
+	findings, err := scanner.runSingleDOMTest(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: server.URL}, test, marker, marker)
 	if err != nil {
 		t.Fatalf("run reported: %v", err)
 	}

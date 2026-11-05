@@ -5,8 +5,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/xsscan/xsscan/pkg/context"
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/context"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 // PayloadType categorizes how a payload is delivered.

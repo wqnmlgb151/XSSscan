@@ -10,16 +10,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xsscan/xsscan/pkg/analyze"
-	xctx "github.com/xsscan/xsscan/pkg/context"
-	"github.com/xsscan/xsscan/pkg/execverify"
-	"github.com/xsscan/xsscan/pkg/httpclient"
-	allocopts "github.com/xsscan/xsscan/pkg/internal/chromedp"
-	"github.com/xsscan/xsscan/pkg/internal/request"
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/pkg/payload"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
-	"github.com/xsscan/xsscan/pkg/verify"
+	"github.com/wqnmlgb151/XSSscan/pkg/analyze"
+	xctx "github.com/wqnmlgb151/XSSscan/pkg/context"
+	"github.com/wqnmlgb151/XSSscan/pkg/execverify"
+	"github.com/wqnmlgb151/XSSscan/pkg/httpclient"
+	allocopts "github.com/wqnmlgb151/XSSscan/pkg/internal/chromedp"
+	"github.com/wqnmlgb151/XSSscan/pkg/internal/request"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/payload"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/pkg/verify"
 )
 
 type triggerObservation struct {
@@ -210,7 +210,7 @@ func (s *Scanner) confirmStored(ctx context.Context, inj Injection, urls []strin
 			problems = append(problems, ctx.Err())
 			break
 		}
-		value, message, err := execverify.InstrumentDialogPayload(candidate.Value)
+		value, message, err := execverify.InstrumentDialogPayloadContext(ctx, candidate.Value)
 		if err != nil {
 			problems = append(problems, err)
 			continue

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/xsscan/xsscan/pkg/analyze"
+	"github.com/wqnmlgb151/XSSscan/pkg/analyze"
 )
 
 // --- jsStringLiteral ---

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 func TestReleaseFormatsAgreeOnIncompleteStatusAndCoverage(t *testing.T) {

@@ -13,8 +13,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/xsscan/xsscan/pkg/httpclient"
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/httpclient"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 // MaxBodyRead limits how much of a multipart part body we read into memory.
@@ -58,7 +58,7 @@ var xmlElementRe = regexp.MustCompile(`(<(\w+)[^>]*>)([^<]*)(</(\w+)>)`)
 // ContentTypeKey is the HTTP header key for Content-Type.
 const ContentTypeKey = "Content-Type"
 
-// ApplyHeaders sets User-Agent, Content-Type, Cookies, Proxy-Authorization, and custom headers on a request.
+// ApplyHeaders sets User-Agent, Content-Type, Cookies and custom headers on a request.
 // If User-Agent is not already set in target.Headers, the default UA or a random UA is used
 // depending on the randomUA flag.
 func ApplyHeaders(req *http.Request, target model.Target, randomUA bool) {
@@ -69,9 +69,6 @@ func ApplyHeaders(req *http.Request, target model.Target, randomUA bool) {
 			req.Header.Set("User-Agent", httpclient.DefaultUA)
 		}
 	}
-	if target.ProxyAuth != "" {
-		req.Header.Set("Proxy-Authorization", target.ProxyAuth)
-	}
 	if target.Body != "" {
 		if ct, ok := target.Headers["Content-Type"]; ok {
 			req.Header.Set("Content-Type", ct)
@@ -81,6 +78,9 @@ func ApplyHeaders(req *http.Request, target model.Target, randomUA bool) {
 		req.AddCookie(c)
 	}
 	for k, v := range target.Headers {
+		if strings.EqualFold(k, "Proxy-Authorization") {
+			continue
+		}
 		req.Header.Set(k, v)
 	}
 }

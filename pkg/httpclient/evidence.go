@@ -12,7 +12,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 const MaxEvidenceBody = 512 * 1024

@@ -2,9 +2,9 @@ package scanner
 
 import (
 	"errors"
-	"github.com/xsscan/xsscan/pkg/execverify"
-	allocopts "github.com/xsscan/xsscan/pkg/internal/chromedp"
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/execverify"
+	allocopts "github.com/wqnmlgb151/XSSscan/pkg/internal/chromedp"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 	"testing"
 )
 

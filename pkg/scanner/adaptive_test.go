@@ -2,13 +2,14 @@ package scanner
 
 import (
 	"context"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 	"strings"
 	"testing"
 	"time"
 
-	xctx "github.com/xsscan/xsscan/pkg/context"
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/pkg/payload"
+	xctx "github.com/wqnmlgb151/XSSscan/pkg/context"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/payload"
 )
 
 // drain pulls every task the scheduler is willing to hand out, calling done()
@@ -474,7 +475,7 @@ func TestDispatcherDeliversEveryItemExactlyOnce(t *testing.T) {
 	}
 
 	in, out := newDispatcherFixture(items, paths)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 10*time.Second)
 	defer cancel()
 
 	dispatcherDone := startPathDispatcher(ctx, in, out, s)
@@ -520,7 +521,7 @@ func TestDispatcherStopsOnCancel(t *testing.T) {
 	}
 	in, out := newDispatcherFixture(items, paths)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}))
 	done := startPathDispatcher(ctx, in, out, s)
 	// Drain whatever was dispatched, then cancel without releasing anything:
 	// the bound stops further dispatch and the dispatcher must still exit.
@@ -555,7 +556,7 @@ func TestDispatcherHandlesSlowArrival(t *testing.T) {
 
 	in := make(chan dispatchItem[int])
 	out := make(chan dispatchItem[int])
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 10*time.Second)
 	defer cancel()
 
 	// Feed one item at a time with a pause, so the dispatcher makes several passes
@@ -770,7 +771,7 @@ func TestDispatcherTerminatesAfterProof(t *testing.T) {
 
 	in := make(chan dispatchItem[int])
 	out := make(chan dispatchItem[int])
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 5*time.Second)
 	defer cancel()
 	go func() {
 		defer close(in)

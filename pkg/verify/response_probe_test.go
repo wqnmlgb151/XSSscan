@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/xsscan/xsscan/pkg/context"
-	"github.com/xsscan/xsscan/pkg/payload"
+	"github.com/wqnmlgb151/XSSscan/pkg/context"
+	"github.com/wqnmlgb151/XSSscan/pkg/payload"
 )
 
 func TestNestedResponseProbeDoesNotBorrowOuterEvidence(t *testing.T) {

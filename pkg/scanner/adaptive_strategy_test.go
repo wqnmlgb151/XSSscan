@@ -3,23 +3,21 @@ package scanner
 import (
 	"context"
 	"fmt"
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"net/http"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/pkg/payload"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/payload"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 	"go.uber.org/zap"
 )
 
 func withAllowPrivate(t *testing.T) {
 	t.Helper()
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	t.Cleanup(func() { ssrfguard.AllowPrivate = old })
+
 }
 
 func newStrategyTestEngine(preset string, strategy string) *Engine {
@@ -60,7 +58,7 @@ func TestAdaptiveStrategyStillFindsReflection(t *testing.T) {
 	target := model.Target{URL: server.URL + "/?q=test"}
 	for _, strategy := range []string{StrategyExhaustive, StrategyAdaptive} {
 		e := newStrategyTestEngine("standard", strategy)
-		res, err := e.Run(context.Background(), target)
+		res, err := e.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 		if err != nil && res == nil {
 			t.Fatalf("strategy %s: %v", strategy, err)
 		}
@@ -93,7 +91,7 @@ func TestAdaptiveStrategyKeepsSafeTargetClean(t *testing.T) {
 	defer server.Close()
 
 	e := newStrategyTestEngine("standard", StrategyAdaptive)
-	res, _ := e.Run(context.Background(), model.Target{URL: server.URL + "/?q=test"})
+	res, _ := e.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: server.URL + "/?q=test"})
 	if res == nil {
 		t.Fatal("no result")
 	}
@@ -128,7 +126,7 @@ func TestAdaptiveStrategySerializesPerPath(t *testing.T) {
 
 	e := newStrategyTestEngine("full", StrategyAdaptive)
 	e.config.Concurrency = 4
-	res, _ := e.Run(context.Background(), model.Target{URL: server.URL + "/?q=test"})
+	res, _ := e.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: server.URL + "/?q=test"})
 	if res == nil {
 		t.Fatal("no result")
 	}
@@ -160,7 +158,7 @@ func TestExhaustiveStrategyStillOverlaps(t *testing.T) {
 
 	e := newStrategyTestEngine("full", StrategyExhaustive)
 	e.config.Concurrency = 4
-	res, _ := e.Run(context.Background(), model.Target{URL: server.URL + "/?q=test"})
+	res, _ := e.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: server.URL + "/?q=test"})
 	if res == nil {
 		t.Fatal("no result")
 	}
@@ -189,7 +187,7 @@ func TestAdaptiveStrategyCancellationTerminates(t *testing.T) {
 	defer close(release)
 
 	e := newStrategyTestEngine("full", StrategyAdaptive)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}))
 	done := make(chan struct{})
 	var res *model.ScanResult
 	var err error

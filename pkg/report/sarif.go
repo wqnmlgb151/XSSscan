@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 // generateSARIF produces a SARIF 2.1.0 report for integration with GitHub Code Scanning,
@@ -19,7 +19,7 @@ func (r *Reporter) generateSARIF(data *ScanData) ([]byte, error) {
 		Tool: sarifTool{
 			Driver: sarifDriver{
 				Name:           "xsscan",
-				InformationURI: "https://github.com/xsscan/xsscan",
+				InformationURI: "https://github.com/wqnmlgb151/XSSscan",
 				Rules:          []sarifRule{},
 			},
 		},

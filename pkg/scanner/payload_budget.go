@@ -1,8 +1,8 @@
 package scanner
 
 import (
-	xctx "github.com/xsscan/xsscan/pkg/context"
-	"github.com/xsscan/xsscan/pkg/payload"
+	xctx "github.com/wqnmlgb151/XSSscan/pkg/context"
+	"github.com/wqnmlgb151/XSSscan/pkg/payload"
 )
 
 // limitPayloads shares a binding budget across contexts and quote breakouts.

@@ -3,23 +3,21 @@ package dom
 import (
 	"context"
 	"fmt"
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"net/http"
 	"net/url"
 	"testing"
 	"time"
 
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 )
 
 func TestDOMBrowserSourceSetupAndAuthenticatedPOST(t *testing.T) {
 	if testing.Short() {
 		t.Skip("local Chrome required")
 	}
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	marker := "xsscanSourceFixture"
 	for _, source := range []string{"localStorage", "sessionStorage", "document-cookie", "postMessage", "referrer"} {
 		t.Run(source, func(t *testing.T) {
@@ -48,7 +46,7 @@ func TestDOMBrowserSourceSetupAndAuthenticatedPOST(t *testing.T) {
 				fmt.Fprintf(w, "<html><body>safe<script>%s</script></body></html>", script)
 			}))
 			defer server.Close()
-			s, err := NewScannerWithAuth(context.Background(), 20*time.Second, &AuthState{Cookies: []*http.Cookie{{Name: "session", Value: "secret", HttpOnly: true}}})
+			s, err := NewScannerWithAuth(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 20*time.Second, &AuthState{Cookies: []*http.Cookie{{Name: "session", Value: "secret", HttpOnly: true}}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -58,7 +56,7 @@ func TestDOMBrowserSourceSetupAndAuthenticatedPOST(t *testing.T) {
 				if probe.Name != source {
 					continue
 				}
-				findings, err := s.runSingleDOMTest(context.Background(), model.Target{URL: server.URL, Method: "POST", Body: "q=original", Headers: map[string]string{"Authorization": "Bearer fixture", "Content-Type": "application/x-www-form-urlencoded"}}, probe, marker, "fixture")
+				findings, err := s.runSingleDOMTest(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: server.URL, Method: "POST", Body: "q=original", Headers: map[string]string{"Authorization": "Bearer fixture", "Content-Type": "application/x-www-form-urlencoded"}}, probe, marker, "fixture")
 				if err != nil || len(findings) == 0 {
 					t.Fatalf("source lost: %+v %v", findings, err)
 				}

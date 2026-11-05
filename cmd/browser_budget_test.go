@@ -3,11 +3,11 @@ package main
 import (
 	"encoding/json"
 	"errors"
-	"github.com/xsscan/xsscan/pkg/model"
-	"github.com/xsscan/xsscan/pkg/report"
-	"github.com/xsscan/xsscan/pkg/requestbudget"
-	"github.com/xsscan/xsscan/pkg/ssrfguard"
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/report"
+	"github.com/wqnmlgb151/XSSscan/pkg/requestbudget"
+
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -20,8 +20,7 @@ func TestBrowserBudgetCLIIncompleteAndAccounting(t *testing.T) {
 		t.Skip("real Chrome")
 	}
 	defer saveCfg()()
-	old := ssrfguard.AllowPrivate
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		w.Write([]byte(`<html><link rel="icon" href="data:,"><script src="/script"></script><body>safe</body></html>`))

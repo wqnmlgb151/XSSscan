@@ -12,8 +12,8 @@ import (
 	"sync/atomic"
 
 	"github.com/chromedp/cdproto/fetch"
-	"github.com/xsscan/xsscan/pkg/internal/request"
-	"github.com/xsscan/xsscan/pkg/model"
+	"github.com/wqnmlgb151/XSSscan/pkg/internal/request"
+	"github.com/wqnmlgb151/XSSscan/pkg/model"
 )
 
 // verifyRequest overrides the initial document request in Chrome. Keeping the

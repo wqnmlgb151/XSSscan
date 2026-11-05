@@ -1,5 +1,69 @@
 # Changelog
 
+## 未发布 — 实战安全加固
+
+### P0-1 代理凭据隔离
+
+- HTTP/HTTPS 代理认证通过 transport 的代理 URL userinfo 处理，CONNECT 和普通代理请求携带认证；目标请求与原始证据不再携带代理认证头。
+- 移除 `model.Target.ProxyAuth` 及其重放/去重哈希输入；目标 Cookie、Authorization、请求体等身份信息继续参与隔离。保留代理 CLI 参数及 `ProxyAuthHeader` SDK 辅助函数。
+- 代理状态日志只显示 scheme/host；URL 解析错误不回显含凭据的原始地址。新增 loopback HTTP/CONNECT、五格式报告及日志安全回归，接入独立 required-tests 清单。
+
+### P0-4 报告语义保护
+
+- 复现并修复短 Cookie 值全局替换破坏 Payload、Parameter、Context 和 HTTP 语法的问题。所有敏感位置继续脱敏（完整认证/Cookie 头、URL userinfo、敏感参数、正文隐藏）。
+- 全局凭据副本替换仅用于至少 8 字节的完整 token 边界；Payload、Parameter 等语义字段只按敏感位置处理。五格式、Schema 1.1、显式 raw opt-in 不变，既有 canary/raw 合约保留。
+
+### P0-5 凭据输入入口
+
+- 新增 `XSSCAN_PASSWORD`、`XSSCAN_PROXY_PASSWORD`、`XSSCAN_OAUTH_CLIENT_SECRET`、`XSSCAN_OAUTH_PASSWORD`、`XSSCAN_JWT`；优先级为显式 CLI > 环境变量（含显式空值）> YAML。新增 `--password-file`、`--jwt-file`、`--password-stdin`；只删除末尾换行，保留空格。
+- 同一凭据的多个显式来源互斥；密码 stdin 不得同时作为 URL 列表，输入上限 1 MiB。Unix 含凭据 YAML 对组/其他用户可读时警告；日志不回显凭据。
+
+### P1-1 容器
+
+- 升级到受支持且固定摘要的 Alpine 3.23.7，内置 Chromium/CA，默认非 root，保留 Chrome 沙箱；builder 同样固定摘要。新增网络禁用的容器 loopback 执行验证 CI，测试专用 fixture 不进入 final 镜像。
+- 镜像只在构建时安装依赖；本机无 Docker，实际镜像构建/执行结果待 CI。Chrome 沙箱所需权限及 CI 权限放宽边界见 `docs/container.md`。
+
+### P1-2 模块路径（零扫描行为变化）
+
+- module/import 统一为实际仓库 `github.com/wqnmlgb151/XSSscan`，不新增依赖、不改变扫描、CLI、报告。SDK 导入者需要更新路径。
+- 历史审计和 legacy 测试清单原文保留；CI 只映射模块前缀，全部历史测试名称继续强制验证，新增路径合约回归。
+
+### P1-3 SSRF 策略与地址边界
+
+- 引入显式不可变 Policy，经请求 context、HTTP 客户端、Chrome 隔离上下文传递；CLI 不再修改包级 AllowPrivate，测试不再依赖修改该全局变量。兼容旧 SDK 的默认入口保留，但不应并发修改兼容全局。
+- CIDR 预编译，补全多播/保留/广播/文档/测试/转换地址；解包 IPv4-mapped、NAT64、6to4 和 Teredo，转换/隧道范围保守拒绝。客户端复制构造策略，避免调用者修改切片改变已有客户端。
+- 新增默认关闭的实验性 `--chrome-pin-dns`：单一 --url、一次解析并校验全部答案，浏览器固定一个已验证 IP，保留同源子资源；强制浏览器直连，批量目标和未显式直连的代理组合明确报错。
+
+### P1-4 Marker 随机性与前缀
+
+- 检测/回调 token 的 12 位后缀改用 crypto/rand 均匀采样，默认 xsscan 前缀和长度保持。保留原 GenerateMarker 与 InstrumentDialogPayload 函数签名，新增 context 入口贯穿四类检测及浏览器确认。
+- 新增 --marker-prefix / --random-marker-prefix 与 YAML 配置，前缀限制为首位小写字母、后续小写字母或数字、最多 32 字符；随机模式每轮一次生成 10 字母前缀并优先于指定前缀。恢复默认用 --random-marker-prefix=false --marker-prefix=xsscan。
+- 多维探针按本轮前缀构建独立验证器；DOM hook 已按完整 marker 注入，xsspatterns 不依赖 marker 前缀，无需改写事件处理器规则。Schema/置信度/adaptive/检测矩阵不变。
+
+### P1-5 Chrome 启动加固
+
+- 真实 Chrome 前置测试确认恢复站点隔离兼容 BrowserContext、隔离存储、守卫/预算、脚本执行与清理；默认去掉 disable-features 中的 site-per-process 并显式启用站点隔离。
+- 显式禁用组件更新；原有后台网络与同步禁用参数保持，三项均以实际 Chrome 命令行回归验证。新增不可变 context 配置，不新增 browser 全局开关。
+
+### 行为变化
+
+- P1-5：Chrome 默认恢复站点隔离并禁用组件更新。`--chrome-disable-site-isolation` 只恢复旧隔离配置；`--chrome-legacy-startup` 完整恢复本项原有隔离/组件更新启动参数。二者默认关闭，支持 YAML，--help 说明；沙箱/证书/代理/预算策略独立。
+
+- P1-3：默认拒绝更多特殊用途地址；授权内网/转换地址可用原 `--allow-private` 显式放开。实验性 DNS 固定默认关闭，`--chrome-pin-dns=false` 恢复普通 DNS；开启时只支持单一目标且 Chrome 直连，优先已验证 IPv4，没有 IPv4 时用首个 IPv6，不保证该固定地址可达。
+
+- P0-5：已有敏感 argv 参数继续可用，非 silent 模式新增一次进程列表/历史风险提示；`--silent` 恢复无提示行为。环境变量现在覆盖 YAML；显式旧 CLI 参数可恢复指定值，未设置环境变量时 YAML 行为保持不变。
+
+- 代理凭据仅提供给代理；自定义目标头中的 `Proxy-Authorization` 也被忽略。这是代理认证泄露修复，不提供向目标泄露代理密码的恢复开关；原有代理用户名/密码参数继续使用。
+- P0-2：认证态自动发现的 POST 表单默认跳过；使用 `--allow-form-submit` 恢复提交。密码表单和危险动作路径始终跳过并报告原因；不提供绕过该保护的开关。未认证的普通表单保留自动提交行为。
+- P0-2：hidden、select、checkbox/radio 等控件保留页面默认值；仅文本类字段填充 `test`。新增 `--no-forms`、可重复的 `--include-url` / `--exclude-url`，同时支持 YAML。URL 范围显式限制扫描请求，跳过原因进入 ScanIssue。
+- P0-3：配置 `--proxy` 时，共享 Chrome allocator 默认同样使用该代理。`--browser-direct` 显式恢复浏览器直连；与代理配置同时使用时 stderr 警告一次。代理密码仅通过 CDP 的匹配 Proxy 认证挑战发送，不出现在 Chrome 参数；`--proxy-insecure` 不改变 Chrome 证书策略。
+- Chrome 不支持带认证的 SOCKS5 时明确报错，支持的 HTTP 代理认证保持可用；纯 Go 扫描不受浏览器限制影响。代理认证拒绝保留不完整诊断，不静默当作安全结果。
+
+## 未发布 — 性能排查
+
+- 增加 v1.1.1/v1.1.4 默认配置五轮本地 A/B、隔离检出分模块计时及 pprof 工具；公开实测结果与可比范围。本地语料尚未复现版本退化，未修改扫描算法或缩减检测/安全检查。
+- 性能门禁验证完整 DOM 矩阵、Stored 请求/注入数、payload 和浏览器执行验证；支持中断恢复，CI 增加门禁自身的反退化测试。见 `test/performance/README.md`。
+
 ## 1.1.4 — 2026-11-02
 
 - 正式发布汇总 v1.1.2～v1.1.4；发布前通过 PR 审查、双平台完整回归和五架构原生产物验收，发布包带 SHA256 与源码/运行记录。流程和已知限制见 `docs/releases/v1.1.4.md`。
@@ -34,4 +98,4 @@
 - 维护发布：版本一致性、构建与审计资料整理。保留 v1.1.0 扫描行为。
 - A 路线审计及基线公开于 `audit/2026-10-31/`。
 
-更早版本见 README 的历史更新日志。
+更早版本见 [历史 Release](https://github.com/wqnmlgb151/XSSscan/releases) 与 Git 提交记录。

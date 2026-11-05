@@ -1,7 +1,7 @@
 package dom
 
 import (
-	"github.com/xsscan/xsscan/test/testenv"
+	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"net/http"
 	"net/http/httptest"
 	"testing"

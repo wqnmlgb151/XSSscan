@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math/rand"
 	"net/http"
 	"net/url"
 	"strings"
@@ -73,7 +72,7 @@ func (a *Analyzer) Analyze(gtx stdctx.Context, target model.Target) (*AnalysisRe
 	// parameter's reflection is wrongly attributed to another.
 	paramMarkers := make(map[string]string, len(params))
 	for _, p := range params {
-		paramMarkers[paramKey(p)] = GenerateMarker()
+		paramMarkers[paramKey(p)] = GenerateMarkerContext(gtx)
 	}
 
 	preserveAuth := hasAuthCredentials(target)
@@ -467,21 +466,4 @@ func hasAuthCredentials(target model.Target) bool {
 		}
 	}
 	return false
-}
-
-// MarkerPrefix is the prefix for all reflection/stored detection markers.
-const MarkerPrefix = "xsscan"
-
-// MarkerRandomLen is the number of random chars appended to MarkerPrefix.
-const MarkerRandomLen = 12
-
-// GenerateMarker produces a unique marker for detection (reflection or stored).
-// Format: MarkerPrefix + MarkerRandomLen random alphanumeric chars.
-func GenerateMarker() string {
-	const letters = "abcdefghijklmnopqrstuvwxyz0123456789"
-	b := make([]byte, MarkerRandomLen)
-	for i := range b {
-		b[i] = letters[rand.Intn(len(letters))]
-	}
-	return MarkerPrefix + string(b)
 }

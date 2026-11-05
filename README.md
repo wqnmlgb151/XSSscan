@@ -113,6 +113,7 @@ go test -race -p 1 -count=1 -timeout 15m ./...
 ```
 
 - [CHANGELOG](CHANGELOG.md)：版本变更。
+- [开发分支 Marker 配置](docs/markers.md)：加密随机后缀、指定/随机前缀与兼容入口。
 - [开发分支 SSRF 策略](docs/ssrf-policy.md)：独立 Policy、特殊地址及实验性 DNS 固定限制。
 - [开发分支容器说明](docs/container.md)：Chromium、非 root、Chrome 沙箱运行条件及验证边界。
 - [开发分支凭据入口](docs/credentials.md)：未发布的环境变量、文件/stdin 与优先级。

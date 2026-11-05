@@ -39,3 +39,12 @@ github.com/wqnmlgb151/XSSscan/pkg/httpclient	TestClientPolicySnapshotsCallerSlic
 github.com/wqnmlgb151/XSSscan/pkg/ssrfguard	TestReservedAndEmbeddedAddressesAreRejected
 github.com/wqnmlgb151/XSSscan/pkg/ssrfguard	TestPinnedPolicyRetainsValidatedAnswers
 github.com/wqnmlgb151/XSSscan/pkg/ssrfguard	TestEmbeddedIPv4AddressDecoding
+github.com/wqnmlgb151/XSSscan/cmd	TestMarkerPrefixCLIUsesConfiguredProbes
+github.com/wqnmlgb151/XSSscan/cmd	TestRandomMarkerPrefixIsStableWithinRun
+github.com/wqnmlgb151/XSSscan/pkg/analyze	TestSecureMarkerReaderAndPrefixValidation
+github.com/wqnmlgb151/XSSscan/pkg/scanner	TestCustomMarkerProbeDimensionsMatchDefaults
+github.com/wqnmlgb151/XSSscan/test/integration	TestCustomMarkerPrefixPreservesFourDetectors
+github.com/wqnmlgb151/XSSscan/test/integration	TestCustomMarkerPrefixPreservesFourDetectors/reflected
+github.com/wqnmlgb151/XSSscan/test/integration	TestCustomMarkerPrefixPreservesFourDetectors/dom
+github.com/wqnmlgb151/XSSscan/test/integration	TestCustomMarkerPrefixPreservesFourDetectors/stored
+github.com/wqnmlgb151/XSSscan/test/integration	TestCustomMarkerPrefixPreservesFourDetectors/blind

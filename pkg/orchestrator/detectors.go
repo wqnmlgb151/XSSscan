@@ -65,7 +65,7 @@ func StoredModule(client *http.Client, config stored.Config, discoverHeaders boo
 		result.Stats.ParametersFound = len(params)
 		injections := make([]stored.Injection, 0, len(params))
 		for _, param := range params {
-			injections = append(injections, stored.Injection{Target: target, Parameter: param, Marker: analyze.GenerateMarker()})
+			injections = append(injections, stored.Injection{Target: target, Parameter: param, Marker: analyze.GenerateMarkerContext(ctx)})
 		}
 		detector := stored.NewScanner(client, config, nil)
 		findings, err := detector.DetectWithError(ctx, injections)

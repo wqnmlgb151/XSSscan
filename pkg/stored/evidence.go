@@ -210,7 +210,7 @@ func (s *Scanner) confirmStored(ctx context.Context, inj Injection, urls []strin
 			problems = append(problems, ctx.Err())
 			break
 		}
-		value, message, err := execverify.InstrumentDialogPayload(candidate.Value)
+		value, message, err := execverify.InstrumentDialogPayloadContext(ctx, candidate.Value)
 		if err != nil {
 			problems = append(problems, err)
 			continue

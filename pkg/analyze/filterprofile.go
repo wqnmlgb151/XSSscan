@@ -20,7 +20,6 @@ type FilterProfile struct {
 // fate the profile needs to determine.
 const FilterProbeValue = MarkerPrefix + `<>"'()=onerror=alert(javascript:`
 
-
 // DetectFilterProfile analyzes a response body containing the reflection of
 // FilterProbeValue. A page can reflect the same input in MULTIPLE places
 // with different escaping (e.g., escaped in body text, raw in an attribute) —
@@ -28,7 +27,11 @@ const FilterProbeValue = MarkerPrefix + `<>"'()=onerror=alert(javascript:`
 // MOST PERMISSIVE behavior: a capability is only marked blocked when EVERY
 // occurrence blocks it. This prevents pruning payloads that work against
 // the raw reflection point. Returns nil if the probe value cannot be located.
-func DetectFilterProfile(body string) *FilterProfile {
+func DetectFilterProfile(body string, prefixes ...string) *FilterProfile {
+	prefix := MarkerPrefix
+	if len(prefixes) > 0 && prefixes[0] != "" {
+		prefix = prefixes[0]
+	}
 	angleRaw := false
 	angleEncoded := false
 	angleStrippedAll := true
@@ -38,7 +41,7 @@ func DetectFilterProfile(body string) *FilterProfile {
 
 	searchFrom := 0
 	for {
-		idx := strings.Index(body[searchFrom:], MarkerPrefix)
+		idx := strings.Index(body[searchFrom:], prefix)
 		if idx < 0 {
 			break
 		}
@@ -49,11 +52,11 @@ func DetectFilterProfile(body string) *FilterProfile {
 		// the marker (up to ~32 chars). The windowed approach failed
 		// because surrounding attribute delimiters polluted raw-quote
 		// detection; the probe's own chars are unambiguous.
-		end := idx + len(MarkerPrefix) + 32
+		end := idx + len(prefix) + 32
 		if end > len(body) {
 			end = len(body)
 		}
-		fragment := body[idx+len(MarkerPrefix) : end]
+		fragment := body[idx+len(prefix) : end]
 
 		fragRaw := strings.Contains(fragment, "<") || strings.Contains(fragment, ">")
 		fragEnc := strings.Contains(fragment, "&lt;") || strings.Contains(fragment, "&gt;")
@@ -73,7 +76,7 @@ func DetectFilterProfile(body string) *FilterProfile {
 			singleRaw = true
 		}
 
-		searchFrom = idx + len(MarkerPrefix)
+		searchFrom = idx + len(prefix)
 	}
 
 	if !anyOccurrence {

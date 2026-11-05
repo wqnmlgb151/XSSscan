@@ -34,6 +34,12 @@
 - CIDR 预编译，补全多播/保留/广播/文档/测试/转换地址；解包 IPv4-mapped、NAT64、6to4 和 Teredo，转换/隧道范围保守拒绝。客户端复制构造策略，避免调用者修改切片改变已有客户端。
 - 新增默认关闭的实验性 `--chrome-pin-dns`：单一 --url、一次解析并校验全部答案，浏览器固定一个已验证 IP，保留同源子资源；强制浏览器直连，批量目标和未显式直连的代理组合明确报错。
 
+### P1-4 Marker 随机性与前缀
+
+- 检测/回调 token 的 12 位后缀改用 crypto/rand 均匀采样，默认 xsscan 前缀和长度保持。保留原 GenerateMarker 与 InstrumentDialogPayload 函数签名，新增 context 入口贯穿四类检测及浏览器确认。
+- 新增 --marker-prefix / --random-marker-prefix 与 YAML 配置，前缀限制为首位小写字母、后续小写字母或数字、最多 32 字符；随机模式每轮一次生成 10 字母前缀并优先于指定前缀。恢复默认用 --random-marker-prefix=false --marker-prefix=xsscan。
+- 多维探针按本轮前缀构建独立验证器；DOM hook 已按完整 marker 注入，xsspatterns 不依赖 marker 前缀，无需改写事件处理器规则。Schema/置信度/adaptive/检测矩阵不变。
+
 ### 行为变化
 
 - P1-3：默认拒绝更多特殊用途地址；授权内网/转换地址可用原 `--allow-private` 显式放开。实验性 DNS 固定默认关闭，`--chrome-pin-dns=false` 恢复普通 DNS；开启时只支持单一目标且 Chrome 直连，优先已验证 IPv4，没有 IPv4 时用首个 IPv6，不保证该固定地址可达。

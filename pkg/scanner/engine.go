@@ -271,7 +271,7 @@ func (e *Engine) run(ctx context.Context, target model.Target) (*model.ScanResul
 	// permission simply because it shares the same scheduling handle.
 	convergent := make(map[pathID]bool)
 	for _, injection := range analysisResult.InjectionPoints {
-		startMarker, endMarker := analyze.GenerateMarker(), analyze.GenerateMarker()
+		startMarker, endMarker := analyze.GenerateMarkerContext(ctx), analyze.GenerateMarkerContext(ctx)
 		var profiles analyze.ContextFilters
 		if body, err := e.sendProbeRequest(ctx, injection, startMarker+`<>"'()=`+endMarker, host); err == nil {
 			profiles = analyze.DetectContextFilters(body, startMarker, endMarker)

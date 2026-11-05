@@ -36,9 +36,9 @@ type ContextProbe struct {
 The second return value is false if no probe is defined for the context.
 Use GetProbesForContext to test all probe dimensions. */
 
-func GetProbeForContext(ct ctx.ContextType) (ContextProbe, bool) {
-	probes, ok := probeLibrary[ct]
-	if !ok || len(probes) == 0 {
+func GetProbeForContext(ct ctx.ContextType, prefixes ...string) (ContextProbe, bool) {
+	probes := GetProbesForContext(ct, prefixes...)
+	if len(probes) == 0 {
 		return ContextProbe{}, false
 	}
 	return probes[0], true
@@ -48,7 +48,10 @@ func GetProbeForContext(ct ctx.ContextType) (ContextProbe, bool) {
 A context is considered exploitable if ANY dimension's validator passes —
 real payloads may use a different breakout mechanism than the primary probe. */
 
-func GetProbesForContext(ct ctx.ContextType) []ContextProbe {
+func GetProbesForContext(ct ctx.ContextType, prefixes ...string) []ContextProbe {
+	if len(prefixes) > 0 && prefixes[0] != "" && prefixes[0] != analyze.MarkerPrefix {
+		return buildProbeLibrary(prefixes[0])[ct]
+	}
 	return probeLibrary[ct]
 }
 
@@ -57,107 +60,120 @@ Probes are SAFE: no alert(), no side effects, just structural tests.
 The first entry is the primary probe; additional entries test alternative
 breakout mechanisms (e.g., quote breakout when angle brackets are stripped). */
 
-var probeLibrary = map[ctx.ContextType][]ContextProbe{
-	ctx.ContextHTMLBody: {{
-		ContextType: ctx.ContextHTMLBody,
-		Probe:       "<" + analyze.MarkerPrefix + ">",
-		Validator:   validateUnescapedProbe("<" + analyze.MarkerPrefix + ">"),
-	}},
-	ctx.ContextHTMLComment: {{
-		ContextType: ctx.ContextHTMLComment,
-		Probe:       "--><" + analyze.MarkerPrefix + "><!--",
-		Validator:   validateCommentBreakout,
-	}},
-	ctx.ContextHTMLTag: {{
-		ContextType: ctx.ContextHTMLTag,
-		Probe:       analyze.MarkerPrefix,
-		Validator:   validateUnescapedProbe(analyze.MarkerPrefix),
-	}},
-	ctx.ContextHTMLAttrName: {{
-		ContextType: ctx.ContextHTMLAttrName,
-		Probe:       analyze.MarkerPrefix,
-		Validator:   validateUnescapedProbe(analyze.MarkerPrefix),
-	}},
-	ctx.ContextHTMLAttrValue: {
-		{
-			ContextType: ctx.ContextHTMLAttrValue,
-			Probe:       " " + analyze.MarkerPrefix + ">",
-			Validator:   validateAttrBreakout,
+var probeLibrary = buildProbeLibrary(analyze.MarkerPrefix)
+
+func buildProbeLibrary(prefix string) map[ctx.ContextType][]ContextProbe {
+	jsStringProbeValue := "';" + prefix + "//"
+	jsonProbeValue := `"` + prefix + `"`
+	templateLiteralProbeValue := "${" + prefix + "}"
+	validateCommentBreakout := func(body string) bool { return strings.Contains(body, "<"+prefix+">") }
+	validateAttrBreakout := func(body string) bool { return strings.Contains(body, prefix+">") }
+	validateDoubleQuoteBreakout := func(body string) bool { return validateQuoteBreakoutWithPrefix(body, prefix) }
+	validateSingleQuoteBreakout := validateDoubleQuoteBreakout
+	validateJSONBreakout := func(body string) bool { return strings.Contains(body, jsonProbeValue) }
+	return map[ctx.ContextType][]ContextProbe{
+		ctx.ContextHTMLBody: {{
+			ContextType: ctx.ContextHTMLBody,
+			Probe:       "<" + prefix + ">",
+			Validator:   validateUnescapedProbe("<" + prefix + ">"),
+		}},
+		ctx.ContextHTMLComment: {{
+			ContextType: ctx.ContextHTMLComment,
+			Probe:       "--><" + prefix + "><!--",
+			Validator:   validateCommentBreakout,
+		}},
+		ctx.ContextHTMLTag: {{
+			ContextType: ctx.ContextHTMLTag,
+			Probe:       prefix,
+			Validator:   validateUnescapedProbe(prefix),
+		}},
+		ctx.ContextHTMLAttrName: {{
+			ContextType: ctx.ContextHTMLAttrName,
+			Probe:       prefix,
+			Validator:   validateUnescapedProbe(prefix),
+		}},
+		ctx.ContextHTMLAttrValue: {
+			{
+				ContextType: ctx.ContextHTMLAttrValue,
+				Probe:       " " + prefix + ">",
+				Validator:   validateAttrBreakout,
+			},
+			// Quote-only breakout: servers that strip < > but preserve quotes
+			// are still exploitable via event-handler attribute injection
+			// (" onmouseover=alert(1) x="). These probes validate that dimension.
+			{
+				ContextType: ctx.ContextHTMLAttrValue,
+				Probe:       `" ` + prefix + `="`,
+				Validator:   validateDoubleQuoteBreakout,
+			},
+			{
+				ContextType: ctx.ContextHTMLAttrValue,
+				Probe:       `' ` + prefix + `='`,
+				Validator:   validateSingleQuoteBreakout,
+			},
 		},
-		// Quote-only breakout: servers that strip < > but preserve quotes
-		// are still exploitable via event-handler attribute injection
-		// (" onmouseover=alert(1) x="). These probes validate that dimension.
-		{
-			ContextType: ctx.ContextHTMLAttrValue,
-			Probe:       `" ` + analyze.MarkerPrefix + `="`,
-			Validator:   validateDoubleQuoteBreakout,
-		},
-		{
-			ContextType: ctx.ContextHTMLAttrValue,
-			Probe:       `' ` + analyze.MarkerPrefix + `='`,
-			Validator:   validateSingleQuoteBreakout,
-		},
-	},
-	ctx.ContextHTMLEntity: {{
-		ContextType: ctx.ContextHTMLEntity,
-		Probe:       analyze.MarkerPrefix,
-		Validator:   validateUnescapedProbe(analyze.MarkerPrefix),
-	}},
-	ctx.ContextJSString: {{
-		ContextType: ctx.ContextJSString,
-		Probe:       jsStringProbeValue,
-		Validator:   validateUnescapedProbe(jsStringProbeValue),
-	}},
-	ctx.ContextJSComment: {{
-		ContextType: ctx.ContextJSComment,
-		Probe:       "/*" + analyze.MarkerPrefix + "*/",
-		Validator:   validateUnescapedProbe(analyze.MarkerPrefix),
-	}},
-	ctx.ContextJSBlock: {{
-		ContextType: ctx.ContextJSBlock,
-		Probe:       "</script><" + analyze.MarkerPrefix + ">",
-		Validator:   validateUnescapedProbe("<" + analyze.MarkerPrefix + ">"),
-	}},
-	ctx.ContextCSSValue: {{
-		ContextType: ctx.ContextCSSValue,
-		Probe:       analyze.MarkerPrefix,
-		Validator:   validateUnescapedProbe(analyze.MarkerPrefix),
-	}},
-	ctx.ContextCSSBlock: {{
-		ContextType: ctx.ContextCSSBlock,
-		Probe:       "</style><" + analyze.MarkerPrefix + "><style>",
-		Validator:   validateUnescapedProbe("<" + analyze.MarkerPrefix + ">"),
-	}},
-	ctx.ContextURLAttr: {{
-		ContextType: ctx.ContextURLAttr,
-		Probe:       "javascript:" + analyze.MarkerPrefix,
-		Validator:   validateURLBreakout,
-	}},
-	ctx.ContextTemplate: {{
-		ContextType: ctx.ContextTemplate,
-		Probe:       "{{" + analyze.MarkerPrefix + "}}",
-		Validator:   validateUnescapedProbe(analyze.MarkerPrefix),
-	}},
-	ctx.ContextSVGContainer: {{
-		ContextType: ctx.ContextSVGContainer,
-		Probe:       "<" + analyze.MarkerPrefix + ">",
-		Validator:   validateUnescapedProbe("<" + analyze.MarkerPrefix + ">"),
-	}},
-	ctx.ContextMathMLContainer: {{
-		ContextType: ctx.ContextMathMLContainer,
-		Probe:       "<" + analyze.MarkerPrefix + ">",
-		Validator:   validateUnescapedProbe("<" + analyze.MarkerPrefix + ">"),
-	}},
-	ctx.ContextJSONValue: {{
-		ContextType: ctx.ContextJSONValue,
-		Probe:       jsonProbeValue,
-		Validator:   validateJSONBreakout,
-	}},
-	ctx.ContextJSTemplateLiteral: {{
-		ContextType: ctx.ContextJSTemplateLiteral,
-		Probe:       templateLiteralProbeValue,
-		Validator:   validateUnescapedProbe(templateLiteralProbeValue),
-	}},
+		ctx.ContextHTMLEntity: {{
+			ContextType: ctx.ContextHTMLEntity,
+			Probe:       prefix,
+			Validator:   validateUnescapedProbe(prefix),
+		}},
+		ctx.ContextJSString: {{
+			ContextType: ctx.ContextJSString,
+			Probe:       jsStringProbeValue,
+			Validator:   validateUnescapedProbe(jsStringProbeValue),
+		}},
+		ctx.ContextJSComment: {{
+			ContextType: ctx.ContextJSComment,
+			Probe:       "/*" + prefix + "*/",
+			Validator:   validateUnescapedProbe(prefix),
+		}},
+		ctx.ContextJSBlock: {{
+			ContextType: ctx.ContextJSBlock,
+			Probe:       "</script><" + prefix + ">",
+			Validator:   validateUnescapedProbe("<" + prefix + ">"),
+		}},
+		ctx.ContextCSSValue: {{
+			ContextType: ctx.ContextCSSValue,
+			Probe:       prefix,
+			Validator:   validateUnescapedProbe(prefix),
+		}},
+		ctx.ContextCSSBlock: {{
+			ContextType: ctx.ContextCSSBlock,
+			Probe:       "</style><" + prefix + "><style>",
+			Validator:   validateUnescapedProbe("<" + prefix + ">"),
+		}},
+		ctx.ContextURLAttr: {{
+			ContextType: ctx.ContextURLAttr,
+			Probe:       "javascript:" + prefix,
+			Validator:   validateURLBreakout,
+		}},
+		ctx.ContextTemplate: {{
+			ContextType: ctx.ContextTemplate,
+			Probe:       "{{" + prefix + "}}",
+			Validator:   validateUnescapedProbe(prefix),
+		}},
+		ctx.ContextSVGContainer: {{
+			ContextType: ctx.ContextSVGContainer,
+			Probe:       "<" + prefix + ">",
+			Validator:   validateUnescapedProbe("<" + prefix + ">"),
+		}},
+		ctx.ContextMathMLContainer: {{
+			ContextType: ctx.ContextMathMLContainer,
+			Probe:       "<" + prefix + ">",
+			Validator:   validateUnescapedProbe("<" + prefix + ">"),
+		}},
+		ctx.ContextJSONValue: {{
+			ContextType: ctx.ContextJSONValue,
+			Probe:       jsonProbeValue,
+			Validator:   validateJSONBreakout,
+		}},
+		ctx.ContextJSTemplateLiteral: {{
+			ContextType: ctx.ContextJSTemplateLiteral,
+			Probe:       templateLiteralProbeValue,
+			Validator:   validateUnescapedProbe(templateLiteralProbeValue),
+		}},
+	}
+
 }
 
 /*
@@ -217,6 +233,10 @@ Naive substring checks produce false positives when quotes reflect raw in
 body text (inert) or inside attribute values without breaking out. */
 
 func validateQuoteBreakout(body string) bool {
+	return validateQuoteBreakoutWithPrefix(body, analyze.MarkerPrefix)
+}
+
+func validateQuoteBreakoutWithPrefix(body, prefix string) bool {
 	z := html.NewTokenizer(strings.NewReader(body))
 	for {
 		tt := z.Next()
@@ -231,7 +251,7 @@ func validateQuoteBreakout(body string) bool {
 				// name (parse error but tolerated): value=""xsscan"=" becomes
 				// attribute `xsscan"`. Trim quotes before comparison.
 				name := strings.Trim(string(key), `"'`)
-				if strings.EqualFold(name, analyze.MarkerPrefix) {
+				if strings.EqualFold(name, prefix) {
 					return true
 				}
 				if !more {
@@ -297,7 +317,7 @@ func (e *Engine) runContextProbe(stdctx context.Context, injection model.Injecti
 	var passed []ctx.Context
 	for _, c := range probed {
 		contextPassed := false
-		for _, probe := range GetProbesForContext(c.Type) {
+		for _, probe := range GetProbesForContext(c.Type, analyze.MarkerPrefixFromContext(stdctx)) {
 			body, err := e.sendProbeRequest(stdctx, injection, probe.Probe, host)
 			if err != nil {
 				e.logger.Debug("probe request failed (fail open)", zap.Error(err),

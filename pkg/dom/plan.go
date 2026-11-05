@@ -33,7 +33,7 @@ func (s *Scanner) requestPlanKey(target model.Target) ([sha256.Size]byte, error)
 func (s *Scanner) checkTargetPlan(ctx context.Context, target model.Target) (*documentPlan, error) {
 	plan := &documentPlan{}
 	model.ReportProgress(ctx, "DOM JS data-flow planning", 0, 0)
-	_, err := s.runSingleDOMTest(ctx, target, domXSSTest{Name: "baseline", NavURL: target.URL}, analyze.GenerateMarker(), "", plan)
+	_, err := s.runSingleDOMTest(ctx, target, domXSSTest{Name: "baseline", NavURL: target.URL}, analyze.GenerateMarkerContext(ctx), "", plan)
 	if err != nil {
 		return nil, err
 	}

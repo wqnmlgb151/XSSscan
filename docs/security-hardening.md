@@ -12,7 +12,7 @@
 | P1-1 Docker | 已完成代码、审查及 Windows/Linux 完整普通/race/历史身份门禁；结果见下方记录 |
 | P1-2 模块路径 | 已完成代码、审查及 Windows/Linux 完整普通/race/历史身份门禁；结果见下方记录 |
 | P1-3 SSRF Policy | 已实现，失败测试转绿；独立审查、build/vet/short-race/指定真实 Chrome 回归通过，跨平台完整 CI 待提交触发 |
-| P1-4 marker | 未完成 |
+| P1-4 marker | 加密随机与前缀配置已实现；四模块自定义前缀、本地完整指定回归通过，跨平台 CI 待触发 |
 | P1-5 Chrome 参数 | 待真实 Chrome 验证 |
 | P1-6 执行观察 | 未完成 |
 | P2-1 公开语料 | 未完成 |
@@ -113,3 +113,11 @@
 - 旧测试不再修改 AllowPrivate；静态核对函数名称、断言/skip 调用数量保持不变。认证用例改为显式 context 入口，保留成功/失败断言。CLI 不修改全局，SDK 遗留默认入口保留兼容。
 - `go build ./...`、`go vet ./...` 通过；最终全仓 short/race 1761 pass / 54 short skip。真实 Chrome DNS 固定同源脚本/执行验证通过；指定五包 Chrome 串行 race 268 pass / 0 skip。审查发现的切片可变问题已补失败测试并修复，最终无 CRITICAL/HIGH。
 - 新行为、恢复开关及网络限制见 CHANGELOG“行为变化”和 `docs/ssrf-policy.md`；实验性固定不提供批量/代理远端 DNS 支持，固定 IP 不保证可达。并非完整网络防火墙；非标准 NAT64 前缀不能自动识别。跨平台完整 CI 待本项提交推送后验证。
+
+## P1-4 验证及边界
+
+- 文件：`pkg/analyze/{marker,analyzer,filterprofile}*.go`、scanner probe factory/engine、DOM plan/scanner、Blind/Stored/orchestrator marker 接线、执行验证 context 入口、cmd flags/YAML 与新回归，CHANGELOG 和 `docs/markers.md`。
+- `p1-4-before.log` 复现缺少前缀入口；修复后 CLI 自定义探针、同轮随机前缀一致/轮间变化、加密随机 reader/错误处理/前缀限制，以及自定义前缀四模块（含真实 DOM Chrome）均 race 通过。所有 probe 维度及验证器等价测试通过。
+- 默认 xsscan + 12 长度不变；随机前缀默认关闭。旧 GenerateMarker()/InstrumentDialogPayload() SDK 签名保留。DOM hook 原本已按完整 marker 生成，xsspatterns 不匹配固定前缀，未为关键词强行重构。
+- build/vet 通过；全仓 short/race 1769 pass / 55 short skip；指定五包真实 Chrome 串行 race 268 pass / 0 skip。独立审查无 CRITICAL/HIGH，三相关包 vet 与两个 marker/probe 单测 race 另通过。
+- 风险：熵源故障 fail closed；随机前缀不保证 WAF 绕过或隐匿工具，固定协议参数/内部 hook 名保持兼容。跨平台完整 CI 待提交触发。

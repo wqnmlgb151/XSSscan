@@ -58,7 +58,7 @@ func (s *Scanner) Scan(ctx context.Context, target model.Target) (*model.ScanRes
 			return result, err
 		}
 		for probeIndex := 0; probeIndex < 3; probeIndex++ {
-			token := analyze.GenerateMarker()
+			token := analyze.GenerateMarkerContext(ctx)
 			endpoint := strings.TrimSpace(s.config.Callback)
 			var generator *payload.Generator
 			if !strings.ContainsAny(endpoint, ":/") {

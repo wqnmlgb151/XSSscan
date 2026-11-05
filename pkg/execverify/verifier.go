@@ -178,7 +178,7 @@ func (v *Verifier) VerifyFinding(ctx context.Context, finding model.Finding, tar
 // VerifyPayload verifies a specific payload against a target parameter.
 func (v *Verifier) VerifyPayload(ctx context.Context, target model.Target, paramName string, paramType model.ParamType, payload string) (result *ExecutionResult, err error) {
 	result = &ExecutionResult{}
-	payload, message, err := InstrumentDialogPayload(payload)
+	payload, message, err := InstrumentDialogPayloadContext(ctx, payload)
 	if err != nil {
 		return result, err
 	}

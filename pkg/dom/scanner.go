@@ -386,7 +386,7 @@ func (s *Scanner) DetectPayloadsWithCoverage(ctx context.Context, target model.T
 	}
 	var tasks []task
 	for _, payload := range payloads {
-		marker := analyze.GenerateMarker()
+		marker := analyze.GenerateMarkerContext(ctx)
 		for _, test := range buildPlannedDOMTests(u, payload, marker, plan) {
 			tasks = append(tasks, task{test, marker, payload})
 		}

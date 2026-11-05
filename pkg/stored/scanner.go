@@ -326,7 +326,7 @@ func (s *Scanner) detectSingle(ctx context.Context, inj Injection, triggerURLs [
 
 func (s *Scanner) detectSingleWithError(ctx context.Context, inj Injection, triggerURLs []string) (*model.Finding, error) {
 	if inj.Marker == "" {
-		inj.Marker = analyze.GenerateMarker()
+		inj.Marker = analyze.GenerateMarkerContext(ctx)
 	}
 	injectTarget := cloneTargetForParam(inj.Target, inj.Parameter, inj.Marker)
 

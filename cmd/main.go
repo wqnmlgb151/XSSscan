@@ -107,6 +107,8 @@ type ScanConfig struct {
 	ChromePath             string
 	BrowserDirect          bool
 	ChromePinDNS           bool
+	MarkerPrefix           string
+	RandomMarkerPrefix     bool
 	ConfigFile             string
 	JWT                    string
 	Silent                 bool
@@ -201,6 +203,8 @@ func main() {
 }
 
 func init() {
+	rootCmd.Flags().StringVar(&cfg.MarkerPrefix, "marker-prefix", analyze.MarkerPrefix, "Marker prefix: lowercase letter then lowercase letters/digits, max 32 (empty uses default)")
+	rootCmd.Flags().BoolVar(&cfg.RandomMarkerPrefix, "random-marker-prefix", false, "Use one cryptographically random prefix per scan (overrides --marker-prefix)")
 	rootCmd.Flags().BoolVar(&cfg.ChromePinDNS, "chrome-pin-dns", false, "Experimental: pin one --url browser origin to validated DNS; forces direct browser connections")
 	rootCmd.Flags().BoolVar(&cfg.BrowserDirect, "browser-direct", false, "Use direct browser connections instead of --proxy (warning when combined)")
 	rootCmd.Flags().StringArrayVar(&cfg.ExcludeURLs, "exclude-url", nil, "Exclude discovery URLs matching a regex (repeatable)")
@@ -332,6 +336,18 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 	ctx, cancel := context.WithCancel(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: cfg.AllowPrivate}))
 	defer cancel()
+	if cfg.RandomMarkerPrefix {
+		prefix, err := analyze.RandomMarkerPrefix()
+		if err != nil {
+			return fmt.Errorf("secure marker prefix: %w", err)
+		}
+		cfg.MarkerPrefix = prefix
+	}
+	var markerErr error
+	ctx, markerErr = analyze.WithMarkerPrefix(ctx, cfg.MarkerPrefix)
+	if markerErr != nil {
+		return markerErr
+	}
 	urlScope, scopeErr := crawler.NewURLScope(cfg.ExcludeURLs, cfg.IncludeURLs)
 	if scopeErr != nil {
 		return scopeErr
@@ -1551,7 +1567,7 @@ func runStoredXSSScan(ctx context.Context, client *http.Client, tgt model.Target
 		injections = append(injections, stored.Injection{
 			Target:    tgt,
 			Parameter: param,
-			Marker:    analyze.GenerateMarker(),
+			Marker:    analyze.GenerateMarkerContext(ctx),
 		})
 	}
 

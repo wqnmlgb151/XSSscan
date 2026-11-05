@@ -17,7 +17,7 @@ import (
 )
 
 func init() {
-	ssrfguard.AllowPrivate = true
+
 }
 
 func TestDetect_MarkerAppearsOnTrigger(t *testing.T) {
@@ -65,7 +65,7 @@ func TestDetect_MarkerAppearsOnTrigger(t *testing.T) {
 		},
 	}
 
-	findings := scanner.Detect(context.Background(), injections)
+	findings := scanner.Detect(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), injections)
 	if len(findings) != 1 {
 		t.Fatalf("Expected 1 finding, got %d", len(findings))
 	}
@@ -112,7 +112,7 @@ func TestDetect_MarkerNeverAppears(t *testing.T) {
 		},
 	}
 
-	findings := scanner.Detect(context.Background(), injections)
+	findings := scanner.Detect(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), injections)
 	if len(findings) != 0 {
 		t.Fatalf("Expected 0 findings (marker never appeared), got %d", len(findings))
 	}
@@ -120,7 +120,7 @@ func TestDetect_MarkerNeverAppears(t *testing.T) {
 
 func TestDetect_EmptyInjections(t *testing.T) {
 	scanner := NewScanner(nil, Config{}, nil)
-	findings := scanner.Detect(context.Background(), nil)
+	findings := scanner.Detect(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), nil)
 	if findings != nil {
 		t.Errorf("Expected nil findings for empty injections, got %v", findings)
 	}
@@ -144,7 +144,7 @@ func TestDetect_ContextCancellation(t *testing.T) {
 		RequestTimeout:  5 * time.Second,
 	}, nil)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	ctx, cancel := context.WithTimeout(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 200*time.Millisecond)
 	defer cancel()
 
 	injections := []Injection{
@@ -202,7 +202,7 @@ func TestDetect_MultipleTriggerURLs(t *testing.T) {
 		},
 	}
 
-	findings := scanner.Detect(context.Background(), injections)
+	findings := scanner.Detect(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), injections)
 	if len(findings) != 1 {
 		t.Fatalf("Expected 1 finding (found on second trigger URL), got %d", len(findings))
 	}
@@ -256,22 +256,19 @@ func TestDetect_BodyParameter(t *testing.T) {
 		},
 	}
 
-	findings := scanner.Detect(context.Background(), injections)
+	findings := scanner.Detect(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), injections)
 	if len(findings) != 1 {
 		t.Fatalf("Expected 1 finding for body parameter, got %d", len(findings))
 	}
 }
 
 func TestCheckTriggerURL_SSRFBlocked(t *testing.T) {
-	origAllow := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = false
-	defer func() { ssrfguard.AllowPrivate = origAllow }()
 
 	scanner := NewScanner(nil, Config{
 		RequestTimeout: 5 * time.Second,
 	}, nil)
 
-	found, err := scanner.checkTriggerURL(context.Background(), "http://127.0.0.1:9999/test", analyze.MarkerPrefix, nil)
+	found, err := scanner.checkTriggerURL(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: false}), "http://127.0.0.1:9999/test", analyze.MarkerPrefix, nil)
 	if err == nil {
 		t.Error("Expected SSRF error for private IP, got nil")
 	}
@@ -326,7 +323,7 @@ func TestDetect_ConcurrentWorkers(t *testing.T) {
 		})
 	}
 
-	findings := scanner.Detect(context.Background(), injections)
+	findings := scanner.Detect(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), injections)
 	if len(findings) != 3 {
 		t.Fatalf("Expected 3 findings (concurrent), got %d", len(findings))
 	}

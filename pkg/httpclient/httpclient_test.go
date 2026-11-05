@@ -8,9 +8,7 @@ import (
 )
 
 func TestClientMaintainsCookies(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	// Server sets a cookie on first request, expects it on second
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if _, err := r.Cookie("session"); err == nil {
@@ -26,7 +24,7 @@ func TestClientMaintainsCookies(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(0, nil)
+	client := NewClient(0, nil, ssrfguard.Policy{AllowPrivate: true})
 	resp, err := client.Get(server.URL)
 	if err != nil {
 		t.Fatalf("First request failed: %v", err)

@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/netip"
 	"net/url"
 	"strings"
 
@@ -13,7 +14,8 @@ import (
 )
 
 // AllowPrivate flag enables scanning of private/internal networks.
-// Set via --allow-private flag for authorized internal security testing.
+// Deprecated: use explicit Policy/WithPolicy. The CLI no longer mutates this
+// compatibility default; concurrent callers should never change it.
 var AllowPrivate = false
 
 // IsURLTargetAllowed validates that a URL does not point to private,
@@ -45,11 +47,11 @@ func IsURLTargetAllowedContext(ctx context.Context, rawURL string) error {
 
 	// Check literal IP addresses first (fast path)
 	if ip := net.ParseIP(host); ip != nil {
-		return checkIP(ip)
+		return PolicyFromContext(ctx).CheckIP(ip)
 	}
 
 	// Resolve hostname and check all resolved IPs
-	ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+	ips, err := PolicyFromContext(ctx).resolve(ctx, host)
 	if err != nil {
 		// If resolution fails, block by default (fail closed)
 		return fmt.Errorf("cannot resolve host %q: %w", host, err)
@@ -59,7 +61,7 @@ func IsURLTargetAllowedContext(ctx context.Context, rawURL string) error {
 		return fmt.Errorf("no addresses for %q", host)
 	}
 	for _, ip := range ips {
-		if err := checkIP(ip.IP); err != nil {
+		if err := PolicyFromContext(ctx).CheckIP(ip.IP); err != nil {
 			return err
 		}
 	}
@@ -67,11 +69,13 @@ func IsURLTargetAllowedContext(ctx context.Context, rawURL string) error {
 }
 
 // checkIP validates a single IP against restricted ranges.
-func checkIP(ip net.IP) error {
+func checkIP(ip net.IP) error { return (Policy{AllowPrivate: AllowPrivate}).CheckIP(ip) }
+
+func (p Policy) CheckIP(ip net.IP) error {
 	if ip == nil {
 		return fmt.Errorf("invalid IP address")
 	}
-	if !AllowPrivate {
+	if !p.AllowPrivate {
 		if ip.IsLoopback() {
 			return fmt.Errorf("blocked: loopback address %s", ip)
 		}
@@ -92,26 +96,56 @@ func checkIP(ip net.IP) error {
 	return nil
 }
 
-// isPrivateIP checks RFC1918 and RFC4193 private ranges.
-func isPrivateIP(ip net.IP) bool {
-	privateRanges := []string{
-		"10.0.0.0/8",     // RFC1918
-		"172.16.0.0/12",  // RFC1918
-		"192.168.0.0/16", // RFC1918
-		"127.0.0.0/8",    // loopback (also caught by IsLoopback)
-		"0.0.0.0/8",      // current network
-		"169.254.0.0/16", // link-local (also caught by IsLinkLocalUnicast)
-		"100.64.0.0/10",  // CGNAT (RFC6598)
-		"fc00::/7",       // IPv6 unique local (RFC4193)
-		"fe80::/10",      // IPv6 link-local
+// Prefixes are compiled once. Translation/tunnel ranges fail closed even when
+// an embedded public IPv4 is present: their actual egress depends on local routing.
+var restrictedPrefixes = func() []netip.Prefix {
+	ranges := []string{
+		"0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12",
+		"192.0.0.0/24", "192.0.2.0/24", "192.88.99.0/24", "192.168.0.0/16", "198.18.0.0/15", "198.51.100.0/24", "203.0.113.0/24", "224.0.0.0/4", "240.0.0.0/4",
+		"::/96", "::1/128", "64:ff9b::/96", "64:ff9b:1::/48", "100::/64", "100:0:0:1::/64", "3fff::/20", "5f00::/16", "2001::/32", "2001:2::/48", "2001:db8::/32", "2001:10::/28", "2001:20::/28", "2002::/16", "fc00::/7", "fe80::/10", "fec0::/10", "ff00::/8",
 	}
-	for _, cidr := range privateRanges {
-		_, ipnet, err := net.ParseCIDR(cidr)
-		if err == nil && ipnet.Contains(ip) {
+	out := make([]netip.Prefix, 0, len(ranges))
+	for _, raw := range ranges {
+		out = append(out, netip.MustParsePrefix(raw))
+	}
+	return out
+}()
+
+func isPrivateIP(ip net.IP) bool {
+	address, ok := netip.AddrFromSlice(ip)
+	if !ok {
+		return true
+	}
+	address = address.Unmap()
+	if embedded, ok := embeddedIPv4(address); ok && isPrivateIP(embedded.AsSlice()) {
+		return true
+	}
+	for _, prefix := range restrictedPrefixes {
+		if prefix.Contains(address) {
 			return true
 		}
 	}
 	return false
+}
+
+var nat64Prefix = netip.MustParsePrefix("64:ff9b::/96")
+var sixToFourPrefix = netip.MustParsePrefix("2002::/16")
+var teredoPrefix = netip.MustParsePrefix("2001::/32")
+
+func embeddedIPv4(address netip.Addr) (netip.Addr, bool) {
+	if !address.Is6() {
+		return netip.Addr{}, false
+	}
+	bytes := address.As16()
+	switch {
+	case nat64Prefix.Contains(address):
+		return netip.AddrFrom4([4]byte{bytes[12], bytes[13], bytes[14], bytes[15]}), true
+	case sixToFourPrefix.Contains(address):
+		return netip.AddrFrom4([4]byte{bytes[2], bytes[3], bytes[4], bytes[5]}), true
+	case teredoPrefix.Contains(address):
+		return netip.AddrFrom4([4]byte{^bytes[12], ^bytes[13], ^bytes[14], ^bytes[15]}), true
+	}
+	return netip.Addr{}, false
 }
 
 // HostsMatch checks whether two URLs share the same host or parent domain

@@ -15,7 +15,7 @@ type ipResolver interface {
 // address from that result. The transport still uses the original host for TLS.
 func DialContext(ctx context.Context, network, address string) (net.Conn, error) {
 	dialer := &net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}
-	return dialResolved(ctx, network, address, net.DefaultResolver, dialer.DialContext)
+	return dialResolved(ctx, network, address, policyResolver{PolicyFromContext(ctx)}, dialer.DialContext)
 }
 
 func dialResolved(ctx context.Context, network, address string, resolver ipResolver, dial func(context.Context, string, string) (net.Conn, error)) (net.Conn, error) {
@@ -34,7 +34,7 @@ func dialResolved(ctx context.Context, network, address string, resolver ipResol
 		if addr.Zone != "" {
 			return nil, fmt.Errorf("scoped IP addresses are unsupported")
 		}
-		if err := checkIP(addr.IP); err != nil {
+		if err := PolicyFromContext(ctx).CheckIP(addr.IP); err != nil {
 			return nil, err
 		}
 	}
@@ -49,4 +49,10 @@ func dialResolved(ctx context.Context, network, address string, resolver ipResol
 		}
 	}
 	return nil, fmt.Errorf("connect %q: %w", address, err)
+}
+
+type policyResolver struct{ policy Policy }
+
+func (r policyResolver) LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error) {
+	return r.policy.resolve(ctx, host)
 }

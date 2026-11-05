@@ -1,23 +1,22 @@
 package ssrfguard
 
 import (
+	"context"
 	"testing"
 )
 
 // Validate literal public addresses without network requests or external DNS.
 func TestIsURLTargetAllowed_PublicLiteralIPs(t *testing.T) {
-	old := AllowPrivate
-	AllowPrivate = false
-	defer func() { AllowPrivate = old }()
+
 	for _, raw := range []string{"https://8.8.8.8/page?q=test", "http://1.1.1.1/", "https://[2606:4700:4700::1111]/"} {
-		if err := IsURLTargetAllowed(raw); err != nil {
+		if err := (Policy{AllowPrivate: false}).IsURLTargetAllowedContext(context.Background(), raw); err != nil {
 			t.Fatalf("public literal rejected: %s: %v", raw, err)
 		}
 	}
 }
 
 func TestIsURLTargetAllowed_LiteralPrivateIPs(t *testing.T) {
-	AllowPrivate = false
+
 	privateURLs := []string{
 		"http://127.0.0.1/page",
 		"http://10.0.0.1/admin",
@@ -29,15 +28,13 @@ func TestIsURLTargetAllowed_LiteralPrivateIPs(t *testing.T) {
 		"http://0.0.0.0/",
 	}
 	for _, u := range privateURLs {
-		if err := IsURLTargetAllowed(u); err == nil {
+		if err := (Policy{AllowPrivate: false}).IsURLTargetAllowedContext(context.Background(), u); err == nil {
 			t.Errorf("Private URL %q should be blocked", u)
 		}
 	}
 }
 
 func TestIsURLTargetAllowed_AllowPrivate(t *testing.T) {
-	AllowPrivate = true
-	defer func() { AllowPrivate = false }()
 
 	privateURLs := []string{
 		"http://127.0.0.1/page",
@@ -45,21 +42,21 @@ func TestIsURLTargetAllowed_AllowPrivate(t *testing.T) {
 		"http://192.168.1.1/router",
 	}
 	for _, u := range privateURLs {
-		if err := IsURLTargetAllowed(u); err != nil {
+		if err := (Policy{AllowPrivate: true}).IsURLTargetAllowedContext(context.Background(), u); err != nil {
 			t.Errorf("With AllowPrivate=true, URL %q should be allowed, got: %v", u, err)
 		}
 	}
 }
 
 func TestIsURLTargetAllowed_InvalidURL(t *testing.T) {
-	AllowPrivate = false
+
 	invalidURLs := []string{
 		"",
 		"not-a-url",
 		"http://",
 	}
 	for _, u := range invalidURLs {
-		if err := IsURLTargetAllowed(u); err == nil {
+		if err := (Policy{AllowPrivate: false}).IsURLTargetAllowedContext(context.Background(), u); err == nil {
 			t.Errorf("Invalid URL %q should return error", u)
 		}
 	}

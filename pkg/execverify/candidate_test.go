@@ -3,6 +3,7 @@ package execverify
 import (
 	"context"
 	"fmt"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 	"html"
 	"net/http"
 	"strings"
@@ -56,12 +57,12 @@ func TestBrowserCandidateHoverAndUnrelatedDialog(t *testing.T) {
 				fmt.Fprintf(w, `<input value='%s'></body></html>`, value)
 			}))
 			defer server.Close()
-			v, err := NewVerifier(context.Background(), 15*time.Second)
+			v, err := NewVerifier(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 15*time.Second)
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer v.Close()
-			got, err := v.VerifyPayload(context.Background(), model.Target{URL: server.URL + "?q=test"}, "q", model.ParamQuery, "' onmouseover='alert(1)' style='display:block;width:100vw;height:100vh")
+			got, err := v.VerifyPayload(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: server.URL + "?q=test"}, "q", model.ParamQuery, "' onmouseover='alert(1)' style='display:block;width:100vw;height:100vh")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -92,12 +93,12 @@ func TestBrowserIncompleteNavigationRejectsDialog(t *testing.T) {
 		fmt.Fprint(w, "<html><body>"+r.URL.Query().Get("q")+`<img src="/slow.png"></body></html>`)
 	}))
 	defer server.Close()
-	v, err := NewVerifier(context.Background(), 6*time.Second)
+	v, err := NewVerifier(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 6*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer v.Close()
-	got, err := v.VerifyPayload(context.Background(), model.Target{URL: server.URL}, "q", model.ParamQuery, `<script>alert(1)</script>`)
+	got, err := v.VerifyPayload(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: server.URL}, "q", model.ParamQuery, `<script>alert(1)</script>`)
 	if err == nil || got == nil || got.Executed || got.LoadError == "" {
 		t.Fatalf("incomplete navigation accepted: %+v %v", got, err)
 	}

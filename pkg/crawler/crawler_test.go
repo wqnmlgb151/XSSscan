@@ -233,8 +233,6 @@ func TestCrawler_CrawlSinglePage(t *testing.T) {
 }
 
 func TestCrawler_CrawlTwoDepths(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
@@ -251,7 +249,7 @@ func TestCrawler_CrawlTwoDepths(t *testing.T) {
 
 	// maxDepth=2: start (d0) → page1 (d1) → page2 (d2)
 	c := NewCrawler(nil, 2, 10, true)
-	result, err := c.Crawl(context.Background(), server.URL+"/")
+	result, err := c.Crawl(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), server.URL+"/")
 	if err != nil {
 		t.Fatalf("Crawl failed: %v", err)
 	}
@@ -261,8 +259,6 @@ func TestCrawler_CrawlTwoDepths(t *testing.T) {
 }
 
 func TestCrawler_CrawlMaxPages(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
@@ -277,7 +273,7 @@ func TestCrawler_CrawlMaxPages(t *testing.T) {
 
 	// maxPages=3: start (1) + a (2) + b (3) → stop before c
 	c := NewCrawler(nil, 5, 3, false)
-	result, err := c.Crawl(context.Background(), server.URL+"/")
+	result, err := c.Crawl(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), server.URL+"/")
 	if err != nil {
 		t.Fatalf("Crawl failed: %v", err)
 	}
@@ -315,9 +311,7 @@ func TestCrawler_CrawlInvalidStartURL(t *testing.T) {
 }
 
 func TestCrawler_CrawlNonHTMLOverHTTP(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"links": ["/page1"]}`))
@@ -325,7 +319,7 @@ func TestCrawler_CrawlNonHTMLOverHTTP(t *testing.T) {
 	defer server.Close()
 
 	c := NewCrawler(nil, 2, 10, true)
-	result, err := c.Crawl(context.Background(), server.URL)
+	result, err := c.Crawl(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), server.URL)
 	if err != nil {
 		t.Fatalf("Crawl failed: %v", err)
 	}
@@ -434,8 +428,6 @@ func TestExtractRoutePatterns_MultipleRoutes(t *testing.T) {
 // ===== Sitemap and Robots Discovery Tests =====
 
 func TestDiscoverSitemap(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	ts := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/xml")
@@ -457,8 +449,6 @@ func TestDiscoverSitemap(t *testing.T) {
 }
 
 func TestDiscoverRobots(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	ts := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
@@ -483,8 +473,6 @@ func TestDiscoverRobots(t *testing.T) {
 }
 
 func TestCrawl_WithSitemapDiscovery(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	ts := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
@@ -506,7 +494,7 @@ func TestCrawl_WithSitemapDiscovery(t *testing.T) {
 		SameHostOnly:    false,
 		DiscoverSitemap: true,
 	})
-	result, err := c.Crawl(context.Background(), ts.URL)
+	result, err := c.Crawl(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), ts.URL)
 	if err != nil {
 		t.Fatalf("Crawl failed: %v", err)
 	}

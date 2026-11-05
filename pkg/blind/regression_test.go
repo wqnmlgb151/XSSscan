@@ -16,9 +16,7 @@ import (
 )
 
 func TestBlindCorrelationControls(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	t.Cleanup(func() { ssrfguard.AllowPrivate = old })
+
 	for _, tc := range []struct {
 		name       string
 		correlated bool
@@ -49,7 +47,7 @@ func TestBlindCorrelationControls(t *testing.T) {
 				defer mu.Unlock()
 				return append([]callback.Callback(nil), observed...), nil
 			}})
-			result, err := scan.Scan(context.Background(), model.Target{URL: server.URL + "/?q=x"})
+			result, err := scan.Scan(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: server.URL + "/?q=x"})
 			if err != nil || result.Stats.Status != model.ScanCompleted || result.Stats.PayloadsSent == 0 {
 				t.Fatalf("incomplete: %+v %v", result, err)
 			}
@@ -66,14 +64,12 @@ func TestBlindCorrelationControls(t *testing.T) {
 }
 
 func TestBlindObservationDeadlineAndCancellation(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	t.Cleanup(func() { ssrfguard.AllowPrivate = old })
+
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) }))
 	defer server.Close()
 	for _, deadline := range []bool{true, false} {
 		t.Run(map[bool]string{true: "deadline", false: "cancellation"}[deadline], func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel := context.WithCancel(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}))
 			defer cancel()
 			var expected error = context.Canceled
 			if deadline {

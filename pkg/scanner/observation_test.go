@@ -21,9 +21,7 @@ import (
 )
 
 func TestObservedNegativeResponsesAndShadowReplay(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	var calls atomic.Int32
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
@@ -39,7 +37,7 @@ func TestObservedNegativeResponsesAndShadowReplay(t *testing.T) {
 	p := payload.Payload{Value: `<script>alert(1)</script>`, Context: xctx.ContextHTMLBody}
 	for _, path := range []string{"/absent", "/encoded"} {
 		inj := model.InjectionPoint{Target: model.Target{URL: server.URL + path + "?q=test"}, Parameter: model.Parameter{Name: "q", Type: model.ParamQuery}}
-		f, _, err := e.doScanPayload(context.Background(), inj, p, nil, "127.0.0.1")
+		f, _, err := e.doScanPayload(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), inj, p, nil, "127.0.0.1")
 		if err != nil || f != nil {
 			t.Fatalf("finding=%+v err=%v", f, err)
 		}
@@ -102,7 +100,7 @@ func TestObservationBoundsCopiesAndReset(t *testing.T) {
 
 func TestObservedPolicyAndCancellationRemainUnknown(t *testing.T) {
 	e := NewEngine(Config{RequestTimeout: time.Second}, nil, nil)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}))
 	cancel()
 	inj := model.InjectionPoint{Target: model.Target{URL: "http://127.0.0.1/?q=test"}, Parameter: model.Parameter{Name: "q", Type: model.ParamQuery}}
 	_, _, _ = e.doScanPayload(ctx, inj, payload.Payload{Value: "test"}, nil, "127.0.0.1")
@@ -113,9 +111,7 @@ func TestObservedPolicyAndCancellationRemainUnknown(t *testing.T) {
 }
 
 func TestObservedRetryRedirectAndMutationLineage(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	var mu sync.Mutex
 	calls := 0
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -138,7 +134,7 @@ func TestObservedRetryRedirectAndMutationLineage(t *testing.T) {
 	e := NewEngine(Config{RateLimit: 1000, RateBurst: 1000, WAFBypass: true}, nil, server.Client())
 	p := payload.Payload{Value: `<script>alert(1)</script>`, Context: xctx.ContextHTMLBody}
 	inj := model.InjectionPoint{Target: model.Target{URL: server.URL + "/retry?q=test"}, Parameter: model.Parameter{Name: "q", Type: model.ParamQuery}}
-	f, err := e.scanPayload(context.Background(), inj, p, nil, "127.0.0.1", pathID(""))
+	f, err := e.scanPayload(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), inj, p, nil, "127.0.0.1", pathID(""))
 	if f != nil || err != nil {
 		t.Fatal(f, err)
 	}
@@ -214,9 +210,7 @@ func (observationReadFailure) Read([]byte) (int, error) { return 0, io.ErrUnexpe
 func (observationReadFailure) Close() error             { return nil }
 
 func TestObservedReadErrorSurvivesSuccessfulRetry(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	calls := 0
 	client := &http.Client{Transport: runTransportFunc(func(r *http.Request) (*http.Response, error) {
 		calls++
@@ -230,7 +224,7 @@ func TestObservedReadErrorSurvivesSuccessfulRetry(t *testing.T) {
 	})}
 	e := NewEngine(Config{RateLimit: 1000, RateBurst: 1000}, nil, client)
 	inj := model.InjectionPoint{Target: model.Target{URL: "http://127.0.0.1/?q=test"}, Parameter: model.Parameter{Name: "q", Type: model.ParamQuery}}
-	_, _, err := e.doScanPayload(context.Background(), inj, payload.Payload{Value: "marker", Context: xctx.ContextHTMLBody}, nil, "127.0.0.1")
+	_, _, err := e.doScanPayload(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), inj, payload.Payload{Value: "marker", Context: xctx.ContextHTMLBody}, nil, "127.0.0.1")
 	s := e.observations.snapshot()
 	if err != nil || len(s.Samples) != 1 || s.Samples[0].Transport.ReadErrors != 1 || s.Samples[0].Transport.PayloadSends != 2 || s.Samples[0].Failure != failureNone || s.Samples[0].ResponseIncomplete {
 		t.Fatal(err, s)
@@ -238,9 +232,7 @@ func TestObservedReadErrorSurvivesSuccessfulRetry(t *testing.T) {
 }
 
 func TestObservedCSRFRefreshIncludesAuxiliaryRequest(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		if r.URL.Query().Get("q") == "test" {
@@ -256,7 +248,7 @@ func TestObservedCSRFRefreshIncludesAuxiliaryRequest(t *testing.T) {
 	defer server.Close()
 	e := NewEngine(Config{RateLimit: 1000, RateBurst: 1000}, nil, server.Client())
 	inj := model.InjectionPoint{Target: model.Target{URL: server.URL + "?q=test"}, Parameter: model.Parameter{Name: "q", Type: model.ParamQuery}}
-	_, _, err := e.doScanPayload(context.Background(), inj, payload.Payload{Value: "marker", Context: xctx.ContextHTMLBody}, nil, "127.0.0.1")
+	_, _, err := e.doScanPayload(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), inj, payload.Payload{Value: "marker", Context: xctx.ContextHTMLBody}, nil, "127.0.0.1")
 	s := e.observations.snapshot()
 	if err != nil || len(s.Samples) != 1 || s.Samples[0].Transport.Requests != 3 || s.Samples[0].Transport.PayloadSends != 2 || s.Samples[0].Status != 200 {
 		t.Fatal(err, s)
@@ -264,9 +256,7 @@ func TestObservedCSRFRefreshIncludesAuxiliaryRequest(t *testing.T) {
 }
 
 func TestObservationRunResetsWithoutChangingFindings(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		value := r.URL.Query().Get("q")
@@ -277,12 +267,12 @@ func TestObservationRunResetsWithoutChangingFindings(t *testing.T) {
 	}))
 	defer server.Close()
 	e := NewEngine(Config{RateLimit: 1000, RateBurst: 1000, MaxPayloads: 2, CSRFToken: "manual"}, nil, server.Client())
-	first, err := e.Run(context.Background(), model.Target{URL: server.URL + "/first?q=test"})
+	first, err := e.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: server.URL + "/first?q=test"})
 	if err != nil || len(first.Findings) == 0 {
 		t.Fatal(first, err)
 	}
 	a := e.observations.snapshot()
-	second, err := e.Run(context.Background(), model.Target{URL: server.URL + "/second?q=test"})
+	second, err := e.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: server.URL + "/second?q=test"})
 	b := e.observations.snapshot()
 	if err != nil || len(second.Findings) != 0 || a.Total == 0 || b.Total == 0 || b.Run <= a.Run || b.Samples[0].ID != 1 {
 		t.Fatal(a, b, second, err)

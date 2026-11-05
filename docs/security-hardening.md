@@ -4,14 +4,14 @@
 
 | 条目 | 状态 |
 | --- | --- |
-| P0-1 代理凭据隔离 | 原测试 HTTP 407 / HTTPS CONNECT 认证失败已复现；修复后 HTTP/HTTPS、五格式报告、日志及身份隔离目标 race 测试通过；构建、vet、short/race 及指定五包真实 Chrome 串行 race 通过；全仓身份门禁/跨平台 CI 待执行 |
-| P0-2 表单与爬取安全 | 已复现并实现；目标 HTTP/Chrome race 回归通过，构建/vet/short-race 通过；完整身份门禁及跨平台 CI 待验证 |
-| P0-3 Chrome 代理 | 已复现绕过代理并修复；普通/认证/直连/拒绝的真实 Chrome race 回归、build/vet/short-race 通过；本项跨平台 CI 待执行 |
-| P0-4 短凭据脱敏 | 已复现并修复；报告包 race、build/vet/全仓 short-race 通过，指定 Chrome 包与跨平台 CI 待完成 |
-| P0-5 凭据输入入口 | 已实现；本地 build/vet/short-race 与来源/警告回归通过，Chrome 串行与 Linux 权限验证待完成 |
-| P1-1 Docker | 配置、固定摘要、非 root Chromium 与 CI 已实现；本地静态策略 race/build/vet/short-race 通过；实际镜像验收待 CI |
-| P1-2 模块路径 | 已机械迁移；失败测试转绿，build/vet/short-race 通过，Chrome 串行与跨平台完整门禁待完成 |
-| P1-3 SSRF Policy | 未完成 |
+| P0-1 代理凭据隔离 | 已完成代码、审查及 Windows/Linux 完整普通/race/历史身份门禁；结果见下方记录 |
+| P0-2 表单与爬取安全 | 已完成代码、审查及 Windows/Linux 完整普通/race/历史身份门禁；结果见下方记录 |
+| P0-3 Chrome 代理 | 已完成代码、审查及 Windows/Linux 完整普通/race/历史身份门禁；结果见下方记录 |
+| P0-4 短凭据脱敏 | 已完成代码、审查及 Windows/Linux 完整普通/race/历史身份门禁；结果见下方记录 |
+| P0-5 凭据输入入口 | 已完成代码、审查及 Windows/Linux 完整普通/race/历史身份门禁；结果见下方记录 |
+| P1-1 Docker | 已完成代码、审查及 Windows/Linux 完整普通/race/历史身份门禁；结果见下方记录 |
+| P1-2 模块路径 | 已完成代码、审查及 Windows/Linux 完整普通/race/历史身份门禁；结果见下方记录 |
+| P1-3 SSRF Policy | 已实现，失败测试转绿；独立审查、build/vet/short-race/指定真实 Chrome 回归通过，跨平台完整 CI 待提交触发 |
 | P1-4 marker | 未完成 |
 | P1-5 Chrome 参数 | 待真实 Chrome 验证 |
 | P1-6 执行观察 | 未完成 |
@@ -94,3 +94,22 @@
 - 独立审查逐文件确认机械替换；跨平台完整身份门禁待提交后 CI。SDK 导入者需更新 module import，这是发布路径纠正，扫描运行行为不变。
 
 - P1-2 指定五包真实 Chrome 串行 race：268 pass / 0 skip；Python 门禁自身 12 个单元测试通过。模块迁移后的完整历史身份门禁由提交后的双平台 CI 验证。
+
+## 已完成提交的完整远程回归
+
+| 条目 | CI | Windows/Linux 普通与 race 各自通过事件 | required-tests |
+| --- | --- | --- | --- |
+| P0-4 | 41972507484 | 1870 pass / 0 test skip | 1860/1860 |
+| P0-5 | 41973111649 | 1879 pass / 0 test skip | 1869/1869 |
+| P1-1 | 41973531381 | 1880 pass / 0 test skip | 1870/1870 |
+| P1-2 | 41974302001 | 1881 pass / 0 test skip | 1871/1871 |
+
+上述均已下载 JSON 核对；含全部 1837 个原有身份。P0-5 Unix YAML 权限用例已在 Linux 完整/race 中通过；Windows 分支不判断 POSIX 位。P1-1/P1-2 容器 smoke 同样成功，非本地 Docker 执行。
+
+## P1-3 验证及边界
+
+- 文件：`pkg/ssrfguard/{policy,pin,ssrfguard,dial}*.go`、`pkg/httpclient/{httpclient,proxy,policy_security_test}.go`、Chrome allocator/isolated、`pkg/browser/dns.go`、analyze/scanner 预检、cmd 配置/接线/真实 Chrome DNS 用例，旧测试显式策略迁移，新清单与策略文档。
+- 失败记录：`p1-3-before.log`（13 个地址缺口）、`p1-3-snapshot-before.log`（调用者切片能放宽已有客户端）、`p1-3-pin-before.log`（功能入口缺失）、`p1-3-iana-before.log`（新增 IPv6 dummy/文档/SRv6 范围）。均转绿。
+- 旧测试不再修改 AllowPrivate；静态核对函数名称、断言/skip 调用数量保持不变。认证用例改为显式 context 入口，保留成功/失败断言。CLI 不修改全局，SDK 遗留默认入口保留兼容。
+- `go build ./...`、`go vet ./...` 通过；最终全仓 short/race 1761 pass / 54 short skip。真实 Chrome DNS 固定同源脚本/执行验证通过；指定五包 Chrome 串行 race 268 pass / 0 skip。审查发现的切片可变问题已补失败测试并修复，最终无 CRITICAL/HIGH。
+- 新行为、恢复开关及网络限制见 CHANGELOG“行为变化”和 `docs/ssrf-policy.md`；实验性固定不提供批量/代理远端 DNS 支持，固定 IP 不保证可达。并非完整网络防火墙；非标准 NAT64 前缀不能自动识别。跨平台完整 CI 待本项提交推送后验证。

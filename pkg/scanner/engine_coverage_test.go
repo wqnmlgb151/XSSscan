@@ -19,7 +19,7 @@ import (
 )
 
 func init() {
-	ssrfguard.AllowPrivate = true
+
 }
 
 // newTestEngine creates an engine with minimal config for testing.
@@ -159,7 +159,7 @@ func TestEngine_Run_VulnerableTarget(t *testing.T) {
 		Method: "GET",
 	}
 
-	result, err := engine.Run(context.Background(), target)
+	result, err := engine.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
@@ -189,7 +189,7 @@ func TestEngine_Run_SafeTarget(t *testing.T) {
 		Method: "GET",
 	}
 
-	result, err := engine.Run(context.Background(), target)
+	result, err := engine.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
@@ -213,7 +213,7 @@ func TestEngine_Run_ConcurrentSafety(t *testing.T) {
 		Method: "GET",
 	}
 
-	result, err := engine.Run(context.Background(), target)
+	result, err := engine.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
@@ -237,7 +237,7 @@ func TestEngine_Run_RetryOnTransient(t *testing.T) {
 		Method: "GET",
 	}
 
-	result, err := engine.Run(context.Background(), target)
+	result, err := engine.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err == nil || result == nil || result.Stats.Status != model.ScanPartial {
 		t.Fatalf("expected partial result retaining probe failure: result=%+v err=%v", result, err)
 	}
@@ -267,7 +267,7 @@ func TestEngine_Run_MaxPayloadsCap(t *testing.T) {
 		Method: "GET",
 	}
 
-	result, err := engine.Run(context.Background(), target)
+	result, err := engine.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
@@ -295,7 +295,7 @@ func TestEngine_Run_StatsPopulated(t *testing.T) {
 		Method: "GET",
 	}
 
-	result, err := engine.Run(context.Background(), target)
+	result, err := engine.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
@@ -323,7 +323,7 @@ func TestEngine_Run_ContextCancellation(t *testing.T) {
 	engine := newTestEngine(server.URL)
 	engine.config.Concurrency = 1
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}))
 	cancel() // Cancel immediately
 
 	target := model.Target{
@@ -351,7 +351,7 @@ func TestEngine_Run_NoInjectionPoints(t *testing.T) {
 		Method: "GET",
 	}
 
-	result, err := engine.Run(context.Background(), target)
+	result, err := engine.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
@@ -378,7 +378,7 @@ func TestEngine_Run_WAFDetection(t *testing.T) {
 		Method: "GET",
 	}
 
-	result, err := engine.Run(context.Background(), target)
+	result, err := engine.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
@@ -404,7 +404,7 @@ func TestWAFInfo_Presence(t *testing.T) {
 		Method: "GET",
 	}
 
-	result, err := engine.Run(context.Background(), target)
+	result, err := engine.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
@@ -498,7 +498,7 @@ func TestEngine_ExtractCSRFToken(t *testing.T) {
 	engine := newTestEngine(server.URL)
 	target := model.Target{URL: server.URL + "/page", Method: "GET"}
 
-	token := engine.extractCSRFToken(context.Background(), target)
+	token := engine.extractCSRFToken(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if token != "test-token-123" {
 		t.Errorf("Expected token 'test-token-123', got %q", token)
 	}
@@ -520,7 +520,7 @@ func TestEngine_ExtractCSRFTokenNoToken(t *testing.T) {
 	engine := newTestEngine(server.URL)
 	target := model.Target{URL: server.URL + "/page", Method: "GET"}
 
-	token := engine.extractCSRFToken(context.Background(), target)
+	token := engine.extractCSRFToken(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if token != "" {
 		t.Errorf("Expected empty token, got %q", token)
 	}
@@ -550,7 +550,7 @@ func TestEngine_Run_WithProbe(t *testing.T) {
 		Method: "GET",
 	}
 
-	result, err := engine.Run(context.Background(), target)
+	result, err := engine.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
@@ -598,7 +598,7 @@ func TestScanPayload_AutoWAFBypass(t *testing.T) {
 	// scanPayload should complete without error. The server returns 200 with
 	// WAF headers (not a 403 block), so auto-bypass is not triggered here —
 	// that path is covered by TestFullPipeline_WAFAutoBypass.
-	finding, err := engine.scanPayload(context.Background(), injection, p, nil, "127.0.0.1", pathID(""))
+	finding, err := engine.scanPayload(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), injection, p, nil, "127.0.0.1", pathID(""))
 	if err != nil {
 		t.Fatalf("scanPayload failed: %v", err)
 	}
@@ -673,7 +673,7 @@ func TestSendWithRetry_RetryAfterDeltaSeconds(t *testing.T) {
 
 	p := payload.Payload{Value: "test", Context: ctx.ContextHTMLBody}
 
-	resp, body, _, err := engine.sendWithRetry(context.Background(), injection, modifiedTarget, p, "127.0.0.1")
+	resp, body, _, err := engine.sendWithRetry(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), injection, modifiedTarget, p, "127.0.0.1")
 	if err != nil {
 		t.Fatalf("sendWithRetry failed: %v", err)
 	}
@@ -714,7 +714,7 @@ func TestSendWithRetry_RetryAfterHTTPDate(t *testing.T) {
 
 	p := payload.Payload{Value: "test", Context: ctx.ContextHTMLBody}
 
-	resp, _, _, err := engine.sendWithRetry(context.Background(), injection, modifiedTarget, p, "127.0.0.1")
+	resp, _, _, err := engine.sendWithRetry(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), injection, modifiedTarget, p, "127.0.0.1")
 	if err != nil {
 		t.Fatalf("sendWithRetry failed: %v", err)
 	}
@@ -748,7 +748,7 @@ func TestSendWithRetry_RetryAfterInvalidFallsThrough(t *testing.T) {
 
 	p := payload.Payload{Value: "test", Context: ctx.ContextHTMLBody}
 
-	resp, body, _, err := engine.sendWithRetry(context.Background(), injection, modifiedTarget, p, "127.0.0.1")
+	resp, body, _, err := engine.sendWithRetry(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), injection, modifiedTarget, p, "127.0.0.1")
 	if err != nil {
 		t.Fatalf("sendWithRetry failed: %v", err)
 	}
@@ -782,7 +782,7 @@ func TestSendWithRetry_All5xxReturnsErrorAndLastResponse(t *testing.T) {
 
 	p := payload.Payload{Value: "test", Context: ctx.ContextHTMLBody}
 
-	resp, _, _, err := engine.sendWithRetry(context.Background(), injection, modifiedTarget, p, "127.0.0.1")
+	resp, _, _, err := engine.sendWithRetry(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), injection, modifiedTarget, p, "127.0.0.1")
 	if err == nil {
 		t.Fatal("exhausted 5xx retries must report incomplete scan")
 	}
@@ -819,7 +819,7 @@ func TestEngine_Run_RaceDetection(t *testing.T) {
 		Method: "GET",
 	}
 
-	result, err := engine.Run(context.Background(), target)
+	result, err := engine.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
@@ -852,7 +852,7 @@ func TestSendWithRetry_SuccessFirstTry(t *testing.T) {
 
 	p := payload.Payload{Value: "test", Context: ctx.ContextHTMLBody}
 
-	resp, body, _, err := engine.sendWithRetry(context.Background(), injection, modifiedTarget, p, "127.0.0.1")
+	resp, body, _, err := engine.sendWithRetry(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), injection, modifiedTarget, p, "127.0.0.1")
 	if err != nil {
 		t.Fatalf("sendWithRetry failed: %v", err)
 	}

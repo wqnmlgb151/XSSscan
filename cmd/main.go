@@ -106,6 +106,7 @@ type ScanConfig struct {
 	ChromeIgnoreCertErrors bool
 	ChromePath             string
 	BrowserDirect          bool
+	ChromePinDNS           bool
 	ConfigFile             string
 	JWT                    string
 	Silent                 bool
@@ -153,6 +154,8 @@ var rootCmd = &cobra.Command{
 凭据优先级：显式 CLI（含文件/stdin）> 环境变量 > YAML。
 环境变量：XSSCAN_PASSWORD、XSSCAN_PROXY_PASSWORD、XSSCAN_OAUTH_CLIENT_SECRET、XSSCAN_OAUTH_PASSWORD、XSSCAN_JWT。
 敏感 argv 非 silent 模式提示暴露风险；--silent 关闭此提示。
+默认拒绝私网及特殊用途地址；授权环境用 --allow-private 放开。
+--chrome-pin-dns 默认关闭；设为 false 恢复普通 DNS，开启时限单 --url 且浏览器直连。
 
 默认调度 reflected、dom、stored、blind 四类检测，使用 --types 选择类型。
 支持上下文感知 payload、JavaScript AST、CSP 分析和 WAF 绕过。
@@ -198,6 +201,7 @@ func main() {
 }
 
 func init() {
+	rootCmd.Flags().BoolVar(&cfg.ChromePinDNS, "chrome-pin-dns", false, "Experimental: pin one --url browser origin to validated DNS; forces direct browser connections")
 	rootCmd.Flags().BoolVar(&cfg.BrowserDirect, "browser-direct", false, "Use direct browser connections instead of --proxy (warning when combined)")
 	rootCmd.Flags().StringArrayVar(&cfg.ExcludeURLs, "exclude-url", nil, "Exclude discovery URLs matching a regex (repeatable)")
 	rootCmd.Flags().StringArrayVar(&cfg.IncludeURLs, "include-url", nil, "Only include discovery URLs matching these regexes (repeatable)")
@@ -235,7 +239,7 @@ func init() {
 	rootCmd.Flags().BoolVar(&cfg.TestHPP, "hpp", false, "Enable HTTP Parameter Pollution testing")
 	rootCmd.Flags().BoolVar(&cfg.WAFBypass, "waf-bypass", false, "Enable WAF bypass via payload mutation")
 	rootCmd.Flags().Float64Var(&cfg.ConfidenceMin, "confidence", 0.60, "Minimum confidence threshold (0.0-1.0)")
-	rootCmd.Flags().BoolVar(&cfg.AllowPrivate, "allow-private", false, "Allow scanning private/internal networks (SSRF protection bypass)")
+	rootCmd.Flags().BoolVar(&cfg.AllowPrivate, "allow-private", false, "Allow private and special-use addresses (default: blocked; authorized environments only)")
 	rootCmd.Flags().StringVar(&cfg.Proxy, "proxy", "", "HTTP proxy URL (e.g., http://127.0.0.1:8080 for Burp Suite)")
 	rootCmd.Flags().StringVar(&cfg.ProxyUsername, "proxy-username", "", "Proxy basic auth username (proxy/CONNECT only, never sent to target)")
 	rootCmd.Flags().StringVar(&cfg.ProxyPassword, "proxy-password", "", "Proxy basic auth password (proxy/CONNECT only, never sent to target)")
@@ -326,13 +330,27 @@ func runScan(cmd *cobra.Command, args []string) error {
 	logger := setupLogger()
 	defer logger.Sync()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: cfg.AllowPrivate}))
 	defer cancel()
 	urlScope, scopeErr := crawler.NewURLScope(cfg.ExcludeURLs, cfg.IncludeURLs)
 	if scopeErr != nil {
 		return scopeErr
 	}
 	ctx = urlScope.Context(ctx)
+	if cfg.ChromePinDNS {
+		if cfg.URL == "" || cfg.TargetsFile != "" {
+			return fmt.Errorf("--chrome-pin-dns currently requires a single --url")
+		}
+		if cfg.Proxy != "" && !cfg.BrowserDirect {
+			return fmt.Errorf("--chrome-pin-dns requires direct Chrome networking; use --browser-direct explicitly with --proxy")
+		}
+		pinned, rule, err := ssrfguard.PolicyFromContext(ctx).PinURL(ctx, cfg.URL)
+		if err != nil {
+			return err
+		}
+		ctx = ssrfguard.WithPolicy(ctx, pinned)
+		ctx = browser.WithDNSRule(ctx, rule)
+	}
 	if cfg.Headless || cfg.VerifyExecution || cfg.RenderSPA {
 		browserProxy, proxyErr := browser.ParseProxy(cfg.Proxy, cfg.ProxyUsername, cfg.ProxyPassword, cfg.BrowserDirect)
 		if proxyErr != nil {
@@ -472,7 +490,6 @@ func loadAndValidateConfig(cmd *cobra.Command) error {
 	if err := resolveCredentials(&cfg, collectChangedFlags(cmd), os.LookupEnv, os.Stdin, os.Stderr); err != nil {
 		return err
 	}
-	ssrfguard.AllowPrivate = cfg.AllowPrivate
 	return validateConfig(&cfg)
 }
 
@@ -498,17 +515,17 @@ func setupHTTPClient(target model.Target) (*http.Client, *httpclient.ProxyConfig
 			Password: cfg.ProxyPassword,
 			Insecure: cfg.ProxyInsecure,
 		}
-		if err := proxyConfig.Validate(); err != nil {
+		if err := proxyConfig.Validate(ssrfguard.Policy{AllowPrivate: cfg.AllowPrivate}); err != nil {
 			return nil, nil, fmt.Errorf("proxy validation failed: %w", err)
 		}
 		logProxyEndpoint(cfg.Proxy)
 	}
-	client := httpclient.NewClient(engineCfg.RequestTimeout, proxyConfig)
+	client := httpclient.NewClient(engineCfg.RequestTimeout, proxyConfig, ssrfguard.Policy{AllowPrivate: cfg.AllowPrivate})
 	return client, proxyConfig, nil
 }
 
 func setupAuthentication(client *http.Client, headers map[string]string, target model.Target) error {
-	return setupAuthenticationContext(context.Background(), client, headers, target)
+	return setupAuthenticationContext(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: cfg.AllowPrivate}), client, headers, target)
 }
 
 func setupAuthenticationContext(ctx context.Context, client *http.Client, headers map[string]string, target model.Target) error {

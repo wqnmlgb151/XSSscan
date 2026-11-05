@@ -24,8 +24,7 @@ import (
 
 func TestPrivateBlockNeverPrintsCleanResult(t *testing.T) {
 	defer saveCfg()()
-	old := ssrfguard.AllowPrivate
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	var hits atomic.Int64
 	server := testenv.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { hits.Add(1) }))
 	defer server.Close()
@@ -64,8 +63,7 @@ func TestPrivateBlockNeverPrintsCleanResult(t *testing.T) {
 
 func TestRunScanPartialFailureWritesFindingsAndStatus(t *testing.T) {
 	defer saveCfg()()
-	old := ssrfguard.AllowPrivate
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	var hits atomic.Int64
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
@@ -103,7 +101,7 @@ func TestRunScanPartialFailureWritesFindingsAndStatus(t *testing.T) {
 }
 
 func TestScanAllTargetsCanceledReturnsError(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}))
 	cancel()
 	var findings []model.Finding
 	var stats model.ScanStats

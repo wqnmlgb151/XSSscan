@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"context"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 	"testing"
 
 	"github.com/wqnmlgb151/XSSscan/pkg/execverify"
@@ -20,7 +21,7 @@ func TestVerificationGroupStopsOnProofAndSkipsUnsupported(t *testing.T) {
 	}
 	groups := groupVerificationCandidates(input)
 	count := 0
-	got := e.verifyCandidateGroup(context.Background(), groups[0], model.Target{}, func(_ context.Context, f model.Finding, _ model.Target) (*execverify.ExecutionResult, error) {
+	got := e.verifyCandidateGroup(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), groups[0], model.Target{}, func(_ context.Context, f model.Finding, _ model.Target) (*execverify.ExecutionResult, error) {
 		count++
 		if f.Payload != `<script>alert(1)</script>` {
 			t.Fatalf("not simplest supported candidate: %s", f.Payload)
@@ -39,7 +40,7 @@ func TestVerificationGroupTriesAlternativeAfterNegative(t *testing.T) {
 	e := NewEngine(Config{}, zap.NewNop(), nil)
 	group := []model.Finding{{Payload: `<script>alert(1)</script>`, Confidence: .9}, {Payload: `<img src=x onerror=alert(1)>`, Confidence: .8}}
 	count := 0
-	got := e.verifyCandidateGroup(context.Background(), group, model.Target{}, func(_ context.Context, f model.Finding, _ model.Target) (*execverify.ExecutionResult, error) {
+	got := e.verifyCandidateGroup(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), group, model.Target{}, func(_ context.Context, f model.Finding, _ model.Target) (*execverify.ExecutionResult, error) {
 		count++
 		return &execverify.ExecutionResult{Executed: count == 2, Confidence: .95, VerificationPayload: f.Payload}, nil
 	})
@@ -51,7 +52,7 @@ func TestVerificationGroupTriesAlternativeAfterNegative(t *testing.T) {
 func TestVerificationGroupRetainsUnsupportedWithoutProof(t *testing.T) {
 	e := NewEngine(Config{}, zap.NewNop(), nil)
 	group := []model.Finding{{Parameter: "q", Payload: `<script>alert(1)</script>`}, {Parameter: "q", Payload: `<script>custom()</script>`}}
-	got := e.verifyCandidateGroup(context.Background(), group, model.Target{}, func(context.Context, model.Finding, model.Target) (*execverify.ExecutionResult, error) {
+	got := e.verifyCandidateGroup(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), group, model.Target{}, func(context.Context, model.Finding, model.Target) (*execverify.ExecutionResult, error) {
 		return &execverify.ExecutionResult{}, nil
 	})
 	if len(got) != 2 || got[1].Evidence.VerificationError == "" || len(e.runIssues) == 0 {

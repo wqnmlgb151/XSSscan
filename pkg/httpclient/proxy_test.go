@@ -43,8 +43,6 @@ func TestProxyValidate_InvalidSchemes(t *testing.T) {
 }
 
 func TestProxyValidate_ValidSchemes(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	valid := []string{
 		"http://127.0.0.1:8080",
@@ -54,7 +52,7 @@ func TestProxyValidate_ValidSchemes(t *testing.T) {
 	for _, raw := range valid {
 		t.Run(raw, func(t *testing.T) {
 			p := &ProxyConfig{URL: raw}
-			if err := p.Validate(); err != nil {
+			if err := p.Validate(ssrfguard.Policy{AllowPrivate: true}); err != nil {
 				t.Errorf("Expected no error for URL %q, got: %v", raw, err)
 			}
 		})
@@ -70,40 +68,32 @@ func TestProxyValidate_NoHost(t *testing.T) {
 }
 
 func TestProxyValidate_SSRFBlocked(t *testing.T) {
-	ssrfguard.AllowPrivate = false
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	p := &ProxyConfig{URL: "http://127.0.0.1:8080"}
-	err := p.Validate()
+	err := p.Validate(ssrfguard.Policy{AllowPrivate: false})
 	if err == nil {
 		t.Error("Expected SSRF block for private IP, got nil")
 	}
 }
 
 func TestProxyValidate_SSRFAllowed(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	p := &ProxyConfig{URL: "http://127.0.0.1:8080"}
-	if err := p.Validate(); err != nil {
+	if err := p.Validate(ssrfguard.Policy{AllowPrivate: true}); err != nil {
 		t.Errorf("Expected no error with AllowPrivate=true, got: %v", err)
 	}
 }
 
 func TestProxyValidate_LoopbackBlocked(t *testing.T) {
-	ssrfguard.AllowPrivate = false
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	p := &ProxyConfig{URL: "http://169.254.169.254:8080"}
-	err := p.Validate()
+	err := p.Validate(ssrfguard.Policy{AllowPrivate: false})
 	if err == nil {
 		t.Error("Expected SSRF block for link-local IP, got nil")
 	}
 }
 
 func TestApplyToTransport_SetsProxy(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	p := &ProxyConfig{URL: "http://127.0.0.1:8080"}
 	transport := &http.Transport{}
@@ -183,11 +173,9 @@ func TestBasicAuth_SpecialChars(t *testing.T) {
 }
 
 func TestNewClient_WithProxy(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	proxy := &ProxyConfig{URL: "http://127.0.0.1:8080"}
-	client := NewClient(0, proxy)
+	client := NewClient(0, proxy, ssrfguard.Policy{AllowPrivate: true})
 	if client == nil {
 		t.Fatal("Expected non-nil client")
 	}
@@ -224,11 +212,9 @@ func TestNewClient_WithoutProxy(t *testing.T) {
 }
 
 func TestNewClient_ProxyInsecure(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	proxy := &ProxyConfig{URL: "https://127.0.0.1:8443", Insecure: true}
-	client := NewClient(0, proxy)
+	client := NewClient(0, proxy, ssrfguard.Policy{AllowPrivate: true})
 	transport := client.Transport.(*http.Transport)
 	if transport.TLSClientConfig == nil {
 		t.Fatal("Expected TLSClientConfig to be set")

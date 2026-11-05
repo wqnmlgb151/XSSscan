@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 	"net/http"
 	"os"
 	"os/exec"
@@ -50,7 +51,7 @@ func TestCredentialSourcesAndArgvWarning(t *testing.T) {
 			if mode == "silent" {
 				args = append(args, "--silent")
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			ctx, cancel := context.WithTimeout(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 20*time.Second)
 			defer cancel()
 			process := exec.CommandContext(ctx, os.Args[0], args...)
 			process.Env = append(os.Environ(), "XSSCAN_SECURITY_CLI_TEST=1", "XSSCAN_JWT=env-canary")

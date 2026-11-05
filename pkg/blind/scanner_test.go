@@ -16,9 +16,7 @@ import (
 )
 
 func TestBlindWithoutReflectionAndCorrelation(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	var submissions int
 	var observed []callback.Callback
 	tokenRe := regexp.MustCompile(`xsscan=([a-z0-9]+)`)
@@ -31,10 +29,10 @@ func TestBlindWithoutReflectionAndCorrelation(t *testing.T) {
 		fmt.Fprint(w, "no reflection")
 	}))
 	defer server.Close()
-	s := New(httpclient.NewClient(0, nil), Config{Callback: "http://callback.test/", Observe: func(context.Context) ([]callback.Callback, error) {
+	s := New(httpclient.NewClient(0, nil, ssrfguard.Policy{AllowPrivate: true}), Config{Callback: "http://callback.test/", Observe: func(context.Context) ([]callback.Callback, error) {
 		return append(observed, callback.Callback{Query: "xsscan=unrelated"}), nil
 	}})
-	result, err := s.Scan(context.Background(), model.Target{URL: server.URL + "?q=x"})
+	result, err := s.Scan(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: server.URL + "?q=x"})
 	if err == nil || result.Stats.Status != model.ScanPartial || submissions == 0 || len(result.Findings) != 3 || result.Findings[0].Parameter != "q" || result.Findings[0].ExecutionVerified {
 		t.Fatalf("blind result: %+v %v", result, err)
 	}
@@ -45,12 +43,10 @@ func TestBlindWithoutReflectionAndCorrelation(t *testing.T) {
 }
 
 func TestExternalCallbackRemainsIncomplete(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, "ok") }))
 	defer server.Close()
-	result, err := New(httpclient.NewClient(0, nil), Config{Callback: "dns.example.test"}).Scan(context.Background(), model.Target{URL: server.URL + "?q=x"})
+	result, err := New(httpclient.NewClient(0, nil, ssrfguard.Policy{AllowPrivate: true}), Config{Callback: "dns.example.test"}).Scan(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: server.URL + "?q=x"})
 	if err == nil || result.Stats.Status != model.ScanPartial || result.Stats.PayloadsSent == 0 {
 		t.Fatalf("unobserved callback reported complete: %+v %v", result, err)
 	}

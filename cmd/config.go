@@ -11,6 +11,7 @@ import (
 
 // FileConfig records which YAML keys were provided, including false and zero.
 type FileConfig struct {
+	ChromePinDNS           bool `yaml:"chrome-pin-dns"`
 	present                map[string]bool
 	OAuthAllowedOrigins    []string `yaml:"oauth-allow-origin"`
 	LoginSuccessContains   string   `yaml:"login-success-contains"`
@@ -145,6 +146,7 @@ func (fc *FileConfig) ApplyTo(cfg *ScanConfig, flags map[string]bool) {
 }
 
 var configFlags = map[string]string{
+	"ChromePinDNS":           "chrome-pin-dns",
 	"BrowserDirect":          "browser-direct",
 	"ExcludeURLs":            "exclude-url",
 	"IncludeURLs":            "include-url",

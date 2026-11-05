@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 	"strings"
 	"testing"
 	"time"
@@ -28,7 +29,7 @@ func TestProgressStopsBeforeResultsAndDoesNotPolluteStdout(t *testing.T) {
 	for _, terminal := range []bool{false, true} {
 		t.Run(fmt.Sprint(terminal), func(t *testing.T) {
 			var out bytes.Buffer
-			ctx, stop := startProgress(context.Background(), &out, terminal, time.Millisecond)
+			ctx, stop := startProgress(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), &out, terminal, time.Millisecond)
 			model.ReportProgress(ctx, "DOM source checks", 3, 50)
 			time.Sleep(15 * time.Millisecond)
 			stop()

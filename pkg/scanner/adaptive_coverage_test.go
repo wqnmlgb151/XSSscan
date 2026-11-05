@@ -3,6 +3,7 @@ package scanner
 import (
 	"context"
 	"fmt"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"net/http"
 	"sync"
@@ -41,7 +42,7 @@ func sentPayloads(t *testing.T, strategy string) map[string]bool {
 		EnableProbe:    false,
 	}
 	e := NewEngine(cfg, zap.NewNop(), nil)
-	if _, err := e.Run(context.Background(), model.Target{URL: server.URL + "/?q=test"}); err != nil {
+	if _, err := e.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: server.URL + "/?q=test"}); err != nil {
 		t.Logf("strategy %s returned error (may be expected): %v", strategy, err)
 	}
 	mu.Lock()
@@ -103,7 +104,7 @@ func TestAdaptiveDispatchesEveryGeneratedCandidate(t *testing.T) {
 			ConfidenceMin: 0.60, ConfidenceSet: true, EnableProbe: false,
 		}
 		e := NewEngine(cfg, zap.NewNop(), nil)
-		res, err := e.Run(context.Background(), model.Target{URL: server.URL + "/?q=test"})
+		res, err := e.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: server.URL + "/?q=test"})
 		if err != nil || res == nil {
 			t.Fatalf("candidate count run failed: %v", err)
 		}
@@ -128,7 +129,7 @@ func TestAdaptiveDispatchesEveryGeneratedCandidate(t *testing.T) {
 		Strategy: StrategyAdaptive,
 	}
 	e := NewEngine(cfg, zap.NewNop(), nil)
-	res, err := e.Run(context.Background(), model.Target{URL: server.URL + "/?q=test"})
+	res, err := e.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: server.URL + "/?q=test"})
 	if err != nil || res == nil {
 		t.Fatalf("adaptive run failed: %v", err)
 	}

@@ -16,9 +16,7 @@ import (
 )
 
 func TestPathAnalysisToFinding(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		parts := strings.Split(r.URL.EscapedPath(), "/")
 		value, _ := url.PathUnescape(parts[len(parts)-1])
@@ -28,7 +26,7 @@ func TestPathAnalysisToFinding(t *testing.T) {
 	defer server.Close()
 	engine := scanner.NewEngine(scanner.Config{Concurrency: 2, RateLimit: 10000, RateBurst: 10000, MaxPayloads: 10, RequestTimeout: 5 * time.Second}, nil, server.Client())
 	target := model.Target{URL: server.URL + "/fixed/a%2Fb/name%21"}
-	result, err := engine.Run(context.Background(), target)
+	result, err := engine.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 	if err != nil {
 		t.Fatal(err)
 	}

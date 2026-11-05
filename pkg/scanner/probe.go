@@ -348,7 +348,7 @@ func (e *Engine) sendProbeRequest(stdctx context.Context, injection model.Inject
 	}
 
 	markAttemptPhase(stdctx, failurePolicy)
-	if err := ssrfguard.IsURLTargetAllowed(modifiedTarget.URL); err != nil {
+	if err := ssrfguard.IsURLTargetAllowedContext(stdctx, modifiedTarget.URL); err != nil {
 		return "", fmt.Errorf("ssrf blocked: %w", err)
 	}
 

@@ -344,7 +344,7 @@ func paramKey(p model.Parameter) string {
 
 func (a *Analyzer) sendRequest(gtx stdctx.Context, target model.Target) (*http.Response, error) {
 	// SSRF protection: validate target URL before making the request
-	if err := ssrfguard.IsURLTargetAllowed(target.URL); err != nil {
+	if err := ssrfguard.IsURLTargetAllowedContext(gtx, target.URL); err != nil {
 		return nil, fmt.Errorf("ssrf blocked: %w", err)
 	}
 

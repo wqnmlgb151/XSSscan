@@ -6,7 +6,7 @@ import (
 	"github.com/wqnmlgb151/XSSscan/pkg/model"
 	"github.com/wqnmlgb151/XSSscan/pkg/report"
 	"github.com/wqnmlgb151/XSSscan/pkg/requestbudget"
-	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
+
 	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"net/http"
 	"os"
@@ -20,8 +20,7 @@ func TestBrowserBudgetCLIIncompleteAndAccounting(t *testing.T) {
 		t.Skip("real Chrome")
 	}
 	defer saveCfg()()
-	old := ssrfguard.AllowPrivate
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		w.Write([]byte(`<html><link rel="icon" href="data:,"><script src="/script"></script><body>safe</body></html>`))

@@ -24,9 +24,6 @@ func TestDOMReplayConfirmsPlainPayload(t *testing.T) {
 	if _, err := browser.FindChrome(); err != nil {
 		t.Fatal(err)
 	}
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
 
 	// Reads the fragment wholesale, so the value it renders is exactly whatever was put
 	// there — marker-prefixed in the observing run, bare in the replay.
@@ -38,7 +35,7 @@ document.getElementById('host').innerHTML = decodeURIComponent(location.hash.sli
 	}))
 	defer server.Close()
 
-	scanner, err := NewScanner(context.Background(), 25*time.Second)
+	scanner, err := NewScanner(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 25*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +49,7 @@ document.getElementById('host').innerHTML = decodeURIComponent(location.hash.sli
 	}
 	payload := "<img src=x onerror=alert(1)>"
 	test := domXSSTest{Name: "fragment", Source: "location.hash", NavURL: buildURLWithFragment(u, marker+"="+payload)}
-	findings, err := scanner.runSingleDOMTest(context.Background(), model.Target{URL: server.URL}, test, marker, payload)
+	findings, err := scanner.runSingleDOMTest(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: server.URL}, test, marker, payload)
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}

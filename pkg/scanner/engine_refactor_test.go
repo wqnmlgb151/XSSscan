@@ -23,8 +23,6 @@ import (
 // --- Test: sendWithRetry success path ---
 
 func TestSendWithRetry_SuccessOnFirstAttempt(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	var callCount int64
 	srv := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -38,7 +36,7 @@ func TestSendWithRetry_SuccessOnFirstAttempt(t *testing.T) {
 	target := model.Target{URL: srv.URL + "/test", Method: "GET"}
 	injection := makeTestInjection(target)
 
-	resp, body, _, err := engine.sendWithRetry(context.Background(), injection, target, payload.Payload{}, "127.0.0.1")
+	resp, body, _, err := engine.sendWithRetry(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), injection, target, payload.Payload{}, "127.0.0.1")
 	if err != nil {
 		t.Fatalf("Expected success, got: %v", err)
 	}
@@ -54,8 +52,6 @@ func TestSendWithRetry_SuccessOnFirstAttempt(t *testing.T) {
 }
 
 func TestSendWithRetry_RetriesOn500(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	var callCount int64
 	srv := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -74,7 +70,7 @@ func TestSendWithRetry_RetriesOn500(t *testing.T) {
 	target := model.Target{URL: srv.URL + "/test", Method: "GET"}
 	injection := makeTestInjection(target)
 
-	resp, _, _, err := engine.sendWithRetry(context.Background(), injection, target, payload.Payload{}, "127.0.0.1")
+	resp, _, _, err := engine.sendWithRetry(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), injection, target, payload.Payload{}, "127.0.0.1")
 	if err != nil {
 		t.Fatalf("Expected success after retries, got: %v", err)
 	}
@@ -87,8 +83,6 @@ func TestSendWithRetry_RetriesOn500(t *testing.T) {
 }
 
 func TestSendWithRetry_503RetriesThenReturnsError(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	var callCount int64
 	srv := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -102,7 +96,7 @@ func TestSendWithRetry_503RetriesThenReturnsError(t *testing.T) {
 	target := model.Target{URL: srv.URL + "/test", Method: "GET"}
 	injection := makeTestInjection(target)
 
-	resp, _, _, err := engine.sendWithRetry(context.Background(), injection, target, payload.Payload{}, "127.0.0.1")
+	resp, _, _, err := engine.sendWithRetry(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), injection, target, payload.Payload{}, "127.0.0.1")
 	// Retain the final response for diagnostics while propagating failure.
 	if err == nil {
 		t.Fatal("exhausted 503 retries must return error")
@@ -119,8 +113,6 @@ func TestSendWithRetry_503RetriesThenReturnsError(t *testing.T) {
 // --- Test: buildFindingFromResponse ---
 
 func TestBuildFindingFromResponse_VulnerableFinding(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	engine := makeTestEngine()
 	target := model.Target{URL: "http://127.0.0.1/?q=test", Method: "GET"}
@@ -159,8 +151,6 @@ func TestBuildFindingFromResponse_VulnerableFinding(t *testing.T) {
 }
 
 func TestBuildFindingFromResponse_NotVulnerable(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	engine := makeTestEngine()
 	target := model.Target{URL: "http://127.0.0.1/test", Method: "GET"}
@@ -274,7 +264,7 @@ func TestApplyVerificationResult_ConfidenceCapAt1(t *testing.T) {
 
 func TestVerifyFindings_EmptyFindings(t *testing.T) {
 	engine := makeTestEngine()
-	result := engine.verifyFindingsWithAuth(context.Background(), []model.Finding{}, nil, model.Target{})
+	result := engine.verifyFindingsWithAuth(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), []model.Finding{}, nil, model.Target{})
 	if len(result) != 0 {
 		t.Errorf("Expected 0 findings, got %d", len(result))
 	}
@@ -301,13 +291,13 @@ func (r *fakeExecResult) toExecverifyResult() *execverify.ExecutionResult {
 }
 
 func makeTestEngine() *Engine {
-	ssrfguard.AllowPrivate = true
+
 	return &Engine{
 		config: Config{
 			ConfidenceMin: verify.DefaultConfidenceThreshold,
 			RateLimit:     100,
 		},
-		client:     httpclient.NewClient(30*time.Second, nil),
+		client:     httpclient.NewClient(30*time.Second, nil, ssrfguard.Policy{AllowPrivate: true}),
 		verifier:   verify.NewVerifier(),
 		throttle:   NewThrottle(100, 200, false),
 		logger:     zap.NewNop(),

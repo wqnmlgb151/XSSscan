@@ -2,6 +2,7 @@
 package httpclient
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"net/http"
@@ -20,7 +21,7 @@ type ProxyConfig struct {
 
 // Validate checks the proxy URL format and SSRF safety.
 // Port is fully user-controllable: specify any port in the URL (e.g., http://127.0.0.1:9090).
-func (p *ProxyConfig) Validate() error {
+func (p *ProxyConfig) Validate(policies ...ssrfguard.Policy) error {
 	if p.URL == "" {
 		return fmt.Errorf("proxy URL is empty")
 	}
@@ -39,11 +40,14 @@ func (p *ProxyConfig) Validate() error {
 		return fmt.Errorf("proxy URL has no host")
 	}
 
-	// SSRF protection: don't allow proxying to internal IPs unless --allow-private
-	if !ssrfguard.AllowPrivate {
-		if err := ssrfguard.IsURLTargetAllowed(p.URL); err != nil {
-			return fmt.Errorf("proxy target blocked by SSRF guard: %w", err)
-		}
+	var policy ssrfguard.Policy
+	if len(policies) > 0 {
+		policy = policies[0]
+	} else {
+		policy = ssrfguard.PolicyFromContext(context.Background())
+	}
+	if err := policy.IsURLTargetAllowedContext(context.Background(), p.URL); err != nil {
+		return fmt.Errorf("proxy target blocked by SSRF guard: %w", err)
 	}
 
 	return nil

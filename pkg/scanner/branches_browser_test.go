@@ -21,9 +21,7 @@ func TestConstantBranchesAgreeWithBrowser(t *testing.T) {
 	if testing.Short() {
 		t.Skip("requires local Chrome")
 	}
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query().Get("q")
 		w.Header().Set("Content-Type", "text/html")
@@ -39,7 +37,7 @@ func TestConstantBranchesAgreeWithBrowser(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	v, err := execverify.NewVerifier(context.Background(), 15*time.Second)
+	v, err := execverify.NewVerifier(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 15*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +55,7 @@ func TestConstantBranchesAgreeWithBrowser(t *testing.T) {
 				body = "<script>if(true){alert(1)}</script>"
 			}
 			assessment := verify.NewVerifier().Verify(body, strings.ToLower(body), payload.Payload{Value: "alert(1)", Context: xctx.ContextJSBlock}, model.InjectionPoint{}, nil, verify.WAFResult{})
-			result, err := v.VerifyPayload(context.Background(), model.Target{URL: server.URL + path + "?q=x"}, "q", model.ParamQuery, "alert(1)")
+			result, err := v.VerifyPayload(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: server.URL + path + "?q=x"}, "q", model.ParamQuery, "alert(1)")
 			if err != nil || result == nil {
 				t.Fatalf("browser result=%+v err=%v", result, err)
 			}

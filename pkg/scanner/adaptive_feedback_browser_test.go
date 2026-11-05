@@ -3,6 +3,7 @@ package scanner
 import (
 	"context"
 	"fmt"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"net/http"
 	"testing"
@@ -27,7 +28,7 @@ func TestDefaultAdaptiveWaitsForProofAndPreservesIndependentParameters(t *testin
 			e := NewEngine(Config{Concurrency: 10, RateLimit: 1000, RateBurst: 100,
 				RequestTimeout: 5 * time.Second, MaxPayloads: 20,
 				VerifyExecution: true, VerifyTimeout: 5 * time.Second, Strategy: strategy}, nil, nil)
-			ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
+			ctx, cancel := context.WithTimeout(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 40*time.Second)
 			defer cancel()
 			result, err := e.Run(ctx, model.Target{URL: server.URL + "/?a=test&b=test"})
 			if err != nil {
@@ -84,7 +85,7 @@ func TestDefaultAdaptiveKeepsAmbiguousReflectionCandidates(t *testing.T) {
 	e := NewEngine(Config{Concurrency: 4, RateLimit: 1000, RateBurst: 100,
 		RequestTimeout: 5 * time.Second, MaxPayloads: 4,
 		VerifyExecution: true, VerifyTimeout: 5 * time.Second}, nil, nil)
-	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
+	ctx, cancel := context.WithTimeout(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 40*time.Second)
 	defer cancel()
 	result, err := e.Run(ctx, model.Target{URL: server.URL + "/?q=test"})
 	if err != nil {
@@ -121,7 +122,7 @@ func TestDefaultAdaptiveMixedFallbackDoesNotInheritProof(t *testing.T) {
 	// All endpoints are this local fixture; there is no external callback service.
 	e.SetCallbackURL(server.URL + "/callback")
 	e.SetPayloadPreset(payload.PresetMinimal)
-	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
+	ctx, cancel := context.WithTimeout(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 40*time.Second)
 	defer cancel()
 	target := model.Target{URL: server.URL + "/?q=test"}
 	analysis, err := e.analyzer.Analyze(ctx, target)

@@ -10,7 +10,6 @@ import (
 
 	"github.com/wqnmlgb151/XSSscan/pkg/model"
 	"github.com/wqnmlgb151/XSSscan/pkg/report"
-	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 )
 
 func TestDefaultModuleCoverageLocalChrome(t *testing.T) {
@@ -18,8 +17,7 @@ func TestDefaultModuleCoverageLocalChrome(t *testing.T) {
 		t.Skip("full default DOM source matrix needs local Chrome")
 	}
 	defer saveCfg()()
-	old := ssrfguard.AllowPrivate
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		w.Write([]byte("<html><body>safe</body></html>"))

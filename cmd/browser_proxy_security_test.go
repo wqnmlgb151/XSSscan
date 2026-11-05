@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 	"io"
 	"net/http"
 	"os"
@@ -65,7 +66,7 @@ func TestBrowserVerificationUsesConfiguredProxy(t *testing.T) {
 				io.Copy(w, response.Body)
 			}))
 			defer proxy.Close()
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			ctx, cancel := context.WithTimeout(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 30*time.Second)
 			defer cancel()
 			output := filepath.Join(t.TempDir(), "proxy.json")
 			arguments := []string{"-test.run=^TestSecurityCLIProcess$", "--", "--url", target.URL + "/?q=x", "--proxy", proxy.URL, "--allow-private", "--types", "reflected", "--silent", "--max-payloads", "1", "--output", output}

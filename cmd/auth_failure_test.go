@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"github.com/wqnmlgb151/XSSscan/pkg/report"
-	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
+
 	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"net/http"
 	"os"
@@ -14,8 +14,7 @@ import (
 
 func TestAuthenticationFailureStillWritesReproducibleReport(t *testing.T) {
 	defer saveCfg()()
-	old := ssrfguard.AllowPrivate
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		w.Write([]byte(`<form><input type="password"></form>`))

@@ -26,9 +26,7 @@ import (
 // TestRegressionBaseline is a small labeled corpus, not a population accuracy estimate.
 // BASELINE records use process-wide Go allocation counters; they exclude Chrome memory.
 func TestRegressionBaseline(t *testing.T) {
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	t.Cleanup(func() { ssrfguard.AllowPrivate = old })
+
 	for _, module := range []string{"reflected", "dom", "stored", "blind"} {
 		for _, safe := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/safe=%t", module, safe), func(t *testing.T) {
@@ -91,7 +89,7 @@ func TestRegressionBaseline(t *testing.T) {
 					fmt.Fprint(w, "<body>"+value+"</body>")
 				}))
 				defer server.Close()
-				ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+				ctx, cancel := context.WithTimeout(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 90*time.Second)
 				defer cancel()
 				var before, after runtime.MemStats
 				runtime.ReadMemStats(&before)

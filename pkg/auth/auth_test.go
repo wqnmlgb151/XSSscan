@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"net/http"
@@ -38,7 +39,7 @@ func TestAuthenticateSuccess(t *testing.T) {
 		PassField: "password",
 	}
 
-	err := Authenticate(client, cfg)
+	err := AuthenticateContext(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), client, cfg)
 	if err != nil {
 		t.Fatalf("Expected successful login, got error: %v", err)
 	}
@@ -69,7 +70,7 @@ func TestAuthenticateFailure(t *testing.T) {
 		PassField: "password",
 	}
 
-	err := Authenticate(client, cfg)
+	err := AuthenticateContext(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), client, cfg)
 	if err == nil {
 		t.Error("Expected login failure, but got success")
 	}
@@ -98,10 +99,10 @@ func TestAuthenticateDefaultFieldNames(t *testing.T) {
 		Password: "test",
 	}
 
-	err := Authenticate(client, cfg)
+	err := AuthenticateContext(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), client, cfg)
 	if err != nil {
 		t.Fatalf("Expected success with default field names, got: %v", err)
 	}
 }
 
-func TestMain(m *testing.M) { ssrfguard.AllowPrivate = true; os.Exit(m.Run()) }
+func TestMain(m *testing.M) { os.Exit(m.Run()) }

@@ -21,11 +21,9 @@ import (
 // The engine is configured for fast, deterministic testing.
 func newTestEngine(t *testing.T, baseURL string) (*scanner.Engine, *http.Client) {
 	t.Helper()
-	ssrfguard.AllowPrivate = true
-	t.Cleanup(func() { ssrfguard.AllowPrivate = false })
 
 	logger := zap.NewNop()
-	client := httpclient.NewClient(5*time.Second, nil)
+	client := httpclient.NewClient(5*time.Second, nil, ssrfguard.Policy{AllowPrivate: true})
 	engineCfg := scanner.Config{
 		Concurrency:    2,
 		RateLimit:      1000, // high limit for fast tests
@@ -65,7 +63,7 @@ func TestScanOneTarget_AggregatesFindings(t *testing.T) {
 		Method: "GET",
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 15*time.Second)
 	defer cancel()
 
 	err := scanOneTarget(ctx, engine, target, &allFindings, &totalStats)
@@ -100,7 +98,7 @@ func TestScanOneTarget_SumsStatsAcrossMultipleTargets(t *testing.T) {
 	var allFindings []model.Finding
 	var totalStats model.ScanStats
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 30*time.Second)
 	defer cancel()
 
 	// Scan two different URLs
@@ -148,7 +146,7 @@ func TestScanOneTarget_WAFPropagation(t *testing.T) {
 		Method: "GET",
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 15*time.Second)
 	defer cancel()
 
 	err := scanOneTarget(ctx, engine, target, &allFindings, &totalStats)
@@ -216,7 +214,7 @@ func TestScanOneTarget_ContextCanceled(t *testing.T) {
 	var totalStats model.ScanStats
 
 	// Create a context that's already canceled
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}))
 	cancel()
 
 	target := model.Target{
@@ -252,7 +250,7 @@ func TestScanOneTarget_EmptyServer(t *testing.T) {
 		Method: "GET",
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 10*time.Second)
 	defer cancel()
 
 	err := scanOneTarget(ctx, engine, target, &allFindings, &totalStats)
@@ -275,7 +273,7 @@ func TestRunHeadlessScan_Disabled(t *testing.T) {
 	cfg.Headless = false
 
 	var findings []model.Finding
-	err := runHeadlessScan(context.Background(), &http.Client{}, model.Target{URL: "http://localhost/test"}, &findings)
+	err := runHeadlessScan(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), &http.Client{}, model.Target{URL: "http://localhost/test"}, &findings)
 	if err != nil {
 		t.Errorf("runHeadlessScan should return nil when disabled, got: %v", err)
 	}
@@ -289,7 +287,7 @@ func TestRunHeadlessScan_ContextCanceled(t *testing.T) {
 	cfg.Headless = false // disabled — returns nil before checking context
 
 	var findings []model.Finding
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}))
 	cancel()
 
 	err := runHeadlessScan(ctx, &http.Client{}, model.Target{URL: "http://localhost/test"}, &findings)
@@ -363,7 +361,7 @@ func TestScanOneTarget_MultipleParams(t *testing.T) {
 		Method: "GET",
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 20*time.Second)
 	defer cancel()
 
 	err := scanOneTarget(ctx, engine, target, &allFindings, &totalStats)
@@ -389,7 +387,7 @@ func TestScanOneTarget_ConcurrentTargets(t *testing.T) {
 
 	engine, _ := newTestEngine(t, server.URL)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 30*time.Second)
 	defer cancel()
 
 	var wg sync.WaitGroup

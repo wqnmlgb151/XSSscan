@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"net/http"
 	"os"
@@ -80,7 +81,7 @@ func TestDiscoveryScopeAndPasswordFormsDoNotReachTargets(t *testing.T) {
 		fmt.Fprint(w, `<body><a href="/logout">logout</a><a href="/excluded?q=x">excluded</a><a href="/included?q=x">included</a><form method="post" action="/change"><input name="new" type="password"></form></body>`)
 	}))
 	defer server.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 20*time.Second)
 	defer cancel()
 	output := filepath.Join(t.TempDir(), "scope.json")
 	process := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestSecurityCLIProcess$", "--", "--url", server.URL, "--allow-private", "--types", "reflected", "--verify-execution=false", "--crawl", "--exclude-url", "/excluded", "--include-url", "^"+regexp.QuoteMeta(server.URL)+"(?:/(?:included.*|change))?$", "--silent", "--max-payloads", "1", "--output", output)
@@ -112,7 +113,7 @@ func TestDiscoveryUnsafeRedirectIsNotFollowed(t *testing.T) {
 		fmt.Fprint(w, "<body>logged out</body>")
 	}))
 	defer server.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 20*time.Second)
 	defer cancel()
 	output := filepath.Join(t.TempDir(), "redirect.json")
 	process := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestSecurityCLIProcess$", "--", "--url", server.URL+"/safe?q=x", "--allow-private", "--types", "reflected", "--verify-execution=false", "--silent", "--max-payloads", "1", "--output", output)
@@ -140,7 +141,7 @@ func TestBrowserDiscoveryUnsafeRedirectIsNotFollowed(t *testing.T) {
 		fmt.Fprint(w, "<body>logout</body>")
 	}))
 	defer server.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 30*time.Second)
 	defer cancel()
 	output := filepath.Join(t.TempDir(), "browser-redirect.json")
 	process := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestSecurityCLIProcess$", "--", "--url", server.URL+"/safe?q=x", "--allow-private", "--types", "dom", "--verify-execution=false", "--silent", "--output", output)
@@ -168,7 +169,7 @@ func TestStoredNoFormsDoesNotFollowFormActions(t *testing.T) {
 		fmt.Fprint(w, `<body><form action="/submitted"><input name="q"></form></body>`)
 	}))
 	defer server.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 20*time.Second)
 	defer cancel()
 	output := filepath.Join(t.TempDir(), "stored-noforms.json")
 	process := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestSecurityCLIProcess$", "--", "--url", server.URL+"?q=x", "--allow-private", "--types", "stored", "--verify-execution=false", "--no-forms", "--stored-max-polls", "1", "--silent", "--output", output)

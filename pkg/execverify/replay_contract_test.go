@@ -2,6 +2,7 @@ package execverify
 
 import (
 	"context"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 	"github.com/wqnmlgb151/XSSscan/test/testenv"
 	"io"
 	"net/http"
@@ -33,7 +34,7 @@ func TestCapturedReplayCookieLinesReachLocalServer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req, err := buildVerificationRequest(context.Background(), target, "", "", "")
+	req, err := buildVerificationRequest(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target, "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +112,7 @@ func TestCapturedReplayFallbackOwnsMutableState(t *testing.T) {
 
 func TestVerifierAuthSnapshotDoesNotFollowCallerMutations(t *testing.T) {
 	input := &AuthState{Cookies: []*http.Cookie{{Name: "session", Value: "original", Unparsed: []string{"original"}}, nil}}
-	v, err := NewVerifierWithAuth(context.Background(), time.Second, input)
+	v, err := NewVerifierWithAuth(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), time.Second, input)
 	if err != nil {
 		t.Fatal(err)
 	}

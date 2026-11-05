@@ -22,9 +22,7 @@ func TestDOMBrowserEvidenceAttribution(t *testing.T) {
 	if _, err := browser.FindChrome(); err != nil {
 		t.Fatal(err)
 	}
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	cases := []struct {
 		name, script string
 		want         bool
@@ -44,7 +42,7 @@ func TestDOMBrowserEvidenceAttribution(t *testing.T) {
 				fmt.Fprintf(w, "<html><body>safe<script>%s</script></body></html>", tc.script)
 			}))
 			defer server.Close()
-			scanner, err := NewScanner(context.Background(), 15*time.Second)
+			scanner, err := NewScanner(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 15*time.Second)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -52,7 +50,7 @@ func TestDOMBrowserEvidenceAttribution(t *testing.T) {
 			marker := "xsscanAttribution123"
 			u, _ := url.Parse(server.URL)
 			test := domXSSTest{Name: "fragment", Source: "location.hash", NavURL: buildURLWithFragment(u, marker)}
-			findings, err := scanner.runSingleDOMTest(context.Background(), model.Target{URL: server.URL}, test, marker, marker)
+			findings, err := scanner.runSingleDOMTest(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: server.URL}, test, marker, marker)
 			if tc.name == "missing-hooks" {
 				if err == nil || len(findings) > 0 {
 					t.Fatalf("missing hooks must fail: %v %+v", err, findings)
@@ -70,7 +68,7 @@ func TestDOMBrowserEvidenceAttribution(t *testing.T) {
 			}
 			// The old inline-event test injected its own onerror on every safe page.
 			if tc.name == "plain" {
-				findings, err = scanner.runSingleDOMTest(context.Background(), model.Target{URL: server.URL}, domXSSTest{Name: "inline-event", Source: "legacy", NavURL: server.URL, Extra: "inject-inline-" + marker}, marker, marker)
+				findings, err = scanner.runSingleDOMTest(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: server.URL}, domXSSTest{Name: "inline-event", Source: "legacy", NavURL: server.URL, Extra: "inject-inline-" + marker}, marker, marker)
 				if err != nil || len(findings) > 0 {
 					t.Fatalf("self injection: %v %+v", err, findings)
 				}
@@ -86,18 +84,16 @@ func TestDOMBrowserPrivateTargetBlocked(t *testing.T) {
 	if _, err := browser.FindChrome(); err != nil {
 		t.Fatal(err)
 	}
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = false
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	var hits atomic.Int32
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hits.Add(1); fmt.Fprint(w, "safe") }))
 	defer server.Close()
-	scanner, err := NewScanner(context.Background(), 15*time.Second)
+	scanner, err := NewScanner(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: false}), 15*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer scanner.Close()
-	findings, err := scanner.runSingleDOMTest(context.Background(), model.Target{URL: server.URL}, domXSSTest{Name: "fragment", NavURL: server.URL + "#xsscanBlocked"}, "xsscanBlocked", "xsscanBlocked")
+	findings, err := scanner.runSingleDOMTest(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: false}), model.Target{URL: server.URL}, domXSSTest{Name: "fragment", NavURL: server.URL + "#xsscanBlocked"}, "xsscanBlocked", "xsscanBlocked")
 	if err == nil || len(findings) > 0 || hits.Load() != 0 {
 		t.Fatalf("err=%v findings=%+v hits=%d", err, findings, hits.Load())
 	}

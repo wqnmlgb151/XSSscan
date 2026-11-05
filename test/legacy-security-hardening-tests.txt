@@ -33,3 +33,9 @@ github.com/xsscan/xsscan/cmd	TestYAMLCredentialPermissionWarning
 github.com/xsscan/xsscan/cmd	TestAllSensitiveArgvWarningsAreSilentAware
 github.com/xsscan/xsscan/test/integration	TestContainerRuntimeSecurityPolicy
 github.com/wqnmlgb151/XSSscan/test/integration	TestPublishedModulePathMatchesRepository
+github.com/wqnmlgb151/XSSscan/cmd	TestChromePinDNSRetainsSameOriginResources
+github.com/wqnmlgb151/XSSscan/pkg/httpclient	TestConcurrentClientPoliciesRemainIndependent
+github.com/wqnmlgb151/XSSscan/pkg/httpclient	TestClientPolicySnapshotsCallerSlice
+github.com/wqnmlgb151/XSSscan/pkg/ssrfguard	TestReservedAndEmbeddedAddressesAreRejected
+github.com/wqnmlgb151/XSSscan/pkg/ssrfguard	TestPinnedPolicyRetainsValidatedAnswers
+github.com/wqnmlgb151/XSSscan/pkg/ssrfguard	TestEmbeddedIPv4AddressDecoding

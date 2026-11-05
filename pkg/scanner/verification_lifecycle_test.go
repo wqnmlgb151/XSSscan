@@ -3,6 +3,7 @@ package scanner
 import (
 	"context"
 	"fmt"
+	"github.com/wqnmlgb151/XSSscan/pkg/ssrfguard"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -25,7 +26,7 @@ func TestVerificationPanicRetainsPriorAndLaterResults(t *testing.T) {
 	e := NewEngine(Config{}, zap.NewNop(), nil)
 	input := lifecycleCandidates(3)
 	calls := 0
-	got := e.verifyCandidateGroup(context.Background(), input, model.Target{}, func(_ context.Context, f model.Finding, _ model.Target) (*execverify.ExecutionResult, error) {
+	got := e.verifyCandidateGroup(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), input, model.Target{}, func(_ context.Context, f model.Finding, _ model.Target) (*execverify.ExecutionResult, error) {
 		calls++
 		if f.ID == "1" {
 			panic("test verifier failure")
@@ -51,7 +52,7 @@ func TestVerificationPanicRetainsPriorAndLaterResults(t *testing.T) {
 
 func TestVerificationPoolCancellationJoinsWorkersAndRetainsQueued(t *testing.T) {
 	e := NewEngine(Config{}, zap.NewNop(), nil)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}))
 	defer cancel()
 	input := lifecycleCandidates(40)
 	groups := make([][]model.Finding, len(input))
@@ -119,7 +120,7 @@ func TestVerificationPoolCancellationJoinsWorkersAndRetainsQueued(t *testing.T) 
 
 func TestVerificationAlreadyCanceledNeedsNoBrowser(t *testing.T) {
 	e := NewEngine(Config{}, zap.NewNop(), nil)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}))
 	cancel()
 	got := e.verifyGroupedFindings(ctx, lifecycleCandidates(2), nil, model.Target{})
 	if len(got) != 2 {
@@ -134,7 +135,7 @@ func TestVerificationAlreadyCanceledNeedsNoBrowser(t *testing.T) {
 
 func TestVerificationPanicRemainsDiagnosticAfterLaterProof(t *testing.T) {
 	e := NewEngine(Config{}, zap.NewNop(), nil)
-	got := e.verifyCandidateGroup(context.Background(), lifecycleCandidates(2), model.Target{}, func(_ context.Context, f model.Finding, _ model.Target) (*execverify.ExecutionResult, error) {
+	got := e.verifyCandidateGroup(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), lifecycleCandidates(2), model.Target{}, func(_ context.Context, f model.Finding, _ model.Target) (*execverify.ExecutionResult, error) {
 		if f.ID == "0" {
 			panic("first candidate failed internally")
 		}
@@ -152,7 +153,7 @@ func TestVerificationCancellationRetainsEveryCandidate(t *testing.T) {
 	for _, cancelBefore := range []bool{true, false} {
 		t.Run(fmt.Sprint(cancelBefore), func(t *testing.T) {
 			e := NewEngine(Config{}, zap.NewNop(), nil)
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel := context.WithCancel(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}))
 			defer cancel()
 			if cancelBefore {
 				cancel()

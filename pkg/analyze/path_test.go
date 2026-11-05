@@ -36,9 +36,7 @@ func TestExtractPathParams_EncodedSlashIndexes(t *testing.T) {
 }
 
 func TestAnalyze_PathMarkerAttribution(t *testing.T) {
-	previous := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	t.Cleanup(func() { ssrfguard.AllowPrivate = previous })
+
 	for _, path := range []string{"/fixed/a%2Fb/name%21", "/fixed/{slug}", "/fixed/:slug"} {
 		t.Run(path, func(t *testing.T) {
 			server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -48,7 +46,7 @@ func TestAnalyze_PathMarkerAttribution(t *testing.T) {
 			}))
 			defer server.Close()
 			target := model.Target{URL: server.URL + path}
-			result, err := NewAnalyzer(server.Client()).Analyze(context.Background(), target)
+			result, err := NewAnalyzer(server.Client()).Analyze(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), target)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -81,9 +79,7 @@ func TestInjectPerParamMarkers_RepeatedPathValues(t *testing.T) {
 }
 
 func TestAnalyze_PathWAFPerParameterFallback(t *testing.T) {
-	previous := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	t.Cleanup(func() { ssrfguard.AllowPrivate = previous })
+
 	server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		if strings.Count(r.URL.Path, MarkerPrefix) > 1 {
@@ -94,7 +90,7 @@ func TestAnalyze_PathWAFPerParameterFallback(t *testing.T) {
 		fmt.Fprint(w, "<p>"+r.URL.Path+"</p>")
 	}))
 	defer server.Close()
-	result, err := NewAnalyzer(server.Client()).Analyze(context.Background(), model.Target{URL: server.URL + "/fixed/name%21/other%21"})
+	result, err := NewAnalyzer(server.Client()).Analyze(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: server.URL + "/fixed/name%21/other%21"})
 	if err != nil {
 		t.Fatal(err)
 	}

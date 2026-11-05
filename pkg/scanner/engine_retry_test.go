@@ -83,8 +83,6 @@ func simulateRetryLoop(client *mockHTTPClient, req *http.Request) (*http.Respons
 }
 
 func TestRetryOnNetworkError_ExhaustsAndReturnsError(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	mock := &mockHTTPClient{
 		errors: []error{
@@ -107,8 +105,6 @@ func TestRetryOnNetworkError_ExhaustsAndReturnsError(t *testing.T) {
 }
 
 func TestRetryOnNetworkError_RetriesThenSucceeds(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	mock := &mockHTTPClient{
 		errors: []error{
@@ -135,8 +131,6 @@ func TestRetryOnNetworkError_RetriesThenSucceeds(t *testing.T) {
 }
 
 func TestRetryOn500_RetriesThenSucceeds(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	mock := &mockHTTPClient{
 		responses: []*http.Response{
@@ -161,8 +155,6 @@ func TestRetryOn500_RetriesThenSucceeds(t *testing.T) {
 }
 
 func TestRetryOn500_AllFail(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	mock := &mockHTTPClient{
 		responses: []*http.Response{
@@ -185,8 +177,6 @@ func TestRetryOn500_AllFail(t *testing.T) {
 }
 
 func TestRetryOn429_ThenSuccess(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	resp429 := newMockResponse(429, "Too Many Requests")
 	resp429.Header.Set("Retry-After", "0")
@@ -213,8 +203,6 @@ func TestRetryOn429_ThenSuccess(t *testing.T) {
 }
 
 func TestNoRetryOn200(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	mock := &mockHTTPClient{
 		responses: []*http.Response{
@@ -237,8 +225,6 @@ func TestNoRetryOn200(t *testing.T) {
 }
 
 func TestNoRetryOn404(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	mock := &mockHTTPClient{
 		responses: []*http.Response{
@@ -258,8 +244,6 @@ func TestNoRetryOn404(t *testing.T) {
 }
 
 func TestRetryContextCancellation(t *testing.T) {
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = false }()
 
 	// Mock always returns 500 to force retries
 	mock := &mockHTTPClient{
@@ -272,7 +256,7 @@ func TestRetryContextCancellation(t *testing.T) {
 	}
 
 	// Pre-cancelled context
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}))
 	cancel()
 
 	req, _ := http.NewRequestWithContext(ctx, "GET", "http://127.0.0.1:9999/test", nil)

@@ -19,7 +19,7 @@ import (
 // newMockEngine creates an Engine with nop logger, real verifier, and a
 // throttle that won't interfere with tests. Caller should set AllowPrivate.
 func newMockEngine() *Engine {
-	ssrfguard.AllowPrivate = true
+
 	return NewEngine(Config{
 		ConfidenceMin: verify.DefaultConfidenceThreshold,
 		RateLimit:     1000,
@@ -45,7 +45,7 @@ func TestSendWithRetry_Success(t *testing.T) {
 	modifiedTarget := model.Target{URL: srv.URL + "/page?q=PAYLOAD", Method: "GET"}
 	p := payload.Payload{Value: "PAYLOAD", Context: ctx.ContextHTMLBody}
 
-	resp, body, _, err := e.sendWithRetry(context.Background(), inj, modifiedTarget, p, "127.0.0.1")
+	resp, body, _, err := e.sendWithRetry(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), inj, modifiedTarget, p, "127.0.0.1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestSendWithRetry_Retry5xx(t *testing.T) {
 	modifiedTarget := model.Target{URL: srv.URL + "/page?q=PAYLOAD", Method: "GET"}
 	p := payload.Payload{Value: "PAYLOAD", Context: ctx.ContextHTMLBody}
 
-	resp, body, _, err := e.sendWithRetry(context.Background(), inj, modifiedTarget, p, "127.0.0.1")
+	resp, body, _, err := e.sendWithRetry(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), inj, modifiedTarget, p, "127.0.0.1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestSendWithRetry_CSRFRefreshOn403(t *testing.T) {
 	modifiedTarget := model.Target{URL: srv.URL + "/page?q=PAYLOAD", Method: "GET"}
 	p := payload.Payload{Value: "PAYLOAD", Context: ctx.ContextHTMLBody}
 
-	resp, body, _, err := e.sendWithRetry(context.Background(), inj, modifiedTarget, p, "127.0.0.1")
+	resp, body, _, err := e.sendWithRetry(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), inj, modifiedTarget, p, "127.0.0.1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -230,7 +230,7 @@ func TestMockServer_WAFDetection(t *testing.T) {
 	modifiedTarget := model.Target{URL: srv.URL + "/page?q=PAYLOAD", Method: "GET"}
 	p := payload.Payload{Value: "PAYLOAD", Context: ctx.ContextHTMLBody}
 
-	resp, body, _, err := e.sendWithRetry(context.Background(), inj, modifiedTarget, p, "127.0.0.1")
+	resp, body, _, err := e.sendWithRetry(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), inj, modifiedTarget, p, "127.0.0.1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

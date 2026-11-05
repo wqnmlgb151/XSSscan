@@ -20,9 +20,7 @@ func TestSmallBudgetCoversLaterExecutableContext(t *testing.T) {
 	if testing.Short() {
 		t.Skip("requires local Chrome")
 	}
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	for _, mode := range []string{"double-attribute", "single-attribute", "double-js", "safe"} {
 		t.Run(mode, func(t *testing.T) {
 			server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -45,7 +43,7 @@ func TestSmallBudgetCoversLaterExecutableContext(t *testing.T) {
 			for _, preset := range []payload.PayloadPreset{payload.PresetStandard, payload.PresetMinimal} {
 				e := NewEngine(Config{Concurrency: 2, RateLimit: 10000, RateBurst: 10000, RequestTimeout: 5 * time.Second, MaxPayloads: 8, VerifyExecution: true, VerifyTimeout: 15 * time.Second, EnableProbe: true}, zap.NewNop(), newTestClient(server.URL))
 				e.SetPayloadPreset(preset)
-				result, err := e.Run(context.Background(), model.Target{URL: server.URL + "?q=test"})
+				result, err := e.Run(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: server.URL + "?q=test"})
 				if err != nil {
 					t.Fatalf("preset=%s err=%v", preset, err)
 				}
@@ -75,19 +73,17 @@ func TestMixedQuoteAttributeExecutes(t *testing.T) {
 	if testing.Short() {
 		t.Skip("requires local Chrome")
 	}
-	old := ssrfguard.AllowPrivate
-	ssrfguard.AllowPrivate = true
-	defer func() { ssrfguard.AllowPrivate = old }()
+
 	for _, tc := range []struct{ quote, value string }{{`"`, `'" autofocus onfocus=alert(1) x="`}, {"'", `"' autofocus onfocus=alert(1) x='`}} {
 		server := testenv.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/html")
 			fmt.Fprint(w, "<body><input value="+tc.quote+r.URL.Query().Get("q")+tc.quote+"></body>")
 		}))
-		v, err := execverify.NewVerifier(context.Background(), 15*time.Second)
+		v, err := execverify.NewVerifier(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), 15*time.Second)
 		if err != nil {
 			t.Fatal(err)
 		}
-		result, err := v.VerifyPayload(context.Background(), model.Target{URL: server.URL + "?q=test"}, "q", model.ParamQuery, tc.value)
+		result, err := v.VerifyPayload(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), model.Target{URL: server.URL + "?q=test"}, "q", model.ParamQuery, tc.value)
 		v.Close()
 		server.Close()
 		if err != nil || result == nil || !result.Executed {

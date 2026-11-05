@@ -52,7 +52,7 @@ func TestROPCFlow_Success(t *testing.T) {
 		Password: "secret",
 	})
 
-	tokenPair, err := flow.Authenticate(context.Background())
+	tokenPair, err := flow.Authenticate(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}))
 	if err != nil {
 		t.Fatalf("Authenticate: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestROPCFlow_ServerError(t *testing.T) {
 		Password: "wrong",
 	})
 
-	_, err := flow.Authenticate(context.Background())
+	_, err := flow.Authenticate(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}))
 	if err == nil {
 		t.Fatal("expected error for failed auth")
 	}
@@ -111,7 +111,7 @@ func TestROPCFlow_NoCredentials(t *testing.T) {
 		ClientID: "test-client",
 	})
 
-	_, err := flow.Authenticate(context.Background())
+	_, err := flow.Authenticate(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}))
 	if err == nil {
 		t.Fatal("expected error when no credentials provided")
 	}
@@ -216,7 +216,7 @@ func TestRefresh(t *testing.T) {
 		ClientID: "test-client",
 	})
 
-	tokenPair, err := flow.Refresh(context.Background(), "old-refresh-token")
+	tokenPair, err := flow.Refresh(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), "old-refresh-token")
 	if err != nil {
 		t.Fatalf("Refresh: %v", err)
 	}
@@ -237,7 +237,7 @@ func TestDiscoverOIDC(t *testing.T) {
 	}))
 	defer server.Close()
 	issuer = server.URL + "/tenant/realm"
-	doc, err := DiscoverOIDC(context.Background(), &http.Client{Timeout: time.Second}, issuer)
+	doc, err := DiscoverOIDC(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: true}), &http.Client{Timeout: time.Second}, issuer)
 	if err != nil || doc.Issuer != issuer || doc.TokenEndpoint != issuer+"/token" {
 		t.Fatalf("tenant discovery: %+v %v", doc, err)
 	}
@@ -366,4 +366,4 @@ func TestExtractIssuer(t *testing.T) {
 	}
 }
 
-func TestMain(m *testing.M) { ssrfguard.AllowPrivate = true; os.Exit(m.Run()) }
+func TestMain(m *testing.M) { os.Exit(m.Run()) }

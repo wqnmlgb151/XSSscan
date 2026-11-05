@@ -54,6 +54,7 @@ func NewIsolatedTabContext(ctx, parent context.Context, timeout time.Duration) (
 		lifetime = requestbudget.WithMeter(lifetime, meter)
 	}
 	lifetime = ssrfguard.InheritURLFilter(lifetime, ctx)
+	lifetime = ssrfguard.InheritPolicy(lifetime, ctx)
 	tab, closeTab, _ := NewTabContext(lifetime, ext.WithTargetID(tabID))
 	stopCaller := context.AfterFunc(ctx, endLifetime)
 	var once sync.Once

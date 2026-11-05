@@ -18,6 +18,11 @@
 - 新增 `XSSCAN_PASSWORD`、`XSSCAN_PROXY_PASSWORD`、`XSSCAN_OAUTH_CLIENT_SECRET`、`XSSCAN_OAUTH_PASSWORD`、`XSSCAN_JWT`；优先级为显式 CLI > 环境变量（含显式空值）> YAML。新增 `--password-file`、`--jwt-file`、`--password-stdin`；只删除末尾换行，保留空格。
 - 同一凭据的多个显式来源互斥；密码 stdin 不得同时作为 URL 列表，输入上限 1 MiB。Unix 含凭据 YAML 对组/其他用户可读时警告；日志不回显凭据。
 
+### P1-1 容器
+
+- 升级到受支持且固定摘要的 Alpine 3.23.7，内置 Chromium/CA，默认非 root，保留 Chrome 沙箱；builder 同样固定摘要。新增网络禁用的容器 loopback 执行验证 CI，测试专用 fixture 不进入 final 镜像。
+- 镜像只在构建时安装依赖；本机无 Docker，实际镜像构建/执行结果待 CI。Chrome 沙箱所需权限及 CI 权限放宽边界见 `docs/container.md`。
+
 ### 行为变化
 
 - P0-5：已有敏感 argv 参数继续可用，非 silent 模式新增一次进程列表/历史风险提示；`--silent` 恢复无提示行为。环境变量现在覆盖 YAML；显式旧 CLI 参数可恢复指定值，未设置环境变量时 YAML 行为保持不变。

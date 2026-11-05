@@ -31,3 +31,4 @@ github.com/xsscan/xsscan/cmd	TestCredentialEnvironmentAndExplicitEmpty
 github.com/xsscan/xsscan/cmd	TestPasswordFileAndStdinSources
 github.com/xsscan/xsscan/cmd	TestYAMLCredentialPermissionWarning
 github.com/xsscan/xsscan/cmd	TestAllSensitiveArgvWarningsAreSilentAware
+github.com/xsscan/xsscan/test/integration	TestContainerRuntimeSecurityPolicy

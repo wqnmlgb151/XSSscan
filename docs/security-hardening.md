@@ -9,7 +9,7 @@
 | P0-3 Chrome 代理 | 已复现绕过代理并修复；普通/认证/直连/拒绝的真实 Chrome race 回归、build/vet/short-race 通过；本项跨平台 CI 待执行 |
 | P0-4 短凭据脱敏 | 已复现并修复；报告包 race、build/vet/全仓 short-race 通过，指定 Chrome 包与跨平台 CI 待完成 |
 | P0-5 凭据输入入口 | 已实现；本地 build/vet/short-race 与来源/警告回归通过，Chrome 串行与 Linux 权限验证待完成 |
-| P1-1 Docker | 未完成，需核实基础镜像维护和摘要 |
+| P1-1 Docker | 配置、固定摘要、非 root Chromium 与 CI 已实现；本地静态策略 race/build/vet/short-race 通过；实际镜像验收待 CI |
 | P1-2 模块路径 | 未完成 |
 | P1-3 SSRF Policy | 未完成 |
 | P1-4 marker | 未完成 |
@@ -73,3 +73,10 @@
 - 未验证：本机未运行 Unix 权限语义（Windows 提前返回）；需 Linux CI 通过后方可声明。环境变量仍可能被同用户诊断工具读取，文件入口不自动修改用户提供文件的权限。
 
 - P0-5 最终本地结果：short/race 1754 pass / 53 short skip；指定五包真实 Chrome 串行 race 268 pass / 0 skip。CI 待推送后运行；Unix 权限分支尚未验证。
+
+## P1-1 验证及边界
+
+- 文件：Dockerfile、.dockerignore、`.github/workflows/build.yml`、`test/containerfixture/main.go`、`test/container-smoke.sh`、`test/integration/container_policy_test.go`、新清单及容器文档。
+- 失败记录：`p1-1-before.log`，缺摘要、Chromium、非 root 三项配置契约失败；修复后目标 race 通过。build/vet 通过，全仓 short/race 1755 pass / 53 short skip。
+- 仅测试 fixture 与容器配置变化；生产扫描 Go 代码与 P0-5 相同，P0-5 五包串行 Chrome race 268 pass / 0 skip。没有把此结果当作容器运行通过。
+- 本机无 Docker，镜像构建/容器真实 Chrome/沙箱执行均未运行。CI 验收待提交触发；固定摘要不固定 apk 依赖快照。非 root 为容器默认行为变化，宿主 CLI 默认不变。CI 权限放宽仅适用于一次性隔离环境。

@@ -113,6 +113,7 @@ go test -race -p 1 -count=1 -timeout 15m ./...
 ```
 
 - [CHANGELOG](CHANGELOG.md)：版本变更。
+- [开发分支容器说明](docs/container.md)：Chromium、非 root、Chrome 沙箱运行条件及验证边界。
 - [开发分支凭据入口](docs/credentials.md)：未发布的环境变量、文件/stdin 与优先级。
 - [v1.1.4 发布说明](docs/releases/v1.1.4.md)：发布包、兼容性及已知限制。
 - [测试与基线](test/README.md)：四类检测、误报/漏报、并发与取消回归。

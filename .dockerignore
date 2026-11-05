@@ -3,7 +3,9 @@
 .codex
 .agents
 dist
-test
+test/**
+!test/containerfixture/
+!test/containerfixture/**
 **/*_test.go
 AGENTS.md
 CLAUDE.md

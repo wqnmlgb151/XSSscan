@@ -48,3 +48,12 @@ github.com/wqnmlgb151/XSSscan/test/integration	TestCustomMarkerPrefixPreservesFo
 github.com/wqnmlgb151/XSSscan/test/integration	TestCustomMarkerPrefixPreservesFourDetectors/dom
 github.com/wqnmlgb151/XSSscan/test/integration	TestCustomMarkerPrefixPreservesFourDetectors/stored
 github.com/wqnmlgb151/XSSscan/test/integration	TestCustomMarkerPrefixPreservesFourDetectors/blind
+github.com/wqnmlgb151/XSSscan/pkg/internal/chromedp	TestRestoredSiteIsolationSupportsGuardedContexts
+github.com/wqnmlgb151/XSSscan/pkg/internal/chromedp	TestBrowserDefaultKeepsSiteIsolation
+github.com/wqnmlgb151/XSSscan/pkg/internal/chromedp	TestLegacySiteIsolationOptOut
+github.com/wqnmlgb151/XSSscan/pkg/internal/chromedp	TestChromeBackgroundControlsRemainEnabled
+github.com/wqnmlgb151/XSSscan/pkg/internal/chromedp	TestChromeBackgroundControlsRemainEnabled/disable-background-networking
+github.com/wqnmlgb151/XSSscan/pkg/internal/chromedp	TestChromeBackgroundControlsRemainEnabled/disable-sync
+github.com/wqnmlgb151/XSSscan/pkg/internal/chromedp	TestChromeBackgroundControlsRemainEnabled/disable-component-update
+github.com/wqnmlgb151/XSSscan/pkg/internal/chromedp	TestChromeLegacyStartupRestoresPreviousFlags
+github.com/wqnmlgb151/XSSscan/cmd	TestSiteIsolationCompatibilityConfig

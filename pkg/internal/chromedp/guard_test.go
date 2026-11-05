@@ -96,7 +96,7 @@ func TestBrowserAllocatorPreservesExplicitHTTPScheme(t *testing.T) {
 	}
 	for _, arg := range arguments {
 		if strings.HasPrefix(arg, "--disable-features=") {
-			for _, feature := range []string{"HttpsUpgrades", "site-per-process", "Translate", "BlinkGenPropertyTrees"} {
+			for _, feature := range []string{"HttpsUpgrades", "Translate", "BlinkGenPropertyTrees"} {
 				if !strings.Contains(arg, feature) {
 					t.Fatalf("missing %s in %s", feature, arg)
 				}

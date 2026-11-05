@@ -13,7 +13,7 @@
 | P1-2 模块路径 | 已完成代码、审查及 Windows/Linux 完整普通/race/历史身份门禁；结果见下方记录 |
 | P1-3 SSRF Policy | 已实现，失败测试转绿；独立审查、build/vet/short-race/指定真实 Chrome 回归通过，跨平台完整 CI 待提交触发 |
 | P1-4 marker | 加密随机与前缀配置已实现；四模块自定义前缀、本地完整指定回归通过，跨平台 CI 待触发 |
-| P1-5 Chrome 参数 | 待真实 Chrome 验证 |
+| P1-5 Chrome 参数 | 恢复隔离兼容性已实测；build/vet/short-race/276 项真实 Chrome race 通过，双平台 CI 待提交触发 |
 | P1-6 执行观察 | 未完成 |
 | P2-1 公开语料 | 未完成 |
 | P2-2 回调闭环 | 未完成 |
@@ -121,3 +121,11 @@
 - 默认 xsscan + 12 长度不变；随机前缀默认关闭。旧 GenerateMarker()/InstrumentDialogPayload() SDK 签名保留。DOM hook 原本已按完整 marker 生成，xsspatterns 不匹配固定前缀，未为关键词强行重构。
 - build/vet 通过；全仓 short/race 1769 pass / 55 short skip；指定五包真实 Chrome 串行 race 268 pass / 0 skip。独立审查无 CRITICAL/HIGH，三相关包 vet 与两个 marker/probe 单测 race 另通过。
 - 风险：熵源故障 fail closed；随机前缀不保证 WAF 绕过或隐匿工具，固定协议参数/内部 hook 名保持兼容。跨平台完整 CI 待提交触发。
+
+## P1-5 验证及边界
+
+- 文件：`pkg/internal/chromedp/{alloc,guard_test,site_isolation_security_test}.go`、`pkg/browser/isolation.go`、cmd flag/YAML 与配置测试、新清单和 `docs/chrome-startup.md`。
+- `p1-5-before.log`：恢复隔离的显式前置运行成功，默认禁用隔离的断言失败。恢复默认后新断言转绿。组件更新控制首次真实命令行检查失败后补上显式参数，目标隔离/兼容/三项后台控制 race 通过。
+- 默认站点隔离开启、组件更新禁用；原后台网络/同步禁用保留；两个显式兼容开关见 CHANGELOG/--help。保留旧 HTTP scheme 测试身份，新专项用例承担站点隔离断言，未弱化检测矩阵。
+- build/vet 通过；全仓 short/race 1770 pass / 60 short skip；指定五包真实 Chrome 串行 race 276 pass / 0 skip。此前中断日志不作为通过证据，重新完整运行 `p1-5-chrome-race-final.json`。独立审查无 CRITICAL/HIGH。
+- 本机 Windows 真实 Chrome 已验证，Linux/容器及完整历史门禁待提交后的 CI；命令行参数存在不代表浏览器无后台网络，兼容参数不会关闭预算/SSRF/证书/沙箱策略。

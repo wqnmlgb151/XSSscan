@@ -49,79 +49,81 @@ const (
 
 // ScanConfig holds all CLI flags
 type ScanConfig struct {
-	PasswordFile           string
-	JWTFile                string
-	PasswordStdin          bool
-	legacyTypeFlags        map[string]bool
-	typesExplicit          bool
-	OAuthAllowedOrigins    []string
-	LoginSuccessContains   string
-	LoginSuccessURL        string
-	Types                  string
-	ExcludeTypes           string
-	ModuleTimeout          int
-	RequestBudget          int
-	BrowserRequestBudget   int
-	URL                    string
-	Method                 string
-	Headers                []string
-	Body                   string
-	Cookies                []string
-	Output                 string
-	Format                 string
-	IncludeRawEvidence     bool
-	Workers                int
-	RateLimit              int
-	Timeout                int
-	MaxPayload             int
-	Callback               string
-	Verbose                bool
-	LoginURL               string
-	Username               string
-	Password               string
-	TestHPP                bool
-	WAFBypass              bool
-	ConfidenceMin          float64
-	AllowPrivate           bool
-	Proxy                  string
-	ProxyUsername          string
-	ProxyPassword          string
-	ProxyInsecure          bool
-	Crawl                  bool
-	ExcludeURLs            []string
-	IncludeURLs            []string
-	NoForms                bool
-	AllowFormSubmit        bool
-	CrawlDepth             int
-	CrawlMaxPages          int
-	TargetsFile            string
-	RandomUA               bool
-	AdaptiveRate           bool
-	Strategy               string
-	PayloadPreset          string
-	PayloadWordlist        string
-	Headless               bool
-	RenderSPA              bool
-	ChromeNoSandbox        bool
-	ChromeIgnoreCertErrors bool
-	ChromePath             string
-	BrowserDirect          bool
-	ChromePinDNS           bool
-	MarkerPrefix           string
-	RandomMarkerPrefix     bool
-	ConfigFile             string
-	JWT                    string
-	Silent                 bool
-	NoColor                bool
-	EnableProbe            bool
-	VerifyExecution        bool
-	VerifyTimeout          int
-	DiscoverHeaders        bool
-	EnableStored           bool
-	TriggerURLs            []string
-	StoredPollInterval     int
-	StoredMaxPolls         int
-	CSRFToken              string
+	PasswordFile               string
+	JWTFile                    string
+	PasswordStdin              bool
+	legacyTypeFlags            map[string]bool
+	typesExplicit              bool
+	OAuthAllowedOrigins        []string
+	LoginSuccessContains       string
+	LoginSuccessURL            string
+	Types                      string
+	ExcludeTypes               string
+	ModuleTimeout              int
+	RequestBudget              int
+	BrowserRequestBudget       int
+	URL                        string
+	Method                     string
+	Headers                    []string
+	Body                       string
+	Cookies                    []string
+	Output                     string
+	Format                     string
+	IncludeRawEvidence         bool
+	Workers                    int
+	RateLimit                  int
+	Timeout                    int
+	MaxPayload                 int
+	Callback                   string
+	Verbose                    bool
+	LoginURL                   string
+	Username                   string
+	Password                   string
+	TestHPP                    bool
+	WAFBypass                  bool
+	ConfidenceMin              float64
+	AllowPrivate               bool
+	Proxy                      string
+	ProxyUsername              string
+	ProxyPassword              string
+	ProxyInsecure              bool
+	Crawl                      bool
+	ExcludeURLs                []string
+	IncludeURLs                []string
+	NoForms                    bool
+	AllowFormSubmit            bool
+	CrawlDepth                 int
+	CrawlMaxPages              int
+	TargetsFile                string
+	RandomUA                   bool
+	AdaptiveRate               bool
+	Strategy                   string
+	PayloadPreset              string
+	PayloadWordlist            string
+	Headless                   bool
+	RenderSPA                  bool
+	ChromeNoSandbox            bool
+	ChromeIgnoreCertErrors     bool
+	ChromePath                 string
+	BrowserDirect              bool
+	ChromePinDNS               bool
+	ChromeDisableSiteIsolation bool
+	ChromeLegacyStartup        bool
+	MarkerPrefix               string
+	RandomMarkerPrefix         bool
+	ConfigFile                 string
+	JWT                        string
+	Silent                     bool
+	NoColor                    bool
+	EnableProbe                bool
+	VerifyExecution            bool
+	VerifyTimeout              int
+	DiscoverHeaders            bool
+	EnableStored               bool
+	TriggerURLs                []string
+	StoredPollInterval         int
+	StoredMaxPolls             int
+	CSRFToken                  string
 
 	// OAuth 2.0
 	OAuthIssuer       string
@@ -157,6 +159,7 @@ var rootCmd = &cobra.Command{
 环境变量：XSSCAN_PASSWORD、XSSCAN_PROXY_PASSWORD、XSSCAN_OAUTH_CLIENT_SECRET、XSSCAN_OAUTH_PASSWORD、XSSCAN_JWT。
 敏感 argv 非 silent 模式提示暴露风险；--silent 关闭此提示。
 默认拒绝私网及特殊用途地址；授权环境用 --allow-private 放开。
+Chrome 默认恢复站点隔离并禁用组件更新；--chrome-legacy-startup 恢复旧启动参数。
 --chrome-pin-dns 默认关闭；设为 false 恢复普通 DNS，开启时限单 --url 且浏览器直连。
 
 默认调度 reflected、dom、stored、blind 四类检测，使用 --types 选择类型。
@@ -205,6 +208,8 @@ func main() {
 func init() {
 	rootCmd.Flags().StringVar(&cfg.MarkerPrefix, "marker-prefix", analyze.MarkerPrefix, "Marker prefix: lowercase letter then lowercase letters/digits, max 32 (empty uses default)")
 	rootCmd.Flags().BoolVar(&cfg.RandomMarkerPrefix, "random-marker-prefix", false, "Use one cryptographically random prefix per scan (overrides --marker-prefix)")
+	rootCmd.Flags().BoolVar(&cfg.ChromeLegacyStartup, "chrome-legacy-startup", false, "Restore legacy site-isolation and component-update startup flags")
+	rootCmd.Flags().BoolVar(&cfg.ChromeDisableSiteIsolation, "chrome-disable-site-isolation", false, "Restore legacy Chrome site-isolation disable flags (default: site isolation enabled)")
 	rootCmd.Flags().BoolVar(&cfg.ChromePinDNS, "chrome-pin-dns", false, "Experimental: pin one --url browser origin to validated DNS; forces direct browser connections")
 	rootCmd.Flags().BoolVar(&cfg.BrowserDirect, "browser-direct", false, "Use direct browser connections instead of --proxy (warning when combined)")
 	rootCmd.Flags().StringArrayVar(&cfg.ExcludeURLs, "exclude-url", nil, "Exclude discovery URLs matching a regex (repeatable)")
@@ -336,6 +341,8 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 	ctx, cancel := context.WithCancel(ssrfguard.WithPolicy(context.Background(), ssrfguard.Policy{AllowPrivate: cfg.AllowPrivate}))
 	defer cancel()
+	ctx = browser.WithSiteIsolationDisabled(ctx, cfg.ChromeDisableSiteIsolation)
+	ctx = browser.WithLegacyStartup(ctx, cfg.ChromeLegacyStartup)
 	if cfg.RandomMarkerPrefix {
 		prefix, err := analyze.RandomMarkerPrefix()
 		if err != nil {

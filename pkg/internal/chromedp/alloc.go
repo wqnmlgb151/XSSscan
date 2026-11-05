@@ -23,10 +23,13 @@ var StandardHeadlessOptions = []ext.ExecAllocatorOption{
 	ext.NoDefaultBrowserCheck,
 	ext.Headless,
 	ext.DisableGPU,
-	// Preserve chromedp v0.16's disabled features, and keep explicit HTTP
+	ext.Flag("disable-component-update", true),
+	// Retain representation compatibility flags while restoring site isolation.
+	// Keep explicit HTTP
 	// scan targets on HTTP instead of Chrome silently changing their origin.
 	// Server redirects and HSTS remain subject to the request scope policy.
-	ext.Flag("disable-features", "site-per-process,Translate,BlinkGenPropertyTrees,HttpsUpgrades"),
+	ext.Flag("disable-features", "Translate,BlinkGenPropertyTrees,HttpsUpgrades"),
+	ext.Flag("site-per-process", true),
 	ext.Flag("no-sandbox", false),
 	ext.Flag("ignore-certificate-errors", false),
 	ext.WindowSize(1280, 800),
@@ -44,6 +47,12 @@ func AllocatorOptions(custom ...ext.ExecAllocatorOption) []ext.ExecAllocatorOpti
 // The CLI settings take precedence over caller options. When ChromePath is set, the
 // binary location is pinned via ExecPath.
 func NewExecAllocator(ctx context.Context, custom ...ext.ExecAllocatorOption) (context.Context, context.CancelFunc) {
+	if browser.LegacyStartup(ctx) {
+		custom = append(custom, ext.Flag("disable-component-update", false))
+	}
+	if browser.SiteIsolationDisabled(ctx) {
+		custom = append(custom, ext.Flag("site-per-process", false), ext.Flag("disable-features", "site-per-process,Translate,BlinkGenPropertyTrees,HttpsUpgrades"))
+	}
 	if browser.DNSPinEnabled(ctx) {
 		custom = append(custom, ext.Flag("no-proxy-server", true))
 		if rule := browser.DNSRuleFromContext(ctx); rule != "" {

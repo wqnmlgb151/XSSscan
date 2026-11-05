@@ -40,7 +40,14 @@
 - 新增 --marker-prefix / --random-marker-prefix 与 YAML 配置，前缀限制为首位小写字母、后续小写字母或数字、最多 32 字符；随机模式每轮一次生成 10 字母前缀并优先于指定前缀。恢复默认用 --random-marker-prefix=false --marker-prefix=xsscan。
 - 多维探针按本轮前缀构建独立验证器；DOM hook 已按完整 marker 注入，xsspatterns 不依赖 marker 前缀，无需改写事件处理器规则。Schema/置信度/adaptive/检测矩阵不变。
 
+### P1-5 Chrome 启动加固
+
+- 真实 Chrome 前置测试确认恢复站点隔离兼容 BrowserContext、隔离存储、守卫/预算、脚本执行与清理；默认去掉 disable-features 中的 site-per-process 并显式启用站点隔离。
+- 显式禁用组件更新；原有后台网络与同步禁用参数保持，三项均以实际 Chrome 命令行回归验证。新增不可变 context 配置，不新增 browser 全局开关。
+
 ### 行为变化
+
+- P1-5：Chrome 默认恢复站点隔离并禁用组件更新。`--chrome-disable-site-isolation` 只恢复旧隔离配置；`--chrome-legacy-startup` 完整恢复本项原有隔离/组件更新启动参数。二者默认关闭，支持 YAML，--help 说明；沙箱/证书/代理/预算策略独立。
 
 - P1-3：默认拒绝更多特殊用途地址；授权内网/转换地址可用原 `--allow-private` 显式放开。实验性 DNS 固定默认关闭，`--chrome-pin-dns=false` 恢复普通 DNS；开启时只支持单一目标且 Chrome 直连，优先已验证 IPv4，没有 IPv4 时用首个 IPv6，不保证该固定地址可达。
 

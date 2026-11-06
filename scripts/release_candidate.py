@@ -115,7 +115,7 @@ def main():
     parser.add_argument("--goos", required=True)
     parser.add_argument("--goarch", required=True)
     args = parser.parse_args()
-    assert args.version == "1.1.4", "Update the release procedure deliberately for a new version"
+    assert args.version == "1.1.5", "Update the release procedure deliberately for a new version"
     root = Path(__file__).resolve().parent.parent
     os.chdir(root)
     assert not run(["git", "status", "--porcelain", "--untracked-files=no"]), "Tracked source dirty"

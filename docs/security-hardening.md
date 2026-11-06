@@ -14,7 +14,7 @@
 | P1-3 SSRF Policy | 已合并至 master，Windows/Linux 完整回归、身份门禁和容器检查通过 |
 | P1-4 marker | 已合并至 master，四模块自定义前缀回归及双平台完整 CI 通过 |
 | P1-5 Chrome 参数 | 已合并至 master，276 项本地真实 Chrome race 和双平台完整 CI 通过 |
-| P1-6 执行观察 | 实现和目标回归已完成，作为独立 PR 验收 |
+| P1-6 执行观察 | PR #5 已合并至 master，本地五包真实 Chrome 串行 race 和双平台完整 CI 通过 |
 | P2-1 公开语料 | 未完成 |
 | P2-2 回调闭环 | 未完成 |
 | P2-3 外部脚本 | 未完成 |
@@ -139,5 +139,5 @@
 - 文件集中在 `pkg/execverify/{verifier,settle,settle_security_test}.go`、`pkg/browser/verification.go`、cmd 配置和兼容测试、必跑测试清单及验证文档。
 - 三轮预热后的 loopback 惰性负例中位数由 3386.688 ms 降至 422.752 ms，每轮仍是一次请求。2.5 秒延迟 focus/hover、声明式 Shadow DOM 和 HTTP Refresh 仍保留执行证明。原型修改用例在初版优化上未复现漏检，作为防御回归保留。
 - 只在 CDP 确认主文档加载完成且解码字节有界时取得正文。原始 HTML 和运行时均判定惰性且网络安静才提前结束。正文未知或超过 256 KiB、脚本/模板、刷新、网络状态溢出均保留完整窗口。
-- `go build ./...`、`go vet ./...`、全仓 short/race 通过，1774 pass / 64 short skip。目标真实 Chrome 用例及保守分类、字节上限、取消 race 通过。指定五包真实 Chrome 串行 race 和双平台完整门禁作为本项后续 PR 验收。
+- `go build ./...`、`go vet ./...`、全仓 short/race 通过，1774 pass / 64 short skip。目标真实 Chrome 用例及保守分类、字节上限、取消 race 通过。指定五包真实 Chrome 串行 race 通过 288 项。[PR #5 的完整 CI](https://github.com/wqnmlgb151/XSSscan/actions/runs/42147950243) 在 Windows/Linux 普通和 race 各通过 1918 项，必跑门禁均为 1908/1908。
 - `--verify-full-window` 可恢复原完整等待。数据和复现命令见 [执行观察验证](../test/verification-settle.md)。样本仅覆盖本地惰性负例，未测 CPU/RSS。

@@ -1,4 +1,4 @@
-# SSRF Policy 与 Chrome DNS 固定（未发布）
+# SSRF Policy 与 Chrome DNS 固定（v1.1.5）
 
 CLI 通过 context 传递独立 `ssrfguard.Policy`，HTTP 客户端和代理验证也接收显式策略。隔离 Chrome tab 继承调用策略。旧包级 AllowPrivate 仅用于未传策略的 SDK 兼容入口；CLI 和测试不再修改它。SDK 应传 Policy/WithPolicy，认证等预检使用相同 context。
 

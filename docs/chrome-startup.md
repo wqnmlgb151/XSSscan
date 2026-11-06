@@ -1,4 +1,4 @@
-# Chrome 启动参数（未发布安全分支）
+# Chrome 启动参数（v1.1.5）
 
 恢复站点隔离前，真实 Chrome 在覆盖参数下完成：两个 CreateBrowserContext、localStorage 隔离、同源守卫、两次精确请求预算、页面脚本执行及 BrowserContext 清理。默认配置禁用隔离的失败断言已记录；恢复后该断言转绿。既有 DOM/验证/资源回归继续执行，不改变检测矩阵或置信度。
 

@@ -1,6 +1,6 @@
 FROM golang:1.26.9-alpine3.23@sha256:6750308561953d451210ed1a8086d36c8c8bdcbf672d38d9d0d424b8a7a0216c AS builder
 WORKDIR /app
-ARG VERSION=1.1.4
+ARG VERSION=1.1.5
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .

@@ -4,17 +4,17 @@
 
 ## 安装
 
-从 [v1.1.4 Release](https://github.com/wqnmlgb151/XSSscan/releases/tag/v1.1.4) 下载对应附件，无需安装 Go：
+从 [v1.1.5 Release](https://github.com/wqnmlgb151/XSSscan/releases/tag/v1.1.5) 下载对应附件，无需安装 Go：
 
 | 平台 | 下载 |
 | --- | --- |
-| Windows amd64 | [EXE](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.4/xsscan_1.1.4_windows_amd64.exe) / [ZIP](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.4/xsscan_1.1.4_windows_amd64.zip) |
-| Linux amd64 | [TAR.GZ](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.4/xsscan_1.1.4_linux_amd64.tar.gz) |
-| Linux arm64 | [TAR.GZ](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.4/xsscan_1.1.4_linux_arm64.tar.gz) |
-| macOS Intel | [TAR.GZ](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.4/xsscan_1.1.4_darwin_amd64.tar.gz) |
-| macOS Apple Silicon | [TAR.GZ](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.4/xsscan_1.1.4_darwin_arm64.tar.gz) |
+| Windows amd64 | [EXE](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.5/xsscan_1.1.5_windows_amd64.exe) / [ZIP](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.5/xsscan_1.1.5_windows_amd64.zip) |
+| Linux amd64 | [TAR.GZ](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.5/xsscan_1.1.5_linux_amd64.tar.gz) |
+| Linux arm64 | [TAR.GZ](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.5/xsscan_1.1.5_linux_arm64.tar.gz) |
+| macOS Intel | [TAR.GZ](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.5/xsscan_1.1.5_darwin_amd64.tar.gz) |
+| macOS Apple Silicon | [TAR.GZ](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.5/xsscan_1.1.5_darwin_arm64.tar.gz) |
 
-附件提供 `SHA256SUMS` 和 `release-validation.json`；压缩包包含程序、许可证及 `BUILDINFO.json`。GitHub 的 Source code 压缩包是源码。二进制未提供 Windows Authenticode 或 Apple 公证，运行范围见[发布说明](docs/releases/v1.1.4.md)。
+附件提供 `SHA256SUMS` 和 `release-validation.json`；压缩包包含程序、许可证及 `BUILDINFO.json`。GitHub 的 Source code 压缩包是源码。二进制未提供 Windows Authenticode 或 Apple 公证，运行范围见[发布说明](docs/releases/v1.1.5.md)。
 
 DOM、执行验证及 SPA 渲染需要本机安装 Chrome/Chromium，可用 `--chrome-path` 指定路径。
 
@@ -23,7 +23,7 @@ DOM、执行验证及 SPA 渲染需要本机安装 Chrome/Chromium，可用 `--c
 需要 Go 1.26+，推荐固定工具链 **Go 1.26.9**。在源码目录运行：
 
 ```bash
-go build -trimpath -ldflags "-s -w -X main.Version=1.1.4" -o xsscan ./cmd
+go build -trimpath -ldflags "-s -w -X main.Version=1.1.5" -o xsscan ./cmd
 ./xsscan --version
 ```
 
@@ -113,12 +113,12 @@ go test -race -p 1 -count=1 -timeout 15m ./...
 ```
 
 - [CHANGELOG](CHANGELOG.md)：版本变更。
-- [开发分支 Chrome 参数](docs/chrome-startup.md)：站点隔离、后台控制与显式兼容开关。
-- [开发分支 Marker 配置](docs/markers.md)：加密随机后缀、指定/随机前缀与兼容入口。
-- [开发分支 SSRF 策略](docs/ssrf-policy.md)：独立 Policy、特殊地址及实验性 DNS 固定限制。
-- [开发分支容器说明](docs/container.md)：Chromium、非 root、Chrome 沙箱运行条件及验证边界。
-- [开发分支凭据入口](docs/credentials.md)：未发布的环境变量、文件/stdin 与优先级。
-- [v1.1.4 发布说明](docs/releases/v1.1.4.md)：发布包、兼容性及已知限制。
+- [Chrome 参数](docs/chrome-startup.md)：站点隔离、后台控制与显式兼容开关。
+- [Marker 配置](docs/markers.md)：加密随机后缀、指定/随机前缀与兼容入口。
+- [SSRF 策略](docs/ssrf-policy.md)：独立 Policy、特殊地址及实验性 DNS 固定限制。
+- [容器说明](docs/container.md)：Chromium、非 root、Chrome 沙箱运行条件及验证边界。
+- [凭据入口](docs/credentials.md)：环境变量、文件/stdin 与优先级。
+- [v1.1.5 发布说明](docs/releases/v1.1.5.md)：发布包、兼容性及已知限制。
 - [测试与基线](test/README.md)：四类检测、误报/漏报、并发与取消回归。
 - [性能复现](test/performance/README.md)：五轮 A/B、分阶段计时及 pprof；当前合成语料未复现版本退化，不代表真实目标已修复。
 - [历史审计](audit/2026-10-31/REPORT.md)：A 路线审计记录。

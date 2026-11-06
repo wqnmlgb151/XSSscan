@@ -306,6 +306,15 @@ func (v *Verifier) runBrowserCheckMatching(ctx context.Context, navURL string, r
 		return result, fmt.Errorf("browser setup: %w", err)
 	}
 
+	activity := newVerificationActivity(ctx)
+	chromedp.ListenTarget(tctx, activity.observe)
+	if err := chromedp.Run(tctx, network.Enable(), chromedp.ActionFunc(func(ctx context.Context) error {
+		_, err := page.AddScriptToEvaluateOnNewDocument(verificationActivityScript).Do(ctx)
+		return err
+	})); err != nil {
+		return result, fmt.Errorf("browser observation setup: %w", err)
+	}
+
 	// Apply auth cookies without navigating to the payload URL first.
 	if v.auth != nil && len(v.auth.Cookies) > 0 {
 		if err := v.applyCookies(tctx, navURL); err != nil {
@@ -347,39 +356,40 @@ func (v *Verifier) runBrowserCheckMatching(ctx context.Context, navURL string, r
 		}
 	}
 
-	// Check if a dialog was detected
+	if loadErr == nil && len(dialogDetected) == 0 && !activity.fullWindow {
+		activity.inspectDocument(tctx)
+	}
+
+	// Retain the original maximum window and late interaction replay. Only a
+	// provably inert, network-quiet document may end observation before the cap.
 	if loadErr == nil {
-		select {
-		case d := <-dialogDetected:
+		d, waitErr := activity.wait(tctx, dialogDetected)
+		if waitErr != nil {
+			loadErr = waitErr
+			result.LoadError = waitErr.Error()
+		} else if d != nil {
 			result.Executed = true
 			result.DialogType = d.dialogType
 			result.DialogMessage = d.message
-			result.Confidence = 0.95
-		case <-time.After(3 * time.Second):
-			// Preserve the late-handler check for applications that create inputs
-			// asynchronously, while immediate execution no longer waits this long.
-			if interactionScript != "" {
-				if err := chromedp.Run(tctx, chromedp.Evaluate(interactionScript, &result.Interaction)); err != nil {
-					loadErr = err
-					result.LoadError = err.Error()
-				}
-				select {
-				case d := <-dialogDetected:
-					result.Executed = true
-					result.DialogType = d.dialogType
-					result.DialogMessage = d.message
-					result.Confidence = .95
-				case <-time.After(100 * time.Millisecond):
-				case <-tctx.Done():
-					loadErr = tctx.Err()
-					result.LoadError = loadErr.Error()
-				}
+			result.Confidence = .95
+		} else if interactionScript != "" {
+			if err := chromedp.Run(tctx, chromedp.Evaluate(interactionScript, &result.Interaction)); err != nil {
+				loadErr = err
+				result.LoadError = err.Error()
 			}
-		case <-tctx.Done():
-			if loadErr == nil {
+			timer := time.NewTimer(100 * time.Millisecond)
+			select {
+			case d := <-dialogDetected:
+				result.Executed = true
+				result.DialogType = d.dialogType
+				result.DialogMessage = d.message
+				result.Confidence = .95
+			case <-timer.C:
+			case <-tctx.Done():
 				loadErr = tctx.Err()
 				result.LoadError = loadErr.Error()
 			}
+			timer.Stop()
 		}
 	}
 

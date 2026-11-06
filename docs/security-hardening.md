@@ -11,10 +11,10 @@
 | P0-5 凭据输入入口 | 已完成代码、审查及 Windows/Linux 完整普通/race/历史身份门禁；结果见下方记录 |
 | P1-1 Docker | 已完成代码、审查及 Windows/Linux 完整普通/race/历史身份门禁；结果见下方记录 |
 | P1-2 模块路径 | 已完成代码、审查及 Windows/Linux 完整普通/race/历史身份门禁；结果见下方记录 |
-| P1-3 SSRF Policy | 已实现，失败测试转绿；独立审查、build/vet/short-race/指定真实 Chrome 回归通过，跨平台完整 CI 待提交触发 |
-| P1-4 marker | 加密随机与前缀配置已实现；四模块自定义前缀、本地完整指定回归通过，跨平台 CI 待触发 |
-| P1-5 Chrome 参数 | 恢复隔离兼容性已实测；build/vet/short-race/276 项真实 Chrome race 通过，双平台 CI 待提交触发 |
-| P1-6 执行观察 | 未完成 |
+| P1-3 SSRF Policy | 已合并至 master，Windows/Linux 完整回归、身份门禁和容器检查通过 |
+| P1-4 marker | 已合并至 master，四模块自定义前缀回归及双平台完整 CI 通过 |
+| P1-5 Chrome 参数 | 已合并至 master，276 项本地真实 Chrome race 和双平台完整 CI 通过 |
+| P1-6 执行观察 | 实现和目标回归已完成，作为独立 PR 验收 |
 | P2-1 公开语料 | 未完成 |
 | P2-2 回调闭环 | 未完成 |
 | P2-3 外部脚本 | 未完成 |
@@ -129,3 +129,15 @@
 - 默认站点隔离开启、组件更新禁用；原后台网络/同步禁用保留；两个显式兼容开关见 CHANGELOG/--help。保留旧 HTTP scheme 测试身份，新专项用例承担站点隔离断言，未弱化检测矩阵。
 - build/vet 通过；全仓 short/race 1770 pass / 60 short skip；指定五包真实 Chrome 串行 race 276 pass / 0 skip。此前中断日志不作为通过证据，重新完整运行 `p1-5-chrome-race-final.json`。独立审查无 CRITICAL/HIGH。
 - 本机 Windows 真实 Chrome 已验证，Linux/容器及完整历史门禁待提交后的 CI；命令行参数存在不代表浏览器无后台网络，兼容参数不会关闭预算/SSRF/证书/沙箱策略。
+
+## 已合并批次
+
+[PR #4](https://github.com/wqnmlgb151/XSSscan/pull/4) 以合并提交 `e9f415d` 纳入 P0-1～P0-5、P1-1～P1-5，保留各独立提交。合并后的 [CI 42030836206](https://github.com/wqnmlgb151/XSSscan/actions/runs/42030836206) 已通过。Windows 与 Linux 的普通测试和 race 各为 1905 pass / 0 test skip，required-tests 均为 1895/1895，覆盖原有 1837 项。容器测试通过。P1-5 初次 Linux CI 的 Chrome 调试连接超时在失败作业复跑及 PR 验收中未再出现，未修改历史测试断言。
+
+## P1-6 验证及边界
+
+- 文件集中在 `pkg/execverify/{verifier,settle,settle_security_test}.go`、`pkg/browser/verification.go`、cmd 配置和兼容测试、必跑测试清单及验证文档。
+- 三轮预热后的 loopback 惰性负例中位数由 3386.688 ms 降至 422.752 ms，每轮仍是一次请求。2.5 秒延迟 focus/hover、声明式 Shadow DOM 和 HTTP Refresh 仍保留执行证明。原型修改用例在初版优化上未复现漏检，作为防御回归保留。
+- 只在 CDP 确认主文档加载完成且解码字节有界时取得正文。原始 HTML 和运行时均判定惰性且网络安静才提前结束。正文未知或超过 256 KiB、脚本/模板、刷新、网络状态溢出均保留完整窗口。
+- `go build ./...`、`go vet ./...`、全仓 short/race 通过，1774 pass / 64 short skip。目标真实 Chrome 用例及保守分类、字节上限、取消 race 通过。指定五包真实 Chrome 串行 race 和双平台完整门禁作为本项后续 PR 验收。
+- `--verify-full-window` 可恢复原完整等待。数据和复现命令见 [执行观察验证](../test/verification-settle.md)。样本仅覆盖本地惰性负例，未测 CPU/RSS。

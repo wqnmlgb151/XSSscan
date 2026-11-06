@@ -1,4 +1,4 @@
-# 容器（未发布安全分支）
+# 容器（v1.1.5）
 
 构建：`docker build --target final -t xsscan .`。运行层使用非 root `xsscan` 用户，内置 Chromium 与 CA，保留 Chrome 沙箱。Go builder 和 Alpine runtime 均固定 manifest 摘要；依赖只在镜像构建时安装，扫描运行不下载浏览器。
 

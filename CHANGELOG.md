@@ -1,6 +1,6 @@
 # Changelog
 
-## 未发布 — 实战安全加固
+## 1.1.5 — 2026-11-06
 
 ### P0-1 代理凭据隔离
 
@@ -21,7 +21,7 @@
 ### P1-1 容器
 
 - 升级到受支持且固定摘要的 Alpine 3.23.7，内置 Chromium/CA，默认非 root，保留 Chrome 沙箱；builder 同样固定摘要。新增网络禁用的容器 loopback 执行验证 CI，测试专用 fixture 不进入 final 镜像。
-- 镜像只在构建时安装依赖；本机无 Docker，实际镜像构建/执行结果待 CI。Chrome 沙箱所需权限及 CI 权限放宽边界见 `docs/container.md`。
+- 镜像在构建时安装依赖。Linux CI 已完成镜像构建及禁用外网的容器内反射执行验收。Chrome 沙箱所需权限及 CI 权限放宽边界见 `docs/container.md`。
 
 ### P1-2 模块路径（零扫描行为变化）
 
@@ -66,7 +66,7 @@
 - P0-3：配置 `--proxy` 时，共享 Chrome allocator 默认同样使用该代理。`--browser-direct` 显式恢复浏览器直连；与代理配置同时使用时 stderr 警告一次。代理密码仅通过 CDP 的匹配 Proxy 认证挑战发送，不出现在 Chrome 参数；`--proxy-insecure` 不改变 Chrome 证书策略。
 - Chrome 不支持带认证的 SOCKS5 时明确报错，支持的 HTTP 代理认证保持可用；纯 Go 扫描不受浏览器限制影响。代理认证拒绝保留不完整诊断，不静默当作安全结果。
 
-## 未发布 — 性能排查
+### 性能基线与复现
 
 - 增加 v1.1.1/v1.1.4 默认配置五轮本地 A/B、隔离检出分模块计时及 pprof 工具；公开实测结果与可比范围。本地语料尚未复现版本退化，未修改扫描算法或缩减检测/安全检查。
 - 性能门禁验证完整 DOM 矩阵、Stored 请求/注入数、payload 和浏览器执行验证；支持中断恢复，CI 增加门禁自身的反退化测试。见 `test/performance/README.md`。

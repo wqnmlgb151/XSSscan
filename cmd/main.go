@@ -144,10 +144,10 @@ const (
 
 // Version is the current xsscan version. Set via ldflags at build time:
 //
-//	make build VERSION=1.1.4
+//	make build VERSION=1.1.5
 //
 // x.y.z: x = major (architectural redesign), y = feature, z = bug fix.
-var Version = "1.1.4"
+var Version = "1.1.5"
 
 var cfg ScanConfig
 

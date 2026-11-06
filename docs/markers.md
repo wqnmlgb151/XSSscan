@@ -1,4 +1,4 @@
-# Marker 配置（未发布安全分支）
+# Marker 配置（v1.1.5）
 
 默认仍是 `xsscan` + 12 位小写字母/数字，后缀使用 crypto/rand 均匀采样，不回退 math/rand。`GenerateMarker()` 的 SDK 签名与默认前缀保留；扫描通过 `GenerateMarkerContext(ctx)` / `WithMarkerPrefix` 使用本轮配置。
 

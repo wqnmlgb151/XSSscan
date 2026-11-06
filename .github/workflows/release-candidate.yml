@@ -34,7 +34,7 @@ jobs:
           python-version: '3.13'
       - name: Build, unpack and execute native candidate
         shell: bash
-        run: python3 scripts/release_candidate.py --version 1.1.4 --goos '${{ matrix.goos }}' --goarch '${{ matrix.goarch }}'
+        run: python3 scripts/release_candidate.py --version 1.1.5 --goos '${{ matrix.goos }}' --goarch '${{ matrix.goarch }}'
       - name: Upload verified candidates
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:

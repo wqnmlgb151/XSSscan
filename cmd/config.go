@@ -11,6 +11,7 @@ import (
 
 // FileConfig records which YAML keys were provided, including false and zero.
 type FileConfig struct {
+	VerifyFullWindow           bool   `yaml:"verify-full-window"`
 	ChromeLegacyStartup        bool   `yaml:"chrome-legacy-startup"`
 	ChromeDisableSiteIsolation bool   `yaml:"chrome-disable-site-isolation"`
 	MarkerPrefix               string `yaml:"marker-prefix"`
@@ -150,6 +151,7 @@ func (fc *FileConfig) ApplyTo(cfg *ScanConfig, flags map[string]bool) {
 }
 
 var configFlags = map[string]string{
+	"VerifyFullWindow":           "verify-full-window",
 	"ChromeLegacyStartup":        "chrome-legacy-startup",
 	"ChromeDisableSiteIsolation": "chrome-disable-site-isolation",
 	"MarkerPrefix":               "marker-prefix",

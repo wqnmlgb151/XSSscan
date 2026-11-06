@@ -49,6 +49,7 @@ const (
 
 // ScanConfig holds all CLI flags
 type ScanConfig struct {
+	VerifyFullWindow           bool
 	PasswordFile               string
 	JWTFile                    string
 	PasswordStdin              bool
@@ -160,6 +161,7 @@ var rootCmd = &cobra.Command{
 敏感 argv 非 silent 模式提示暴露风险；--silent 关闭此提示。
 默认拒绝私网及特殊用途地址；授权环境用 --allow-private 放开。
 Chrome 默认恢复站点隔离并禁用组件更新；--chrome-legacy-startup 恢复旧启动参数。
+惰性页面可提前结束执行观察；--verify-full-window 恢复旧完整窗口。
 --chrome-pin-dns 默认关闭；设为 false 恢复普通 DNS，开启时限单 --url 且浏览器直连。
 
 默认调度 reflected、dom、stored、blind 四类检测，使用 --types 选择类型。
@@ -208,6 +210,7 @@ func main() {
 func init() {
 	rootCmd.Flags().StringVar(&cfg.MarkerPrefix, "marker-prefix", analyze.MarkerPrefix, "Marker prefix: lowercase letter then lowercase letters/digits, max 32 (empty uses default)")
 	rootCmd.Flags().BoolVar(&cfg.RandomMarkerPrefix, "random-marker-prefix", false, "Use one cryptographically random prefix per scan (overrides --marker-prefix)")
+	rootCmd.Flags().BoolVar(&cfg.VerifyFullWindow, "verify-full-window", false, "Retain legacy full 3-second verification window even for inert quiet pages")
 	rootCmd.Flags().BoolVar(&cfg.ChromeLegacyStartup, "chrome-legacy-startup", false, "Restore legacy site-isolation and component-update startup flags")
 	rootCmd.Flags().BoolVar(&cfg.ChromeDisableSiteIsolation, "chrome-disable-site-isolation", false, "Restore legacy Chrome site-isolation disable flags (default: site isolation enabled)")
 	rootCmd.Flags().BoolVar(&cfg.ChromePinDNS, "chrome-pin-dns", false, "Experimental: pin one --url browser origin to validated DNS; forces direct browser connections")
@@ -343,6 +346,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	defer cancel()
 	ctx = browser.WithSiteIsolationDisabled(ctx, cfg.ChromeDisableSiteIsolation)
 	ctx = browser.WithLegacyStartup(ctx, cfg.ChromeLegacyStartup)
+	ctx = browser.WithFullVerificationWindow(ctx, cfg.VerifyFullWindow)
 	if cfg.RandomMarkerPrefix {
 		prefix, err := analyze.RandomMarkerPrefix()
 		if err != nil {

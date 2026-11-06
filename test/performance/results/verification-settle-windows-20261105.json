@@ -1,0 +1,29 @@
+{
+  "scope": "Loopback inert HTML negative verification; 3 warm samples, Chrome startup warm-up excluded; race enabled",
+  "before_commit": "0f01ea2",
+  "after": "P1-6 working tree (bounded source validation)",
+  "before_ms": [
+    3396.08,
+    3383.508,
+    3386.688
+  ],
+  "after_ms": [
+    422.752,
+    453.107,
+    416.308
+  ],
+  "requests_per_round_before": [
+    1,
+    1,
+    1
+  ],
+  "requests_per_round_after": [
+    1,
+    1,
+    1
+  ],
+  "median_before_ms": 3386.688,
+  "median_after_ms": 422.752,
+  "cpu_rss": "not measured",
+  "limitations": "Not an end-to-end target speed claim. Executable/unknown pages retain the full observation cap."
+}

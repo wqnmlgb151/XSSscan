@@ -22,7 +22,7 @@ func TestShortCookiesPreserveReportSemantics(t *testing.T) {
 		t.Fatalf("short cookie corrupted semantic fields: %+v", actual)
 	}
 	for _, format := range []OutputFormat{FormatJSON, FormatHTML, FormatMarkdown, FormatSARIF, FormatJUnit} {
-		output, err := NewReporter().Generate(data, format)
+		output, err := NewReporterWithOptions(Options{IncludeRawEvidence: false}).Generate(data, format)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -73,7 +73,7 @@ func TestCredentialHeaderCopiesRedactWholeValues(t *testing.T) {
 			t.Errorf("header copy not fully redacted: %s", got.Findings[0].Description)
 		}
 		for _, format := range []OutputFormat{FormatJSON, FormatHTML, FormatMarkdown, FormatSARIF, FormatJUnit} {
-			output, err := NewReporter().Generate(data, format)
+			output, err := NewReporterWithOptions(Options{IncludeRawEvidence: false}).Generate(data, format)
 			if err != nil {
 				t.Fatal(err)
 			}

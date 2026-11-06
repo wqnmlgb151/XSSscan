@@ -4,15 +4,15 @@
 
 ## 安装
 
-从 [v1.1.5 Release](https://github.com/wqnmlgb151/XSSscan/releases/tag/v1.1.5) 下载对应附件，无需安装 Go：
+从 [v1.1.5 修订版](https://github.com/wqnmlgb151/XSSscan/releases/tag/v1.1.5-r1) 下载对应附件，无需安装 Go：
 
 | 平台 | 下载 |
 | --- | --- |
-| Windows amd64 | [EXE](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.5/xsscan_1.1.5_windows_amd64.exe) / [ZIP](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.5/xsscan_1.1.5_windows_amd64.zip) |
-| Linux amd64 | [TAR.GZ](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.5/xsscan_1.1.5_linux_amd64.tar.gz) |
-| Linux arm64 | [TAR.GZ](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.5/xsscan_1.1.5_linux_arm64.tar.gz) |
-| macOS Intel | [TAR.GZ](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.5/xsscan_1.1.5_darwin_amd64.tar.gz) |
-| macOS Apple Silicon | [TAR.GZ](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.5/xsscan_1.1.5_darwin_arm64.tar.gz) |
+| Windows amd64 | [EXE](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.5-r1/xsscan_1.1.5_windows_amd64.exe) / [ZIP](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.5-r1/xsscan_1.1.5_windows_amd64.zip) |
+| Linux amd64 | [TAR.GZ](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.5-r1/xsscan_1.1.5_linux_amd64.tar.gz) |
+| Linux arm64 | [TAR.GZ](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.5-r1/xsscan_1.1.5_linux_arm64.tar.gz) |
+| macOS Intel | [TAR.GZ](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.5-r1/xsscan_1.1.5_darwin_amd64.tar.gz) |
+| macOS Apple Silicon | [TAR.GZ](https://github.com/wqnmlgb151/XSSscan/releases/download/v1.1.5-r1/xsscan_1.1.5_darwin_arm64.tar.gz) |
 
 附件提供 `SHA256SUMS` 和 `release-validation.json`；压缩包包含程序、许可证及 `BUILDINFO.json`。GitHub 的 Source code 压缩包是源码。二进制未提供 Windows Authenticode 或 Apple 公证，运行范围见[发布说明](docs/releases/v1.1.5.md)。
 
@@ -92,7 +92,7 @@ Get-Content urls.txt | .\xsscan.exe --silent
 
 ## 报告与退出码
 
-支持 `json`（默认）、`html`、`markdown`、`sarif`、`junit`，保持报告 Schema 1.1。报告默认脱敏；确需原始证据时，显式使用 `--include-raw-evidence --output <文件>`。
+支持 `json`（默认）、`html`、`markdown`、`sarif`、`junit`，保持报告 Schema 1.1。用 `--output <文件>` 生成报告，默认保留已采集的请求、响应及复现凭据，包括 Cookie、Authorization、Set-Cookie 和 Token。报告文件使用私有访问权限。需要生成脱敏副本时，显式加上 `--include-raw-evidence=false`。
 
 报告采用 Unix 私有权限或 Windows 受保护 DACL。脱敏不能识别所有自由文本秘密；raw 文件包含敏感信息，分享前应检查。截图默认不落盘，详见[报告安全说明](test/security-v1.1.3.md)。
 

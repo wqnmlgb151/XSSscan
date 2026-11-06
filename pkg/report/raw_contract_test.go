@@ -40,7 +40,7 @@ func TestOriginalHTTPAcrossFiveFormatsAndHTMLCopy(t *testing.T) {
 	response := "HTTP/1.1 200 OK\r\nSet-Cookie: session=response-secret\r\n\r\noriginal response"
 	data := FromScanResult(&model.ScanResult{Findings: []model.Finding{{URL: "http://local", ParamType: model.ParamBody, RawRequest: raw, RawResponse: response, Evidence: model.Evidence{HTTP: &model.HTTPExchange{Request: raw, Response: response}}}}}, 0)
 	for _, format := range []OutputFormat{FormatJSON, FormatHTML, FormatMarkdown, FormatSARIF, FormatJUnit} {
-		out, err := NewReporterWithOptions(Options{IncludeRawEvidence: true}).Generate(data, format)
+		out, err := NewReporter().Generate(data, format)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -21,12 +21,13 @@ func securityFixture() (*ScanData, []string) {
 	return data, secrets
 }
 
+// Retain the historical test identity for the explicit redaction policy.
 func TestDefaultReportsRedactCredentialsAcrossAllFormats(t *testing.T) {
 	data, secrets := securityFixture()
 	before, _ := json.Marshal(data)
 	for _, format := range []OutputFormat{FormatJSON, FormatHTML, FormatMarkdown, FormatSARIF, FormatJUnit} {
 		t.Run(string(format), func(t *testing.T) {
-			body, err := NewReporter().Generate(data, format)
+			body, err := NewReporterWithOptions(Options{IncludeRawEvidence: false}).Generate(data, format)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -65,7 +66,7 @@ func TestRedactionPreservesSchemaEnumsAndLargeCounters(t *testing.T) {
 	for _, secret := range []string{"1", "completed", "high", "reflected_xss"} {
 		data := &ScanData{SchemaVersion: "1.1", Status: model.ScanCompleted, Duration: 9007199254740993,
 			Findings: []FindingData{{Type: "reflected_xss", Severity: "high", ParamType: model.ParamQuery, RawRequest: "GET / HTTP/1.1\r\nCookie: session=" + secret + "\r\n\r\n"}}}
-		body, err := NewReporter().Generate(data, FormatJSON)
+		body, err := NewReporterWithOptions(Options{IncludeRawEvidence: false}).Generate(data, FormatJSON)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -94,7 +95,7 @@ func TestCredentialCopiesInEveryReport(t *testing.T) {
 		for _, format := range []OutputFormat{FormatJSON, FormatHTML, FormatMarkdown, FormatSARIF, FormatJUnit} {
 			t.Run(tc.name+"/"+string(format), func(t *testing.T) {
 				data := &ScanData{Issues: []model.ScanIssue{{Message: "diagnostic echo " + tc.secret}}, Findings: []FindingData{{RawRequest: tc.request, Description: "echo " + tc.secret, Evidence: model.Evidence{Reflection: tc.secret}}}}
-				output, err := NewReporter().Generate(data, format)
+				output, err := NewReporterWithOptions(Options{IncludeRawEvidence: false}).Generate(data, format)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -109,7 +110,7 @@ func TestCredentialCopiesInEveryReport(t *testing.T) {
 func TestPrebuiltCurlDoesNotBypassSafeReports(t *testing.T) {
 	for _, format := range []OutputFormat{FormatJSON, FormatHTML, FormatMarkdown, FormatSARIF, FormatJUnit} {
 		data := &ScanData{Findings: []FindingData{{URL: "http://local.test/?q=x", Parameter: "q", ParamType: model.ParamQuery, Payload: "<script>alert(1)</script>", CurlPOC: "curl -H 'X-Unknown-Auth: curl-only-canary' http://local.test/"}}}
-		body, err := NewReporter().Generate(data, format)
+		body, err := NewReporterWithOptions(Options{IncludeRawEvidence: false}).Generate(data, format)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -121,7 +122,7 @@ func TestPrebuiltCurlDoesNotBypassSafeReports(t *testing.T) {
 
 func TestConcurrentSafeAndRawReportsKeepPoliciesSeparate(t *testing.T) {
 	data, _ := securityFixture()
-	safe, raw := NewReporter(), NewReporterWithOptions(Options{IncludeRawEvidence: true})
+	safe, raw := NewReporterWithOptions(Options{IncludeRawEvidence: false}), NewReporter()
 	var group sync.WaitGroup
 	for _, format := range []OutputFormat{FormatJSON, FormatHTML, FormatMarkdown, FormatSARIF, FormatJUnit} {
 		group.Go(func() {

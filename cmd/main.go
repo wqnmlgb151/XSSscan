@@ -235,7 +235,7 @@ func init() {
 	rootCmd.Flags().StringArrayVarP(&cfg.Cookies, "cookie", "c", nil, "Pre-authenticated cookies (Name=Value, seeds cookie jar)")
 	rootCmd.Flags().StringVarP(&cfg.Output, "output", "o", "", "Output file path")
 	rootCmd.Flags().StringVarP(&cfg.Format, "format", "f", "json", "Output format: json, markdown, html, sarif, junit")
-	rootCmd.Flags().BoolVar(&cfg.IncludeRawEvidence, "include-raw-evidence", false, "Include credentials and full HTTP evidence in a private report file (requires --output)")
+	rootCmd.Flags().BoolVar(&cfg.IncludeRawEvidence, "include-raw-evidence", true, "Preserve captured HTTP evidence and credentials in private report files; set false to redact")
 	rootCmd.Flags().IntVarP(&cfg.Workers, "workers", "w", 10, "Concurrent workers")
 	rootCmd.Flags().IntVar(&cfg.RateLimit, "rate-limit", 100, "Max requests per second")
 	rootCmd.Flags().IntVarP(&cfg.Timeout, "timeout", "t", 30, "Request timeout (seconds)")
@@ -1171,9 +1171,6 @@ func collectChangedFlags(cmd *cobra.Command) map[string]bool {
 }
 
 func validateConfig(cfg *ScanConfig) error {
-	if cfg.IncludeRawEvidence && cfg.Output == "" {
-		return fmt.Errorf("--include-raw-evidence requires --output with private file access")
-	}
 	// Pipeline mode: no --url and no --targets-file, but stdin is redirected.
 	if cfg.URL == "" && cfg.TargetsFile == "" {
 		if isStdinPiped() {

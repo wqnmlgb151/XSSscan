@@ -23,17 +23,21 @@ const (
 )
 
 type Options struct {
-	// IncludeRawEvidence retains credentials and bodies; Write still enforces private access.
+	// IncludeRawEvidence retains credentials and bodies. Set it to false when
+	// using NewReporterWithOptions to explicitly request redaction.
 	IncludeRawEvidence bool
 }
 
-type Reporter struct{ options Options }
+type Reporter struct{ redactEvidence bool }
 
+// NewReporter preserves captured evidence for replay.
 func NewReporter() *Reporter {
 	return &Reporter{}
 }
 
-func NewReporterWithOptions(options Options) *Reporter { return &Reporter{options: options} }
+func NewReporterWithOptions(options Options) *Reporter {
+	return &Reporter{redactEvidence: !options.IncludeRawEvidence}
+}
 
 func (r *Reporter) Generate(data *ScanData, format OutputFormat) ([]byte, error) {
 	if data == nil {
@@ -62,7 +66,7 @@ func (r *Reporter) Generate(data *ScanData, format OutputFormat) ([]byte, error)
 	}
 	copy.Status = model.ResolveStatus(data.Status, data.Modules, copy.Issues, copy.Errors)
 	data = &copy
-	if !r.options.IncludeRawEvidence {
+	if r.redactEvidence {
 		var err error
 		data, err = redactedCopy(data)
 		if err != nil {

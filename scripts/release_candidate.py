@@ -72,18 +72,24 @@ def smoke(binary, output, version):
                 data = json.loads(text)
                 assert data["SchemaVersion"] == "1.1" and data["Status"] == "completed" and not data["Findings"]
             results.append({"case": "safe-" + fmt, "exit": result.returncode, "credentials_hidden": True})
-        for fmt in ("json", "html", "markdown", "sarif", "junit"):
-            path = output / ("positive." + fmt)
-            result = subprocess.run(common + ["--url", base + "/positive?q=x", "--format", fmt,
-                                             "--output", str(path)], capture_output=True, timeout=90)
-            assert result.returncode == 2 and not result.stdout and not result.stderr, (fmt, result)
-            text = path.read_text(encoding="utf-8")
-            assert text and "release-request-canary" not in text and "release-response-canary" not in text
-            if fmt == "json":
-                data = json.loads(text)
-                assert data["Status"] == "completed" and data["Findings"]
-                assert not any(f.get("ExecutionVerified") for f in data["Findings"])
-            results.append({"case": "positive-" + fmt, "exit": 2, "credentials_hidden": True})
+        for redact in (False, True):
+            mode = "redacted" if redact else "positive"
+            flags = ["--include-raw-evidence=false"] if redact else []
+            for fmt in ("json", "html", "markdown", "sarif", "junit"):
+                path = output / (mode + "." + fmt)
+                result = subprocess.run(common + ["--url", base + "/positive?q=x", "--format", fmt,
+                                                 "--output", str(path)] + flags, capture_output=True, timeout=90)
+                assert result.returncode == 2 and not result.stdout and not result.stderr, (mode, fmt, result)
+                text = path.read_text(encoding="utf-8")
+                for canary in ("release-request-canary", "release-response-canary"):
+                    assert (canary in text) == (not redact), (mode, fmt, canary)
+                if os.name != "nt":
+                    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+                if fmt == "json":
+                    data = json.loads(text)
+                    assert data["Status"] == "completed" and data["Findings"]
+                    assert not any(f.get("ExecutionVerified") for f in data["Findings"])
+                results.append({"case": mode + "-" + fmt, "exit": 2, "credentials_hidden": redact})
         for name, extra, expected in (("raw-positive", ["--include-raw-evidence"], 2),
                                      ("budget", ["--request-budget", "1"], 1)):
             path = output / (name + ".json")

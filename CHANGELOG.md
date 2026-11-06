@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.5-r1 — 2026-11-06
+
+### 行为变化
+
+- 五种报告默认保留已采集的原始 HTTP 请求、响应和复现凭据。写入报告仍使用 Unix 私有权限或 Windows 受保护 DACL。
+- 如需脱敏副本，显式使用 `--include-raw-evidence=false` 或 YAML 的 `include-raw-evidence: false`。SDK 的 `report.NewReporter()` 默认保留证据，`NewReporterWithOptions(Options{IncludeRawEvidence: false})` 显式脱敏。
+- 程序版本保持 `1.1.5`，修订附件由 `v1.1.5-r1` 标签对应的源码构建。报告 Schema 保持 1.1。
+
 ## 1.1.5 — 2026-11-06
 
 ### P0-1 代理凭据隔离
